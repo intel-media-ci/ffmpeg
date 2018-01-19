@@ -212,6 +212,8 @@ static int qsv_decode_init(AVCodecContext *avctx, QSVContext *q)
     param.mfx.FrameInfo.Width          = frame_width;
     param.mfx.FrameInfo.Height         = frame_height;
     param.mfx.FrameInfo.ChromaFormat   = MFX_CHROMAFORMAT_YUV420;
+    param.mfx.FrameInfo.CropW          = avctx->width;
+    param.mfx.FrameInfo.CropH          = avctx->height;
 
     switch (avctx->field_order) {
     case AV_FIELD_PROGRESSIVE:

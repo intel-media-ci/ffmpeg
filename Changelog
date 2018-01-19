@@ -34,6 +34,7 @@ version <next>:
 - VP4 video decoder
 - IFV demuxer
 - derain filter
+- Intel QSV-accelerated MJPEG decoding
 
 
 version 4.1:
