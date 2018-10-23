@@ -37,6 +37,18 @@
 #define SHARPNESS_MAX          64
 #define SHARPNESS_DEFAULT      44
 
+// Rotation angle values
+enum RotationAngle {
+    ROTATION_0   = 0,
+    ROTATION_90  = 90,
+    ROTATION_180 = 180,
+    ROTATION_270 = 270,
+
+    ROTATION_MIN     = ROTATION_0,
+    ROTATION_MAX     = ROTATION_270,
+    ROTATION_DEFAULT = ROTATION_0,
+};
+
 typedef struct DenoiseVAAPIContext {
     VAAPIVPPContext vpp_ctx; // must be the first field
 
@@ -48,6 +60,12 @@ typedef struct SharpnessVAAPIContext {
 
     int sharpness;       // enable sharpness.
 } SharpnessVAAPIContext;
+
+typedef struct RotationVAAPIContext {
+    VAAPIVPPContext vpp_ctx; // must be the first field
+
+    int rotation;        // enable rotation.
+} RotationVAAPIContext;
 
 static float map(int x, int in_min, int in_max, float out_min, float out_max)
 {
@@ -123,6 +141,64 @@ static int sharpness_vaapi_build_filter_params(AVFilterContext *avctx)
     return 0;
 }
 
+static int rotation_vaapi_build_filter_params(AVFilterContext *avctx)
+{
+    VAAPIVPPContext *vpp_ctx  = avctx->priv;
+    RotationVAAPIContext *ctx = avctx->priv;
+
+    VAStatus vas;
+    int support_flag;
+
+    VAProcPipelineCaps pipeline_caps;
+
+    memset(&pipeline_caps, 0, sizeof(pipeline_caps));
+    vas = vaQueryVideoProcPipelineCaps(vpp_ctx->hwctx->display,
+                                       vpp_ctx->va_context,
+                                       NULL, 0,
+                                       &pipeline_caps);
+    if (vas != VA_STATUS_SUCCESS) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to query pipeline "
+               "caps: %d (%s).\n", vas, vaErrorStr(vas));
+        return AVERROR(EIO);
+    }
+
+    if (!pipeline_caps.rotation_flags) {
+        av_log(avctx, AV_LOG_ERROR, "VAAPI driver doesn't support rotation\n");
+        return AVERROR(EINVAL);
+    }
+
+    switch (ctx->rotation) {
+    case ROTATION_0:
+        vpp_ctx->rotation_state = VA_ROTATION_NONE;
+        break;
+    case ROTATION_90:
+        vpp_ctx->rotation_state = VA_ROTATION_90;
+        break;
+    case ROTATION_180:
+        vpp_ctx->rotation_state = VA_ROTATION_180;
+        break;
+    case ROTATION_270:
+        vpp_ctx->rotation_state = VA_ROTATION_270;
+        break;
+    default:
+        av_log(avctx, AV_LOG_ERROR, "Failed to set rotation_state to %d. "
+               "Clockwise %d, %d, %d and %d are only supported\n",
+               ctx->rotation,
+               ROTATION_0, ROTATION_90, ROTATION_180, ROTATION_270);
+        return AVERROR(EINVAL);
+    }
+
+    support_flag = pipeline_caps.rotation_flags &
+                   (1 << vpp_ctx->rotation_state);
+    if (!support_flag) {
+        av_log(avctx, AV_LOG_ERROR, "VAAPI driver doesn't support %d\n",
+               ctx->rotation);
+        return AVERROR(EINVAL);
+    }
+
+    return 0;
+}
+
 static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext *avctx   = inlink->dst;
@@ -163,6 +239,19 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         .width  = input_frame->width,
         .height = input_frame->height,
     };
+
+    switch (vpp_ctx->rotation_state) {
+    case VA_ROTATION_NONE:
+    case VA_ROTATION_90:
+    case VA_ROTATION_180:
+    case VA_ROTATION_270:
+        params.rotation_state = vpp_ctx->rotation_state;
+        break;
+    default:
+        av_log(avctx, AV_LOG_ERROR, "VAAPI doesn't support %d\n",
+               vpp_ctx->rotation_state);
+        goto fail;
+    }
 
     if (vpp_ctx->nb_filter_buffers) {
         params.filters     = &vpp_ctx->filter_buffers[0];
@@ -225,6 +314,18 @@ static av_cold int sharpness_vaapi_init(AVFilterContext *avctx)
     return 0;
 }
 
+static av_cold int rotation_vaapi_init(AVFilterContext *avctx)
+{
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+
+    ff_vaapi_vpp_ctx_init(avctx);
+    vpp_ctx->pipeline_uninit     = ff_vaapi_vpp_pipeline_uninit;
+    vpp_ctx->build_filter_params = rotation_vaapi_build_filter_params;
+    vpp_ctx->output_format       = AV_PIX_FMT_NONE;
+
+    return 0;
+}
+
 #define DOFFSET(x) offsetof(DenoiseVAAPIContext, x)
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM)
 static const AVOption denoise_vaapi_options[] = {
@@ -240,8 +341,16 @@ static const AVOption sharpness_vaapi_options[] = {
     { NULL },
 };
 
+#define ROFFSET(x) offsetof(RotationVAAPIContext, x)
+static const AVOption rotation_vaapi_options[] = {
+    { "angle", "clockwise rotation angle 0/90/180/270 are only supported",
+      ROFFSET(rotation), AV_OPT_TYPE_INT, { .i64 = ROTATION_DEFAULT }, ROTATION_MIN, ROTATION_MAX, .flags = FLAGS },
+    { NULL },
+};
+
 AVFILTER_DEFINE_CLASS(denoise_vaapi);
 AVFILTER_DEFINE_CLASS(sharpness_vaapi);
+AVFILTER_DEFINE_CLASS(rotation_vaapi);
 
 static const AVFilterPad misc_vaapi_inputs[] = {
     {
@@ -285,5 +394,18 @@ AVFilter ff_vf_sharpness_vaapi = {
     .inputs        = misc_vaapi_inputs,
     .outputs       = misc_vaapi_outputs,
     .priv_class    = &sharpness_vaapi_class,
+    .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
+};
+
+AVFilter ff_vf_rotation_vaapi = {
+    .name          = "rotation_vaapi",
+    .description   = NULL_IF_CONFIG_SMALL("VAAPI VPP for rotation"),
+    .priv_size     = sizeof(RotationVAAPIContext),
+    .init          = &rotation_vaapi_init,
+    .uninit        = &ff_vaapi_vpp_ctx_uninit,
+    .query_formats = &ff_vaapi_vpp_query_formats,
+    .inputs        = misc_vaapi_inputs,
+    .outputs       = misc_vaapi_outputs,
+    .priv_class    = &rotation_vaapi_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };

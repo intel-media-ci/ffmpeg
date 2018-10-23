@@ -44,6 +44,7 @@ typedef struct VAAPIVPPContext {
     int output_width;   // computed width
     int output_height;  // computed height
 
+    int rotation_state;
     VABufferID         filter_buffers[VAProcFilterCount];
     int                nb_filter_buffers;
 
