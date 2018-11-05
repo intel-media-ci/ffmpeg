@@ -167,7 +167,8 @@ static int have_alpha_planar(AVFilterLink *link)
     if (link->format == AV_PIX_FMT_QSV) {
         fctx    = (AVHWFramesContext *)link->hw_frames_ctx->data;
         pix_fmt = fctx->sw_format;
-    }
+    } else
+        pix_fmt = AV_PIX_FMT_NONE;
 
     desc = av_pix_fmt_desc_get(pix_fmt);
     if (!desc)

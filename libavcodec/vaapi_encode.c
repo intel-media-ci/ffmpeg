@@ -1110,6 +1110,7 @@ static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
     }
 
     av_assert0(ctx->codec->profiles);
+
     for (i = 0; (ctx->codec->profiles[i].av_profile !=
                  FF_PROFILE_UNKNOWN); i++) {
         profile = &ctx->codec->profiles[i];
@@ -1123,12 +1124,6 @@ static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
         if (avctx->profile != profile->av_profile &&
             avctx->profile != FF_PROFILE_UNKNOWN)
             continue;
-
-#if VA_CHECK_VERSION(1, 0, 0)
-        profile_string = vaProfileStr(profile->va_profile);
-#else
-        profile_string = "(no profile names)";
-#endif
 
         for (j = 0; j < n; j++) {
             if (va_profiles[j] == profile->va_profile)
@@ -1151,6 +1146,11 @@ static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
 
     avctx->profile  = profile->av_profile;
     ctx->va_profile = profile->va_profile;
+#if VA_CHECK_VERSION(1, 0, 0)
+    profile_string = vaProfileStr(profile->va_profile);
+#else
+    profile_string = "(no profile names)";
+#endif
     av_log(avctx, AV_LOG_VERBOSE, "Using VAAPI profile %s (%d).\n",
            profile_string, ctx->va_profile);
 
