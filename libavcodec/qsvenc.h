@@ -89,6 +89,8 @@
 { "adaptive_b",     "Adaptive B-frame placement",             OFFSET(qsv.adaptive_b),     AV_OPT_TYPE_INT, { .i64 = -1 }, -1,          1, VE },                         \
 { "b_strategy",     "Strategy to choose between I/P/B-frames", OFFSET(qsv.b_strategy),    AV_OPT_TYPE_INT, { .i64 = -1 }, -1,          1, VE },                         \
 { "forced_idr",     "Forcing I frames as IDR frames",         OFFSET(qsv.forced_idr),     AV_OPT_TYPE_BOOL,{ .i64 = 0  },  0,          1, VE },                         \
+{ "win_max_rate",   "maximum average bitrate (in kbps) over a sliding window", OFFSET(qsv.win_brc_max_avg_kbps), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },       \
+{ "win_brc_size",   "sliding window size of win_max_rate",                     OFFSET(qsv.win_brc_size),         AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },
 
 typedef int SetEncodeCtrlCB (AVCodecContext *avctx,
                              const AVFrame *frame, mfxEncodeCtrl* enc_ctrl);
@@ -168,6 +170,9 @@ typedef struct QSVEncContext {
 
     int repeat_pps;
     int low_power;
+
+    int win_brc_max_avg_kbps;
+    int win_brc_size;
 
     int a53_cc;
 

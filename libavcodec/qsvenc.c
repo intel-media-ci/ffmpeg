@@ -267,6 +267,11 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
 #endif
 #endif
 
+#if QSV_HAVE_CO3
+    av_log(avctx, AV_LOG_VERBOSE,"WinBRCMaxAvgKbps: %"PRIu32"; WinBRCSize: %"PRId32"\n",
+           co3->WinBRCMaxAvgKbps, co3->WinBRCSize);
+#endif
+
     if (avctx->codec_id == AV_CODEC_ID_H264) {
         av_log(avctx, AV_LOG_VERBOSE, "Entropy coding: %s; MaxDecFrameBuffering: %"PRIu16"\n",
                co->CAVLC == MFX_CODINGOPTION_ON ? "CAVLC" : "CABAC", co->MaxDecFrameBuffering);
@@ -742,7 +747,14 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #if QSV_HAVE_CO3
         q->extco3.Header.BufferId      = MFX_EXTBUFF_CODING_OPTION3;
         q->extco3.Header.BufferSz      = sizeof(q->extco3);
+        q->extco3.WinBRCMaxAvgKbps     = q->win_brc_max_avg_kbps;
+        q->extco3.WinBRCSize           = q->win_brc_size;
         q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco3;
+#else
+        if (q->win_brc_max_avg_kbps || q->win_brc_size) {
+            av_log(avctx, AV_LOG_ERROR, "BRC sliding window setting is unsupported\n");
+            return AVERROR(ENOSYS);
+        }
 #endif
     }
 
