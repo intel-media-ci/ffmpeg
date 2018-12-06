@@ -210,7 +210,7 @@ typedef struct AV1RawFrameHeader {
     uint8_t segmentation_temporal_update;
     uint8_t segmentation_update_data;
     uint8_t feature_enabled[AV1_MAX_SEGMENTS][AV1_SEG_LVL_MAX];
-    uint8_t feature_value[AV1_MAX_SEGMENTS][AV1_SEG_LVL_MAX];
+    int16_t feature_value[AV1_MAX_SEGMENTS][AV1_SEG_LVL_MAX];
 
     uint8_t delta_q_present;
     uint8_t delta_q_res;
@@ -399,7 +399,10 @@ typedef struct CodedBitstreamAV1Context {
     AV1RawSequenceHeader *sequence_header;
     AVBufferRef          *sequence_header_ref;
 
-    int seen_frame_header;
+    int     seen_frame_header;
+    AVBufferRef *frame_header_ref;
+    uint8_t     *frame_header;
+    size_t       frame_header_size;
 
     int temporal_id;
     int spatial_id;

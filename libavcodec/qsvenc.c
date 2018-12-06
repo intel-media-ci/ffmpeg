@@ -1192,6 +1192,13 @@ static int encode_frame(AVCodecContext *avctx, QSVEncContext *q,
     if (qsv_frame) {
         surf = &qsv_frame->surface;
         enc_ctrl = &qsv_frame->enc_ctrl;
+        memset(enc_ctrl, 0, sizeof(mfxEncodeCtrl));
+
+        if (frame->pict_type == AV_PICTURE_TYPE_I) {
+            enc_ctrl->FrameType = MFX_FRAMETYPE_I | MFX_FRAMETYPE_REF;
+            if (q->forced_idr)
+                enc_ctrl->FrameType |= MFX_FRAMETYPE_IDR;
+        }
     }
 
     ret = av_new_packet(&new_pkt, q->packet_size);
@@ -1330,6 +1337,8 @@ int ff_qsv_encode(AVCodecContext *avctx, QSVEncContext *q,
             pict_type = AV_PICTURE_TYPE_P;
         else if (bs->FrameType & MFX_FRAMETYPE_B || bs->FrameType & MFX_FRAMETYPE_xB)
             pict_type = AV_PICTURE_TYPE_B;
+        else
+            av_assert0(!"Uninitialized pict_type!");
 
 #if FF_API_CODED_FRAME
 FF_DISABLE_DEPRECATION_WARNINGS

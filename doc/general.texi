@@ -53,13 +53,30 @@ Go to @url{http://aomedia.org/} and follow the instructions for
 installing the library. Then pass @code{--enable-libaom} to configure to
 enable it.
 
+@section Chromaprint
+
+FFmpeg can make use of the Chromaprint library for generating audio fingerprints.
+Pass @code{--enable-chromaprint} to configure to
+enable it. See @url{https://acoustid.org/chromaprint}.
+
+@section Game Music Emu
+
+FFmpeg can make use of the Game Music Emu library to read audio from supported video game
+music file formats. Pass @code{--enable-libgme} to configure to
+enable it. See @url{https://bitbucket.org/mpyne/game-music-emu/overview}.
+
+@section ModPlug
+
+FFmpeg can make use of this library, originating in Modplug-XMMS, to read from MOD-like music files.
+See @url{https://github.com/Konstanty/libmodplug}. Pass @code{--enable-libmodplug} to configure to
+enable it.
+
 @section OpenJPEG
 
 FFmpeg can use the OpenJPEG libraries for encoding/decoding J2K videos.  Go to
 @url{http://www.openjpeg.org/} to get the libraries and follow the installation
 instructions.  To enable using OpenJPEG in FFmpeg, pass @code{--enable-libopenjpeg} to
 @file{./configure}.
-
 
 @section OpenCORE, VisualOn, and Fraunhofer libraries
 
@@ -758,8 +775,8 @@ following image formats are supported:
 @item Autodesk Animator Flic video  @tab     @tab  X
 @item Autodesk RLE           @tab     @tab  X
     @tab fourcc: AASC
-@item AV1                    @tab     @tab  E
-    @tab Supported through external library libaom
+@item AV1                    @tab  E  @tab  E
+    @tab Supported through external libraries libaom and libdav1d
 @item Avid 1:1 10-bit RGB Packer  @tab  X  @tab  X
     @tab fourcc: AVrp
 @item AVS (Audio Video Standard) video  @tab     @tab  X

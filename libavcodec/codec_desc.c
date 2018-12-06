@@ -81,6 +81,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Motion JPEG"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
         .mime_types= MT("image/jpeg"),
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_mjpeg_profiles),
     },
     {
         .id        = AV_CODEC_ID_MJPEGB,
@@ -1077,6 +1078,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "prores",
         .long_name = NULL_IF_CONFIG_SMALL("Apple ProRes (iCodec Pro)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_prores_profiles),
     },
     {
         .id        = AV_CODEC_ID_JV,
