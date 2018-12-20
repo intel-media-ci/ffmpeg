@@ -72,6 +72,13 @@ int ff_vaapi_vpp_make_param_buffers(AVFilterContext *avctx,
                                     size_t size,
                                     int count);
 
+int ff_vaapi_vpp_make_param_buffers2(AVFilterContext *avctx,
+                                     int type,
+                                     const void *data,
+                                     size_t size,
+                                     int count,
+                                     VABufferID *buffer_id);
+
 int ff_vaapi_vpp_render_picture(AVFilterContext *avctx,
                                 VAProcPipelineParameterBuffer *params,
                                 VASurfaceID output_surface);

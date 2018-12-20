@@ -276,6 +276,35 @@ int ff_vaapi_vpp_make_param_buffers(AVFilterContext *avctx,
     return 0;
 }
 
+int ff_vaapi_vpp_make_param_buffers2(AVFilterContext *avctx,
+                                     int type,
+                                     const void *data,
+                                     size_t size,
+                                     int count,
+                                     VABufferID *buffer_id)
+{
+    VAStatus vas;
+    VABufferID buffer;
+    VAAPIVPPContext *ctx   = avctx->priv;
+
+    av_assert0(ctx->nb_filter_buffers + 1 <= VAProcFilterCount);
+
+    vas = vaCreateBuffer(ctx->hwctx->display, ctx->va_context,
+                         type, size, count, (void*)data, &buffer);
+    if (vas != VA_STATUS_SUCCESS) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to create parameter "
+               "buffer (type %d): %d (%s).\n",
+               type, vas, vaErrorStr(vas));
+        return AVERROR(EIO);
+    }
+
+    ctx->filter_buffers[ctx->nb_filter_buffers++] = buffer;
+    *buffer_id = buffer;
+
+    av_log(avctx, AV_LOG_DEBUG, "Param buffer (type %d, %zu bytes, count %d) "
+           "is %#x.\n", type, size, count, buffer);
+    return 0;
+}
 
 int ff_vaapi_vpp_render_picture(AVFilterContext *avctx,
                                 VAProcPipelineParameterBuffer *params,
