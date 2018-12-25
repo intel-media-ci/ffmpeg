@@ -27,6 +27,8 @@
 
 #include "avfilter.h"
 
+#define VAAPI_VPP_BACKGROUND_BLACK 0xff000000  //Black in ARGB format
+
 typedef struct VAAPIVPPContext {
     const AVClass *class;
 
