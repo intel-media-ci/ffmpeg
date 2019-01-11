@@ -242,6 +242,8 @@ static const AVOption options[] = {
     { "main10",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_PROFILE_HEVC_MAIN10  }, INT_MIN, INT_MAX,     VE, "profile" },
     { "mainsp",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_PROFILE_HEVC_MAINSP  }, INT_MIN, INT_MAX,     VE, "profile" },
 
+    { "gpb_off", "turn off GPB (generalized P/B frame) and use regular P frame", OFFSET(qsv.gpb_off), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE},
+
     { NULL },
 };
 

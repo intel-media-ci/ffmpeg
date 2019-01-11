@@ -47,6 +47,8 @@
 #define QSV_HAVE_LA_HRD QSV_VERSION_ATLEAST(1, 11)
 #define QSV_HAVE_VDENC  QSV_VERSION_ATLEAST(1, 15)
 
+#define QSV_HAVE_GPB    QSV_VERSION_ATLEAST(1, 18)
+
 #if defined(_WIN32) || defined(__CYGWIN__)
 #define QSV_HAVE_AVBR   QSV_VERSION_ATLEAST(1, 3)
 #define QSV_HAVE_ICQ    QSV_VERSION_ATLEAST(1, 8)
@@ -178,6 +180,8 @@ typedef struct QSVEncContext {
 
     int win_brc_max_avg_kbps;
     int win_brc_size;
+
+    int gpb_off;
 
     int a53_cc;
 
