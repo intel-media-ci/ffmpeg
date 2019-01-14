@@ -714,8 +714,10 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
 
         if (ret < 0 && ret != MFX_ERR_MORE_SURFACE) {
             /* Ignore more_data error */
-            if (ret == MFX_ERR_MORE_DATA)
-                ret = AVERROR(EAGAIN);
+            if (ret == MFX_ERR_MORE_DATA) {
+                ret = MFX_ERR_NONE;
+                av_usleep(100000);
+            }
             break;
         }
 
