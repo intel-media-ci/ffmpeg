@@ -37,7 +37,7 @@ struct VAAPIEncodePicture;
 
 enum {
     MAX_CONFIG_ATTRIBUTES  = 4,
-    MAX_GLOBAL_PARAMS      = 4,
+    MAX_GLOBAL_PARAMS      = 5,
     MAX_DPB_SIZE           = 16,
     MAX_PICTURE_REFERENCES = 2,
     MAX_REORDER_DELAY      = 16,
@@ -176,6 +176,9 @@ typedef struct VAAPIEncodeContext {
     // Desired B frame reference depth.
     int             desired_b_depth;
 
+    // Quantization mode
+    int             trellis;
+
     // Explicitly set RC mode (otherwise attempt to pick from
     // available modes).
     int             explicit_rc_mode;
@@ -256,7 +259,9 @@ typedef struct VAAPIEncodeContext {
 #if VA_CHECK_VERSION(0, 36, 0)
     VAEncMiscParameterBufferQualityLevel quality_params;
 #endif
-
+#if VA_CHECK_VERSION(1, 5, 0)
+    VAEncMiscParameterQuantization quantization_params;
+#endif
     // Per-sequence parameter structure (VAEncSequenceParameterBuffer*).
     void           *codec_sequence_params;
 
@@ -418,7 +423,15 @@ int ff_vaapi_encode_close(AVCodecContext *avctx);
     { "b_depth", \
       "Maximum B-frame reference depth", \
       OFFSET(common.desired_b_depth), AV_OPT_TYPE_INT, \
-      { .i64 = 1 }, 1, INT_MAX, FLAGS }
+      { .i64 = 1 }, 1, INT_MAX, FLAGS }, \
+    { "trellis", \
+      "Trellis Quantization", \
+      OFFSET(common.trellis), AV_OPT_TYPE_FLAGS, \
+      { .i64 = 0}, 0, INT_MAX, FLAGS, "trellis"}, \
+      { "off",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 }, INT_MIN, INT_MAX, FLAGS, "trellis"}, \
+      { "I",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 2 }, INT_MIN, INT_MAX, FLAGS, "trellis"}, \
+      { "P",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 4 }, INT_MIN, INT_MAX, FLAGS, "trellis"}, \
+      { "B",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 8 }, INT_MIN, INT_MAX, FLAGS, "trellis"}
 
 #define VAAPI_ENCODE_RC_MODE(name, desc) \
     { #name, desc, 0, AV_OPT_TYPE_CONST, { .i64 = RC_MODE_ ## name }, \

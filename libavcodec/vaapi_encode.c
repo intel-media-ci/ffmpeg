@@ -1671,6 +1671,47 @@ rc_mode_found:
     return 0;
 }
 
+static av_cold int vaapi_encode_init_quantization(AVCodecContext *avctx)
+{
+#if VA_CHECK_VERSION(1, 5, 0)
+    VAAPIEncodeContext *ctx = avctx->priv_data;
+    VAStatus vas;
+    VAConfigAttrib attr = { VAConfigAttribEncQuantization };
+
+    vas = vaGetConfigAttributes(ctx->hwctx->display,
+                                ctx->va_profile,
+                                ctx->va_entrypoint,
+                                &attr, 1);
+    if (vas != VA_STATUS_SUCCESS) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to query quantization "
+               "config attribute: %d (%s).\n", vas, vaErrorStr(vas));
+        return AVERROR_EXTERNAL;
+    }
+
+    if (attr.value == VA_ATTRIB_NOT_SUPPORTED ||
+        attr.value == VA_ENC_QUANTIZATION_NONE) {
+        av_log(avctx, AV_LOG_WARNING, "Special Quantization attribute is not "
+                "supported: will use default quantization.\n");
+    } else if (attr.value == VA_ENC_QUANTIZATION_TRELLIS_SUPPORTED){
+        av_log(avctx, AV_LOG_VERBOSE, "Quantization Trellis supported.\n");
+
+        ctx->quantization_params = (VAEncMiscParameterQuantization) {
+            .quantization_flags.value = ctx->trellis,
+        };
+
+        vaapi_encode_add_global_param(avctx,
+                                      VAEncMiscParameterTypeQuantization,
+                                      &ctx->quantization_params,
+                                      sizeof(ctx->quantization_params));
+    }
+#else
+    av_log(avctx, AV_LOG_WARNING, "The encode quantization option (Trellis) is "
+           "not supported with this VAAPI version.\n");
+#endif
+
+    return 0;
+}
+
 static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
@@ -2131,6 +2172,12 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
     err = vaapi_encode_init_packed_headers(avctx);
     if (err < 0)
         goto fail;
+
+    if (ctx->trellis) {
+        err = vaapi_encode_init_quantization(avctx);
+        if (err < 0)
+            goto fail;
+    }
 
     if (avctx->compression_level >= 0) {
         err = vaapi_encode_init_quality(avctx);
