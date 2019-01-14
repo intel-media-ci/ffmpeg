@@ -43,6 +43,8 @@
 /* number of video enhancement filters */
 #define ENH_FILTERS_COUNT (5)
 
+#define QSV_HAVE_MCTF QSV_VERSION_ATLEAST(1, 26)
+
 typedef struct VPPContext{
     const AVClass *class;
 
@@ -52,6 +54,7 @@ typedef struct VPPContext{
     mfxExtVPPDeinterlacing  deinterlace_conf;
     mfxExtVPPFrameRateConversion frc_conf;
     mfxExtVPPDenoise denoise_conf;
+    mfxExtVppMctf mctf_conf;
     mfxExtVPPDetail detail_conf;
     mfxExtVPPProcAmp procamp_conf;
 
@@ -62,6 +65,7 @@ typedef struct VPPContext{
     int use_frc;                /* use framerate conversion */
     int deinterlace;            /* deinterlace mode : 0=off, 1=bob, 2=advanced */
     int denoise;                /* Enable Denoise algorithm. Value [0, 100] */
+    int mctf;                   /* Enable Motion Compensated Temporal Filter (MCTF) algorithm. Value [-1, 20] */
     int detail;                 /* Enable Detail Enhancement algorithm. */
                                 /* Level is the optional, value [0, 100] */
     int use_crop;               /* 1 = use crop; 0=none */
@@ -94,6 +98,9 @@ static const AVOption options[] = {
     { "saturation",  "ProcAmp saturation",           OFFSET(saturation),  AV_OPT_TYPE_FLOAT,    { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS},
     { "contrast",    "ProcAmp contrast",             OFFSET(contrast),    AV_OPT_TYPE_FLOAT,    { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS},
     { "brightness",  "ProcAmp brightness",           OFFSET(brightness),  AV_OPT_TYPE_FLOAT,    { .dbl = 0.0 }, -100.0, 100.0, .flags = FLAGS},
+#ifdef QSV_HAVE_MCTF
+    { "mctf",        "mctf filter strength: 0=auto", OFFSET(mctf),        AV_OPT_TYPE_INT,      { .i64 = -1 }, -1, 20, .flags = FLAGS },
+#endif
 
     { "cw",   "set the width crop area expression",   OFFSET(cw), AV_OPT_TYPE_STRING, { .str = "iw" }, CHAR_MIN, CHAR_MAX, FLAGS },
     { "ch",   "set the height crop area expression",  OFFSET(ch), AV_OPT_TYPE_STRING, { .str = "ih" }, CHAR_MIN, CHAR_MAX, FLAGS },
@@ -300,7 +307,16 @@ static int config_output(AVFilterLink *outlink)
 
         param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->denoise_conf;
     }
+#ifdef QSV_HAVE_MCTF
+    if (vpp->mctf >= 0) {
+        memset(&vpp->mctf_conf, 0, sizeof(mfxExtVppMctf));
+        vpp->mctf_conf.Header.BufferId = MFX_EXTBUFF_VPP_MCTF;
+        vpp->mctf_conf.Header.BufferSz = sizeof(mfxExtVppMctf);
+        vpp->mctf_conf.FilterStrength = vpp->mctf;
 
+        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->mctf_conf;
+    }
+#endif
     if (vpp->detail) {
         memset(&vpp->detail_conf, 0, sizeof(mfxExtVPPDetail));
         vpp->detail_conf.Header.BufferId  = MFX_EXTBUFF_VPP_DETAIL;
@@ -323,6 +339,9 @@ static int config_output(AVFilterLink *outlink)
     }
 
     if (vpp->use_frc || vpp->use_crop || vpp->deinterlace || vpp->denoise ||
+#ifdef QSV_HAVE_MCTF
+        vpp->mctf >= 0 ||
+#endif
         vpp->detail || vpp->procamp || inlink->w != outlink->w || inlink->h != outlink->h)
         return ff_qsvvpp_create(ctx, &vpp->qsv, &param);
     else {
