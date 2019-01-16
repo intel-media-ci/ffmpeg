@@ -1305,9 +1305,11 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
     if (avctx->rc_buffer_size)
         hrd_buffer_size = avctx->rc_buffer_size;
     else if (avctx->rc_max_rate > 0)
-        hrd_buffer_size = avctx->rc_max_rate;
+        hrd_buffer_size = ctx->codec->profiles->va_profile > 1 ?
+                        avctx->rc_max_rate : avctx->rc_max_rate >> 14;
     else
-        hrd_buffer_size = avctx->bit_rate;
+        hrd_buffer_size = ctx->codec->profiles->va_profile > 1 ?
+                        avctx->bit_rate : avctx->bit_rate >> 14;
     if (avctx->rc_initial_buffer_occupancy) {
         if (avctx->rc_initial_buffer_occupancy > hrd_buffer_size) {
             av_log(avctx, AV_LOG_ERROR, "Invalid RC buffer settings: "
@@ -1318,7 +1320,7 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
         }
         hrd_initial_buffer_fullness = avctx->rc_initial_buffer_occupancy;
     } else {
-        hrd_initial_buffer_fullness = hrd_buffer_size * 3 / 4;
+        hrd_initial_buffer_fullness = FFMAX(avctx->bit_rate, avctx->rc_max_rate) * 3 / 4;
     }
 
     if (avctx->rc_max_rate && avctx->rc_max_rate < avctx->bit_rate) {
