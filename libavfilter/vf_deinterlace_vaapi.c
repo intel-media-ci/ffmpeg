@@ -255,12 +255,8 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         params.surface_color_standard =
             ff_vaapi_vpp_colour_standard(input_frame->colorspace);
 
-        params.output_region = NULL;
         params.output_background_color = VAAPI_VPP_BACKGROUND_BLACK;
         params.output_color_standard = params.surface_color_standard;
-
-        params.pipeline_flags = 0;
-        params.filter_flags   = VA_FRAME_PICTURE;
 
         if (!ctx->auto_enable || input_frame->interlaced_frame) {
             vas = vaMapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffers[0],

@@ -164,10 +164,9 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         .height = input_frame->height,
     };
 
-    if (vpp_ctx->nb_filter_buffers) {
-        params.filters     = &vpp_ctx->filter_buffers[0];
-        params.num_filters = vpp_ctx->nb_filter_buffers;
-    }
+    params.filters     = &vpp_ctx->filter_buffers[0];
+    params.num_filters = vpp_ctx->nb_filter_buffers;
+
     params.surface = input_surface;
     params.surface_region = &input_region;
     params.surface_color_standard =
@@ -176,9 +175,6 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     params.output_region = NULL;
     params.output_background_color = VAAPI_VPP_BACKGROUND_BLACK;
     params.output_color_standard = params.surface_color_standard;
-
-    params.pipeline_flags = 0;
-    params.filter_flags = VA_FRAME_PICTURE;
 
     err = ff_vaapi_vpp_render_picture(avctx, &params, output_surface);
     if (err < 0)
