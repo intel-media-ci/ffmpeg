@@ -613,8 +613,7 @@ static av_cold int vaapi_encode_mpeg2_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    ctx->desired_packed_headers = VA_ENC_PACKED_HEADER_SEQUENCE |
-                                  VA_ENC_PACKED_HEADER_PICTURE;
+    ctx->desired_packed_headers = VA_ENC_PACKED_HEADER_RAW_DATA;
 
     ctx->surface_width  = FFALIGN(avctx->width,  16);
     ctx->surface_height = FFALIGN(avctx->height, 16);
