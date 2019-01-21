@@ -1,5 +1,5 @@
 /*
- * Intel MediaSDK QSV based MPEG-2, VC-1, VP8 and MJPEG decoders
+ * Intel MediaSDK QSV based MPEG-2, VC-1, VP8, MJPEG and VP9 decoders
  *
  * copyright (c) 2015 Anton Khirnov
  *
@@ -280,5 +280,34 @@ AVCodec ff_mjpeg_qsv_decoder = {
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12,
                                                     AV_PIX_FMT_QSV,
                                                     AV_PIX_FMT_NONE },
+};
+#endif
+
+#if CONFIG_VP9_QSV_DECODER
+static const AVClass vp9_qsv_class = {
+    .class_name = "vp9_qsv",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+AVCodec ff_vp9_qsv_decoder = {
+    .name           = "vp9_qsv",
+    .long_name      = NULL_IF_CONFIG_SMALL("VP9 video (Intel Quick Sync Video acceleration)"),
+    .priv_data_size = sizeof(QSVOtherContext),
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = AV_CODEC_ID_VP9,
+    .init           = qsv_decode_init,
+    .decode         = qsv_decode_frame,
+    .flush          = qsv_decode_flush,
+    .close          = qsv_decode_close,
+    .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_DR1 | AV_CODEC_CAP_AVOID_PROBING | AV_CODEC_CAP_HYBRID,
+    .priv_class     = &vp9_qsv_class,
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12,
+                                                    AV_PIX_FMT_P010,
+                                                    AV_PIX_FMT_QSV,
+                                                    AV_PIX_FMT_NONE },
+    .hw_configs     = ff_qsv_hw_configs,
+    .wrapper_name   = "qsv",
 };
 #endif
