@@ -524,8 +524,7 @@ int ff_qsv_process_data(AVCodecContext *avctx, QSVContext *q,
     avctx->field_order  = q->parser->field_order;
     /* TODO: flush delayed frames on reinit */
     if (q->parser->format       != q->orig_pix_fmt    ||
-        FFALIGN(q->parser->coded_width, 16)  != FFALIGN(avctx->coded_width, 16) ||
-        FFALIGN(q->parser->coded_height, 16) != FFALIGN(avctx->coded_height, 16)) {
+        q->height != q->parser->coded_height || q->width !=  q->parser->coded_width) {
         enum AVPixelFormat pix_fmts[3] = { AV_PIX_FMT_QSV,
                                            AV_PIX_FMT_NONE,
                                            AV_PIX_FMT_NONE };
@@ -558,6 +557,8 @@ int ff_qsv_process_data(AVCodecContext *avctx, QSVContext *q,
         avctx->coded_height = FFALIGN(q->parser->coded_height, 16);
         avctx->level        = q->avctx_internal->level;
         avctx->profile      = q->avctx_internal->profile;
+        q->width            = q->parser->coded_width;
+        q->height           = q->parser->coded_height;
 
         ret = ff_get_format(avctx, pix_fmts);
         if (ret < 0)
