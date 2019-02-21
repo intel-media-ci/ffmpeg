@@ -256,6 +256,9 @@ static const struct {
 #ifdef VA_FOURCC_YV16
     MAP(YV16, YUV422P),
 #endif
+#ifdef VA_FOURCC_YUY2
+    MAP(YUY2, YUYV422),
+#endif
     // 4:4:0
     MAP(422V, YUV440P),
     // 4:4:4
