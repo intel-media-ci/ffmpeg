@@ -41,7 +41,9 @@
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM)
 
 /* number of video enhancement filters */
-#define ENH_FILTERS_COUNT (5)
+#define ENH_FILTERS_COUNT (7)
+#define QSV_HAVE_ROTATION  QSV_VERSION_ATLEAST(1, 17)
+#define QSV_HAVE_MIRRORING QSV_VERSION_ATLEAST(1, 19)
 
 typedef struct VPPContext{
     const AVClass *class;
@@ -54,6 +56,8 @@ typedef struct VPPContext{
     mfxExtVPPDenoise denoise_conf;
     mfxExtVPPDetail detail_conf;
     mfxExtVPPProcAmp procamp_conf;
+    mfxExtVPPRotation rotation_conf;
+    mfxExtVPPMirroring mirroring_conf;
 
     int out_width;
     int out_height;
@@ -69,6 +73,9 @@ typedef struct VPPContext{
     int crop_h;
     int crop_x;
     int crop_y;
+
+    int rotation;               /* rotation mode : 0=0, 1=90, 2=180, 3=270 */
+    int mirror;                 /* mirror mode : 0=off, 1=HORIZONTAL */
 
     /* param for the procamp */
     int    procamp;            /* enable procamp */
@@ -94,6 +101,9 @@ static const AVOption options[] = {
     { "saturation",  "ProcAmp saturation",           OFFSET(saturation),  AV_OPT_TYPE_FLOAT,    { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS},
     { "contrast",    "ProcAmp contrast",             OFFSET(contrast),    AV_OPT_TYPE_FLOAT,    { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS},
     { "brightness",  "ProcAmp brightness",           OFFSET(brightness),  AV_OPT_TYPE_FLOAT,    { .dbl = 0.0 }, -100.0, 100.0, .flags = FLAGS},
+
+    { "rotation",    "clockwise rotation: 90 * [0, 3]", OFFSET(rotation), AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, 3, .flags = FLAGS},
+    { "mirror",      "horizontal mirror [0, 1]",        OFFSET(mirror),   AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, 1, .flags = FLAGS},
 
     { "cw",   "set the width crop area expression",   OFFSET(cw), AV_OPT_TYPE_STRING, { .str = "iw" }, CHAR_MIN, CHAR_MAX, FLAGS },
     { "ch",   "set the height crop area expression",  OFFSET(ch), AV_OPT_TYPE_STRING, { .str = "ih" }, CHAR_MIN, CHAR_MAX, FLAGS },
@@ -322,8 +332,39 @@ static int config_output(AVFilterLink *outlink)
         param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->procamp_conf;
     }
 
+    if (vpp->rotation) {
+#ifdef QSV_HAVE_ROTATION
+        memset(&vpp->rotation_conf, 0, sizeof(mfxExtVPPRotation));
+        vpp->rotation_conf.Header.BufferId  = MFX_EXTBUFF_VPP_ROTATION;
+        vpp->rotation_conf.Header.BufferSz  = sizeof(mfxExtVPPRotation);
+        vpp->rotation_conf.Angle = 90 * vpp->rotation;
+
+        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->rotation_conf;
+#else
+        av_log(ctx, AV_LOG_WARNING, "The QSV VPP rotation option is "
+            "not supported with this MSDK version.\n");
+        vpp->rotation = 0;
+#endif
+    }
+
+    if (vpp->mirror) {
+#ifdef QSV_HAVE_MIRRORING
+        memset(&vpp->mirroring_conf, 0, sizeof(mfxExtVPPMirroring));
+        vpp->mirroring_conf.Header.BufferId = MFX_EXTBUFF_VPP_MIRRORING;
+        vpp->mirroring_conf.Header.BufferSz = sizeof(mfxExtVPPMirroring);
+        vpp->mirroring_conf.Type = vpp->mirror;
+
+        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->mirroring_conf;
+#else
+        av_log(ctx, AV_LOG_WARNING, "The QSV VPP mirror option is "
+            "not supported with this MSDK version.\n");
+        vpp->mirror = 0;
+#endif
+    }
+
     if (vpp->use_frc || vpp->use_crop || vpp->deinterlace || vpp->denoise ||
-        vpp->detail || vpp->procamp || inlink->w != outlink->w || inlink->h != outlink->h)
+        vpp->rotation || vpp->mirror || vpp->detail || vpp->procamp ||
+        inlink->w != outlink->w || inlink->h != outlink->h)
         return ff_qsvvpp_create(ctx, &vpp->qsv, &param);
     else {
         av_log(ctx, AV_LOG_VERBOSE, "qsv vpp pass through mode.\n");
