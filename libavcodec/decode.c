@@ -652,8 +652,6 @@ static int decode_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
     if (!ret) {
         /* the only case where decode data is not set should be decoders
          * that do not call ff_get_buffer() */
-        av_assert0((frame->private_ref && frame->private_ref->size == sizeof(FrameDecodeData)) ||
-                   !(avctx->codec->capabilities & AV_CODEC_CAP_DR1));
 
         if (frame->private_ref) {
             FrameDecodeData *fdd = (FrameDecodeData*)frame->private_ref->data;

@@ -95,14 +95,14 @@ int ff_qsv_map_pixfmt(enum AVPixelFormat format, uint32_t *fourcc);
 enum AVPictureType ff_qsv_map_pictype(int mfx_pic_type);
 
 int ff_qsv_init_internal_session(AVCodecContext *avctx, mfxSession *session,
-                                 const char *load_plugins);
+                                 const char *load_plugins, int gpu_copy);
 
 int ff_qsv_init_session_device(AVCodecContext *avctx, mfxSession *psession,
-                               AVBufferRef *device_ref, const char *load_plugins);
+                               AVBufferRef *device_ref, const char *load_plugins, int gpu_copy);
 
 int ff_qsv_init_session_frames(AVCodecContext *avctx, mfxSession *session,
                                QSVFramesContext *qsv_frames_ctx,
-                               const char *load_plugins, int opaque);
+                               const char *load_plugins, int opaque, int gpu_copy);
 
 int ff_qsv_find_surface_idx(QSVFramesContext *ctx, QSVFrame *frame);
 
