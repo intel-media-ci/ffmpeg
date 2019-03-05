@@ -111,6 +111,10 @@ int filter_nbthreads = 0;
 int filter_complex_nbthreads = 0;
 int vstats_version = 2;
 
+int sfc_flags = 0;
+int sfc_width = 0;
+int sfc_height = 0;
+char *sfc_format;
 
 static int intra_only         = 0;
 static int file_overwrite     = 0;
@@ -1100,6 +1104,13 @@ static int open_input_file(OptionsContext *o, const char *filename)
         av_dict_set(&o->g->format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;
     }
+
+    //sfc opt
+    av_dict_set_int(&o->g->codec_opts, "sfc_flags", sfc_flags, AV_DICT_DONT_OVERWRITE);
+    av_dict_set_int(&o->g->codec_opts, "sfc_width", sfc_width, AV_DICT_DONT_OVERWRITE);
+    av_dict_set_int(&o->g->codec_opts, "sfc_height", sfc_height, AV_DICT_DONT_OVERWRITE);
+    av_dict_set(&o->g->codec_opts, "sfc_format", sfc_format, AV_DICT_DONT_OVERWRITE);
+
     /* open the input file with generic avformat function */
     err = avformat_open_input(&ic, filename, file_iformat, &o->g->format_opts);
     if (err < 0) {
@@ -2898,6 +2909,13 @@ static int opt_vstats_file(void *optctx, const char *opt, const char *arg)
     return 0;
 }
 
+static int opt_sfc_format(void *optctx, const char *opt, const char *arg)
+{
+    av_free (sfc_format);
+    sfc_format = av_strdup (arg);
+    return 0;
+}
+
 static int opt_vstats(void *optctx, const char *opt, const char *arg)
 {
     char filename[40];
@@ -3745,6 +3763,16 @@ const OptionDef options[] = {
         "initialise hardware device", "args" },
     { "filter_hw_device", HAS_ARG | OPT_EXPERT, { .func_arg = opt_filter_hw_device },
         "set hardware device used when filtering", "device" },
+
+    //sfc opt
+    { "sfc_flags",    OPT_VIDEO | HAS_ARG | OPT_INT | OPT_INPUT, { &sfc_flags },
+      "set sfc flags", "sfc" },
+    { "sfc_width",    OPT_VIDEO | HAS_ARG | OPT_INT | OPT_INPUT, { &sfc_width },
+      "set sfc width", "sfc" },
+    { "sfc_height",   OPT_VIDEO | HAS_ARG | OPT_INT | OPT_INPUT, { &sfc_height },
+      "set sfc height", "sfc" },
+    { "sfc_format",  OPT_VIDEO | HAS_ARG | OPT_EXPERT ,  { .func_arg = opt_sfc_format },
+        "set sfc format", "sfc" },
 
     { NULL, },
 };

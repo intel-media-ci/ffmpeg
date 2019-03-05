@@ -145,6 +145,17 @@ static void ff_vaapi_decode_destroy_buffers(AVCodecContext *avctx,
                    pic->slice_buffers[i], vas, vaErrorStr(vas));
         }
     }
+
+    //destory sfc buffer
+    if (avctx->sfc_flags) {
+        vas = vaDestroyBuffer(ctx->hwctx->display,
+                              pic->sfc_buffer);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to destroy sfc "
+                   "buffer %#x: %d (%s).\n",
+                   pic->sfc_buffer, vas, vaErrorStr(vas));
+        }
+    }
 }
 
 int ff_vaapi_decode_issue(AVCodecContext *avctx,
@@ -182,6 +193,56 @@ int ff_vaapi_decode_issue(AVCodecContext *avctx,
                "%d (%s).\n", vas, vaErrorStr(vas));
         err = AVERROR(EIO);
         goto fail_with_picture;
+    }
+
+    //add sfc buffer
+    if (avctx->sfc_flags) {
+        VARectangle   rect_src;          /**< @brief Rectangle for source input */
+        VARectangle   rect_sfc;          /**< @brief Rectangle for SFC output */
+        VAProcPipelineParameterBuffer buffer;
+
+        memset(&rect_src, 0, sizeof(rect_src));
+        memset(&rect_sfc, 0, sizeof(rect_sfc));
+        memset(&buffer, 0, sizeof(buffer));
+
+        rect_src.x = rect_src.y = 0;
+        rect_src.width = (uint16_t)pic->sfc_src_width;
+        rect_src.height = (uint16_t)pic->sfc_src_height;
+
+        rect_sfc.x = rect_src.y = 0;
+        rect_sfc.width = (uint16_t)avctx->sfc_width;
+        rect_sfc.height = (uint16_t)avctx->sfc_height;
+
+        buffer.surface_region = &rect_src;
+        buffer.output_region = &rect_sfc;
+        buffer.additional_outputs = (VASurfaceID*)&(pic->sfc_output_surface);
+        buffer.num_additional_outputs = 1;
+
+        vas = vaCreateBuffer(ctx->hwctx->display, ctx->va_context,
+                                  VAProcPipelineParameterBufferType,
+                                  sizeof(buffer),
+                                  1,
+                                  (uint8_t*)&buffer,
+                                  &pic->sfc_buffer);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to create sfc buffer: "
+                   "%d (%s).\n", vas, vaErrorStr(vas));
+            err = AVERROR(EIO);
+            goto fail_with_picture;
+        }
+
+        av_log(avctx, AV_LOG_DEBUG, "H264 create sfc buffer.\n");
+
+        vas = vaRenderPicture(ctx->hwctx->display, ctx->va_context,
+                              &pic->sfc_buffer, 1);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to upload sfc: "
+                   "%d (%s).\n", vas, vaErrorStr(vas));
+            err = AVERROR(EIO);
+            goto fail_with_picture;
+        }
+
+        av_log(avctx, AV_LOG_DEBUG, "H264 render sfc buffer.\n");
     }
 
     vas = vaEndPicture(ctx->hwctx->display, ctx->va_context);
@@ -493,14 +554,49 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         }
     }
 
-    vas = vaCreateConfig(hwctx->display, matched_va_profile,
-                         VAEntrypointVLD, NULL, 0,
-                         va_config);
-    if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to create decode "
-               "configuration: %d (%s).\n", vas, vaErrorStr(vas));
-        err = AVERROR(EIO);
-        goto fail;
+    if (avctx->sfc_flags) {
+        VAConfigAttrib attrib;
+
+        memset(&attrib, 0, sizeof(attrib));
+        attrib.type = VAConfigAttribDecProcessing;
+        attrib.value = 0;
+
+        vaGetConfigAttributes(
+            hwctx->display,
+            matched_va_profile,
+            VAEntrypointVLD,
+            &attrib,
+            1);
+
+        if (attrib.value != VA_DEC_PROCESSING) {
+            err =  AVERROR(EINVAL);
+            goto fail;
+        }
+
+        av_log(avctx, AV_LOG_DEBUG, "vaapi driver supports VDSFC\n");
+
+        attrib.type = VAConfigAttribDecProcessing;
+        attrib.value = VA_DEC_PROCESSING;
+
+        vas = vaCreateConfig(hwctx->display, matched_va_profile,
+                             VAEntrypointVLD, &attrib, 1,
+                             va_config);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to create decode "
+                   "configuration: %d (%s).\n", vas, vaErrorStr(vas));
+            err = AVERROR(EIO);
+            goto fail;
+        }
+    } else {
+        vas = vaCreateConfig(hwctx->display, matched_va_profile,
+                             VAEntrypointVLD, NULL, 0,
+                             va_config);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to create decode "
+                   "configuration: %d (%s).\n", vas, vaErrorStr(vas));
+            err = AVERROR(EIO);
+            goto fail;
+        }
     }
 
     hwconfig = av_hwdevice_hwconfig_alloc(device_ref);
@@ -587,6 +683,7 @@ int ff_vaapi_common_frame_params(AVCodecContext *avctx,
                                  AVBufferRef *hw_frames_ctx)
 {
     AVHWFramesContext *hw_frames = (AVHWFramesContext *)hw_frames_ctx->data;
+    AVVAAPIFramesContext *avfc = hw_frames->hwctx;
     AVHWDeviceContext *device_ctx = hw_frames->device_ctx;
     AVVAAPIDeviceContext *hwctx;
     VAConfigID va_config = VA_INVALID_ID;
@@ -603,6 +700,15 @@ int ff_vaapi_common_frame_params(AVCodecContext *avctx,
 
     if (va_config != VA_INVALID_ID)
         vaDestroyConfig(hwctx->display, va_config);
+
+    if (avctx->sfc_flags) {
+        avfc->sfc_flags = avctx->sfc_flags;
+        avfc->sfc_format = avctx->sfc_format;
+        avfc->sfc_width = avctx->sfc_width;
+        avfc->sfc_height = avctx->sfc_height;
+
+        av_log(avctx, AV_LOG_DEBUG, "VDSFC save sfc info avfc\n");
+    }
 
     return 0;
 }

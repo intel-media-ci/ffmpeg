@@ -37,6 +37,29 @@ static inline VASurfaceID ff_vaapi_get_surface_id(AVFrame *pic)
     return (uintptr_t)pic->data[3];
 }
 
+static inline VASurfaceID ff_vaapi_get_sfc_surface_id(AVFrame *pic)
+{
+    VASurfaceID sfc_surface_id = VA_INVALID_ID;
+
+    AVFrameSideData *frame_sfc_sd = av_frame_get_side_data(pic,
+                                                           AV_FRAME_DATA_SFC_INFO);
+    if (frame_sfc_sd) {
+        sfc_surface_id = (uintptr_t)frame_sfc_sd->buf->data;
+    }
+
+    return sfc_surface_id;
+}
+
+static inline int ff_vaapi_get_sfc_src_width(AVFrame *pic)
+{
+    return pic->width;
+}
+
+static inline int ff_vaapi_get_sfc_src_height(AVFrame *pic)
+{
+    return pic->height;
+}
+
 enum {
     MAX_PARAM_BUFFERS = 16,
 };
@@ -50,6 +73,13 @@ typedef struct VAAPIDecodePicture {
     int                nb_slices;
     VABufferID           *slice_buffers;
     int                   slices_allocated;
+
+    //sfc info
+    VASurfaceID           sfc_output_surface;
+    int                   sfc_src_width;
+    int                   sfc_src_height;
+    VABufferID            sfc_buffer;
+
 } VAAPIDecodePicture;
 
 typedef struct VAAPIDecodeContext {

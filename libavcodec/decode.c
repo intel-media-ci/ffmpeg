@@ -1795,6 +1795,22 @@ FF_ENABLE_DEPRECATION_WARNINGS
         frame->channels = avctx->channels;
         break;
     }
+
+    //sfc side data
+    if (avctx->sfc_flags) {
+        AVFrameSideData *frame_sfc_sd = av_frame_new_side_data(frame,
+                                                               AV_FRAME_DATA_SFC_INFO,
+                                                               sizeof(AVSFCInfo));
+        if (frame_sfc_sd) {
+            av_dict_set_int(&frame_sfc_sd->metadata, "sfc_flags", avctx->sfc_flags, 0);
+            av_dict_set_int(&frame_sfc_sd->metadata, "sfc_width", avctx->sfc_width, 0);
+            av_dict_set_int(&frame_sfc_sd->metadata, "sfc_height", avctx->sfc_height, 0);
+            av_dict_set_int(&frame_sfc_sd->metadata, "sfc_format", avctx->sfc_format, 0);
+
+            av_log(avctx, AV_LOG_DEBUG, "VDSFC new side data\n");
+        }
+    }
+
     return 0;
 }
 

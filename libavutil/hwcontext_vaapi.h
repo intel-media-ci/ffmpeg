@@ -100,6 +100,12 @@ typedef struct AVVAAPIFramesContext {
      */
     VASurfaceID     *surface_ids;
     int           nb_surfaces;
+
+    // VSFC info
+    int sfc_flags;
+    int sfc_format;
+    int sfc_width;
+    int sfc_height;
 } AVVAAPIFramesContext;
 
 /**

@@ -302,6 +302,19 @@ static int vaapi_h264_start_frame(AVCodecContext          *avctx,
     if (err < 0)
         goto fail;
 
+    //get sfc surface id
+    if (avctx->sfc_flags) {
+        pic->sfc_output_surface = ff_vaapi_get_sfc_surface_id(h->cur_pic_ptr->f);
+
+        //get sfc src width and height
+        pic->sfc_src_width = ff_vaapi_get_sfc_src_width(h->cur_pic_ptr->f);
+        pic->sfc_src_height = ff_vaapi_get_sfc_src_height(h->cur_pic_ptr->f);
+
+        av_log(avctx, AV_LOG_DEBUG, "H264 get sfc surface id: %d\n", pic->sfc_output_surface);
+        av_log(avctx, AV_LOG_DEBUG, "H264 get sfc width: %d\n", pic->sfc_src_width);
+        av_log(avctx, AV_LOG_DEBUG, "H264 get sfc height: %d\n", pic->sfc_src_height);
+    }
+
     return 0;
 
 fail:

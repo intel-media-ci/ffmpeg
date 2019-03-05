@@ -642,8 +642,74 @@ static void vaapi_frames_uninit(AVHWFramesContext *hwfc)
     av_freep(&ctx->attributes);
 }
 
+static int vaapi_get_sfc_buffer(AVHWFramesContext *hwfc, AVFrame *frame)
+{
+    AVVAAPIFramesContext *avfc = hwfc->hwctx;
+    AVFrameSideData *frame_sfc_sd = av_frame_get_side_data(frame,
+                                                           AV_FRAME_DATA_SFC_INFO);
+    if (frame_sfc_sd) {
+        AVVAAPIDeviceContext *hwctx = hwfc->device_ctx->hwctx;
+        VASurfaceID sfc_surface_id;
+        VASurfaceAttrib attrib;
+        unsigned int rt_format;
+        AVBufferRef *ref;
+        VAStatus vas;
+
+        memset(&attrib, 0, sizeof(attrib));
+        attrib.type = VASurfaceAttribPixelFormat;
+        attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
+        attrib.value.type = VAGenericValueTypeInteger;
+
+        switch (avfc->sfc_format) {
+        case AV_PIX_FMT_NV12:
+            attrib.value.value.i = VA_FOURCC_NV12;
+            rt_format = VA_RT_FORMAT_YUV420;
+            break;
+        case AV_PIX_FMT_ARGB:
+            attrib.value.value.i = VA_FOURCC_ARGB;
+            rt_format = VA_RT_FORMAT_RGB32;
+            break;
+        default:
+            av_log(hwfc, AV_LOG_ERROR, "Unknown sfc format: %d\n", avfc->sfc_format);
+            return AVERROR(EINVAL);
+        }
+
+        vas = vaCreateSurfaces(hwctx->display, rt_format,
+                               avfc->sfc_width, avfc->sfc_height,
+                               &sfc_surface_id, 1,
+                               &attrib, 1);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(hwfc, AV_LOG_ERROR, "Failed to create sfc surface: "
+                   "%d (%s).\n", vas, vaErrorStr(vas));
+            return AVERROR(EIO);
+        }
+
+        av_log(hwfc, AV_LOG_DEBUG, "Created sfc surface %#x. sfc_format(%d), w(%d), h(%d)\n",
+               sfc_surface_id, avfc->sfc_format, avfc->sfc_width, avfc->sfc_height);
+
+        ref = av_buffer_create((uint8_t*)(uintptr_t)sfc_surface_id,
+                               sizeof(sfc_surface_id), &vaapi_buffer_free,
+                               hwfc, AV_BUFFER_FLAG_READONLY);
+        if (!ref) {
+            vaDestroySurfaces(hwctx->display, &sfc_surface_id, 1);
+            return AVERROR(EIO);
+        }
+
+        frame_sfc_sd->buf = ref;
+
+        av_log(hwfc, AV_LOG_DEBUG, "Created sfc av buffer ref: %p\n", ref);
+
+    } else {
+        av_log(hwfc, AV_LOG_DEBUG, "VDSFC frame_sfc_sd is null\n");
+    }
+
+    return 0;
+}
+
 static int vaapi_get_buffer(AVHWFramesContext *hwfc, AVFrame *frame)
 {
+    int err;
+
     frame->buf[0] = av_buffer_pool_get(hwfc->pool);
     if (!frame->buf[0])
         return AVERROR(ENOMEM);
@@ -652,6 +718,11 @@ static int vaapi_get_buffer(AVHWFramesContext *hwfc, AVFrame *frame)
     frame->format  = AV_PIX_FMT_VAAPI;
     frame->width   = hwfc->width;
     frame->height  = hwfc->height;
+
+    //create sfc surface, put it in side data
+    err = vaapi_get_sfc_buffer(hwfc, frame);
+    if (err)
+        return err;
 
     return 0;
 }

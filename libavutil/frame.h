@@ -179,6 +179,11 @@ enum AVFrameSideDataType {
      * array element is implied by AVFrameSideData.size / AVRegionOfInterest.self_size.
      */
     AV_FRAME_DATA_REGIONS_OF_INTEREST,
+
+    /**
+     * VDENC SFC information.
+     */
+    AV_FRAME_DATA_SFC_INFO,
 };
 
 enum AVActiveFormatDescription {
@@ -234,6 +239,14 @@ typedef struct AVRegionOfInterest {
     int right;
     AVRational qoffset;
 } AVRegionOfInterest;
+
+/**
+ * Structure to hold Information of SFC.
+ *
+ */
+typedef struct AVSFCInfo {
+    uint8_t *data;
+} AVSFCInfo;
 
 /**
  * This structure describes decoded (raw) audio or video data.
