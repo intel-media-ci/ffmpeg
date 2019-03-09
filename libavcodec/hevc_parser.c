@@ -267,8 +267,7 @@ static int hevc_find_frame_end(AVCodecParserContext *s, const uint8_t *buf,
         if ((nut >= HEVC_NAL_VPS && nut <= HEVC_NAL_EOB_NUT) || nut == HEVC_NAL_SEI_PREFIX ||
             (nut >= 41 && nut <= 44) || (nut >= 48 && nut <= 55)) {
             if (pc->frame_start_found) {
-                pc->frame_start_found = 0;
-                return i - 5;
+                goto found;
             }
         } else if (nut <= HEVC_NAL_RASL_R ||
                    (nut >= HEVC_NAL_BLA_W_LP && nut <= HEVC_NAL_CRA_NUT)) {
@@ -277,14 +276,19 @@ static int hevc_find_frame_end(AVCodecParserContext *s, const uint8_t *buf,
                 if (!pc->frame_start_found) {
                     pc->frame_start_found = 1;
                 } else { // First slice of next frame found
-                    pc->frame_start_found = 0;
-                    return i - 5;
+                    goto found;
                 }
             }
         }
     }
 
     return END_NOT_FOUND;
+
+found:
+    pc->frame_start_found = 0;
+    while (i - 6 >= 0 ? !buf[i - 6] : !pc->buffer[pc->index + i - 6])
+        i--;
+    return i - 5;
 }
 
 static int hevc_parse(AVCodecParserContext *s, AVCodecContext *avctx,
