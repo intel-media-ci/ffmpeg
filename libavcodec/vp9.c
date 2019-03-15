@@ -555,11 +555,37 @@ static int decode_frame_header(AVCodecContext *avctx,
             s->s.h.signbias[1]    = get_bits1(&s->gb) && !s->s.h.errorres;
             s->s.h.refidx[2]      = get_bits(&s->gb, 3);
             s->s.h.signbias[2]    = get_bits1(&s->gb) && !s->s.h.errorres;
-            if (!s->s.refs[s->s.h.refidx[0]].f->buf[0] ||
-                !s->s.refs[s->s.h.refidx[1]].f->buf[0] ||
-                !s->s.refs[s->s.h.refidx[2]].f->buf[0]) {
-                av_log(avctx, AV_LOG_ERROR, "Not all references are available\n");
-                return AVERROR_INVALIDDATA;
+            if (0 == sizeof(s->s.refs[s->s.h.refidx[0]])) {
+                if (0 == sizeof(s->s.refs[s->s.h.refidx[1]].f->buf[0])) {
+                    if (0 == s->s.refs[s->s.h.refidx[2]].f->buf[0]) {
+                        av_log(avctx, AV_LOG_ERROR, "All references are unavailable\n");
+                        return AVERROR_INVALIDDATA;
+                    } else {
+                        av_frame_copy(s->s.refs[s->s.h.refidx[1]].f,s->s.refs[s->s.h.refidx[2]].f);
+                        av_frame_copy(s->s.refs[s->s.h.refidx[0]].f,s->s.refs[s->s.h.refidx[2]].f);
+                    }
+                } else {
+                    if (0 == sizeof(s->s.refs[s->s.h.refidx[2]].f->buf[0])) {
+                        av_frame_copy(s->s.refs[s->s.h.refidx[0]].f,s->s.refs[s->s.h.refidx[1]].f);
+                        av_frame_copy(s->s.refs[s->s.h.refidx[2]].f,s->s.refs[s->s.h.refidx[1]].f);
+                    } else {
+                        av_frame_copy(s->s.refs[s->s.h.refidx[0]].f,s->s.refs[s->s.h.refidx[1]].f);
+                    }
+                }
+            } else {
+                if (0 == sizeof(s->s.refs[s->s.h.refidx[1]].f->buf[0])) {
+                    if (0 == sizeof(s->s.refs[s->s.h.refidx[2]].f->buf[0])) {
+                        s->s.refs[s->s.h.refidx[1]].f = s->s.refs[s->s.h.refidx[2]].f = s->s.refs[s->s.h.refidx[0]].f;
+                        av_frame_copy(s->s.refs[s->s.h.refidx[1]].f,s->s.refs[s->s.h.refidx[0]].f);
+                        av_frame_copy(s->s.refs[s->s.h.refidx[2]].f,s->s.refs[s->s.h.refidx[0]].f);
+                    } else {
+                        av_frame_copy(s->s.refs[s->s.h.refidx[1]].f,s->s.refs[s->s.h.refidx[0]].f);
+                    }
+                } else {
+                    if (0 == sizeof(s->s.refs[s->s.h.refidx[2]].f->buf[0])) {
+                        av_frame_copy(s->s.refs[s->s.h.refidx[2]].f,s->s.refs[s->s.h.refidx[1]].f);
+                    }
+                }
             }
             if (get_bits1(&s->gb)) {
                 w = s->s.refs[s->s.h.refidx[0]].f->width;
@@ -790,6 +816,7 @@ static int decode_frame_header(AVCodecContext *avctx,
 
     /* check reference frames */
     if (!s->s.h.keyframe && !s->s.h.intraonly) {
+        int has_valid_ref_frame = 0;
         for (i = 0; i < 3; i++) {
             AVFrame *ref = s->s.refs[s->s.h.refidx[i]].f;
             int refw = ref->width, refh = ref->height;
@@ -802,18 +829,26 @@ static int decode_frame_header(AVCodecContext *avctx,
                 return AVERROR_INVALIDDATA;
             } else if (refw == w && refh == h) {
                 s->mvscale[i][0] = s->mvscale[i][1] = 0;
+                has_valid_ref_frame = 1;
             } else {
-                if (w * 2 < refw || h * 2 < refh || w > 16 * refw || h > 16 * refh) {
-                    av_log(avctx, AV_LOG_ERROR,
+                int is_ref_frame_invalid = (w * 2 < refw || h * 2 < refh || w > 16 * refw || h > 16 * refh);
+                if (is_ref_frame_invalid) {
+                    av_log(avctx, AV_LOG_WARNING,
                            "Invalid ref frame dimensions %dx%d for frame size %dx%d\n",
                            refw, refh, w, h);
-                    return AVERROR_INVALIDDATA;
+                } else {
+                    has_valid_ref_frame = 1;
                 }
                 s->mvscale[i][0] = (refw << 14) / w;
                 s->mvscale[i][1] = (refh << 14) / h;
                 s->mvstep[i][0] = 16 * s->mvscale[i][0] >> 14;
                 s->mvstep[i][1] = 16 * s->mvscale[i][1] >> 14;
             }
+        }
+        if (!has_valid_ref_frame) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Referenced frame has invalid size\n");
+            return AVERROR_INVALIDDATA;
         }
     }
 
