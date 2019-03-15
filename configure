@@ -1667,6 +1667,7 @@ EXAMPLE_LIST="
     metadata_example
     muxing_example
     qsvdec_example
+    qsvdec_gpucopy_example
     remuxing_example
     resampling_audio_example
     scaling_video_example
@@ -3550,6 +3551,7 @@ hw_decode_example_deps="avcodec avformat avutil"
 metadata_example_deps="avformat avutil"
 muxing_example_deps="avcodec avformat avutil swscale"
 qsvdec_example_deps="avcodec avutil libmfx h264_qsv_decoder"
+qsvdec_gpucopy_example_deps="avcodec avutil avformat"
 remuxing_example_deps="avcodec avformat avutil"
 resampling_audio_example_deps="avutil swresample"
 scaling_video_example_deps="avutil swscale"
