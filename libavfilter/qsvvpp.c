@@ -27,6 +27,7 @@
 #include "libavutil/hwcontext_qsv.h"
 #include "libavutil/time.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/imgutils.h"
 
 #include "internal.h"
 #include "qsvvpp.h"
@@ -51,6 +52,7 @@ struct QSVVPPContext {
     enum AVPixelFormat  out_sw_format;   /* Real output format */
     mfxVideoParam       vpp_param;
     mfxFrameInfo       *frame_infos;     /* frame info for each input */
+    AVBufferPool       *pool;
 
     /* members related to the input/output surface */
     int                 in_mem_mode;
@@ -375,10 +377,26 @@ static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
         out_frame->surface = (mfxFrameSurface1 *)out_frame->frame->data[3];
     } else {
         /* Get a frame with aligned dimensions.
-         * Libmfx need system memory being 128x64 aligned */
-        out_frame->frame = ff_get_video_buffer(outlink,
-                                               FFALIGN(outlink->w, 128),
-                                               FFALIGN(outlink->h, 64));
+         * Libmfx need system memory being 128x64 aligned
+         * and continuously allocated across Y and UV */
+        out_frame->frame = av_frame_alloc();
+        if (!out_frame->frame) {
+            return NULL;
+        }
+
+        out_frame->frame->linesize[0] = FFALIGN(outlink->w, 128);
+        out_frame->frame->linesize[1] = out_frame->frame->linesize[0];
+        out_frame->frame->buf[0]      = av_buffer_pool_get(s->pool);
+        out_frame->frame->format      = outlink->format;
+
+        if (!out_frame->frame->buf[0])
+            return NULL;
+
+        out_frame->frame->data[0] = out_frame->frame->buf[0]->data;
+        out_frame->frame->data[1] = out_frame->frame->data[0] +
+                                    out_frame->frame->linesize[0] *
+                                    FFALIGN(outlink->h, 64);
+
         if (!out_frame->frame)
             return NULL;
 
@@ -483,8 +501,13 @@ static int init_vpp_session(AVFilterContext *avctx, QSVVPPContext *s)
 
         av_buffer_unref(&outlink->hw_frames_ctx);
         outlink->hw_frames_ctx = out_frames_ref;
-    } else
+    } else {
         s->out_mem_mode = MFX_MEMTYPE_SYSTEM_MEMORY;
+        s->pool = av_buffer_pool_init(av_image_get_buffer_size(outlink->format,
+                                                        FFALIGN(outlink->w, 128),
+                                                        FFALIGN(outlink->h, 64), 1),
+                                        av_buffer_allocz);
+    }
 
     /* extract the properties of the "master" session given to us */
     ret = MFXQueryIMPL(device_hwctx->session, &impl);
@@ -674,6 +697,7 @@ int ff_qsvvpp_free(QSVVPPContext **vpp)
     /* release all the resources */
     clear_frame_list(&s->in_frame_list);
     clear_frame_list(&s->out_frame_list);
+    av_buffer_pool_uninit(&s->pool);
     av_freep(&s->surface_ptrs_in);
     av_freep(&s->surface_ptrs_out);
     av_freep(&s->ext_buffers);
