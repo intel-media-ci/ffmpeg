@@ -214,4 +214,16 @@ typedef struct CodedBitstreamVP9Context {
 } CodedBitstreamVP9Context;
 
 
+/**
+ * Entrypoint for VP9 parser.
+ *
+ * Parses headers only in a VP9 frame, and does not require refcounting.
+ *
+ * The data may contain multiple frames in a superframe; all will be parsed
+ * but the returned information will be for the final frame.
+ */
+int ff_cbs_vp9_parse_headers(CodedBitstreamContext *ctx,
+                             VP9RawFrameHeader *header,
+                             const uint8_t *data, size_t data_size);
+
 #endif /* AVCODEC_CBS_VP9_H */

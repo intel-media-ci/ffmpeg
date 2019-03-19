@@ -690,3 +690,65 @@ const CodedBitstreamType ff_cbs_type_vp9 = {
 
     .close             = &cbs_vp9_close,
 };
+
+int ff_cbs_vp9_parse_headers(CodedBitstreamContext *ctx,
+                             VP9RawFrameHeader *header,
+                             const uint8_t *data, size_t data_size)
+{
+    GetBitContext gbc;
+    uint8_t superframe_header;
+    int err;
+
+    if (data_size < 1)
+        return AVERROR_INVALIDDATA;
+
+    superframe_header = data[data_size - 1];
+    if ((superframe_header & 0xe0) == 0xc0) {
+        VP9RawSuperframeIndex sfi;
+        size_t index_size, pos;
+        int i;
+
+        index_size = 2 + (((superframe_header & 0x18) >> 3) + 1) *
+                          ((superframe_header & 0x07) + 1);
+        if (index_size > data_size)
+            return AVERROR_INVALIDDATA;
+
+        err = init_get_bits(&gbc, data + data_size - index_size,
+                            8 * index_size);
+        if (err < 0)
+            return err;
+
+        err = cbs_vp9_read_superframe_index(ctx, &gbc, &sfi);
+        if (err < 0)
+            return err;
+
+        pos = 0;
+        for (i = 0; i <= sfi.frames_in_superframe_minus_1; i++) {
+            if (pos + sfi.frame_sizes[i] + index_size > data_size)
+                return AVERROR_INVALIDDATA;
+
+            err = init_get_bits(&gbc, data + pos,
+                                8 * sfi.frame_sizes[i]);
+            if (err < 0)
+                return err;
+
+            memset(header, 0, sizeof(*header));
+            err = cbs_vp9_read_uncompressed_header(ctx, &gbc, header);
+            if (err < 0)
+                return err;
+
+            pos += sfi.frame_sizes[i];
+        }
+
+    } else {
+        err = init_get_bits(&gbc, data, 8 * data_size);
+        if (err < 0)
+            return err;
+
+        err = cbs_vp9_read_uncompressed_header(ctx, &gbc, header);
+        if (err < 0)
+            return err;
+    }
+
+    return 0;
+}
