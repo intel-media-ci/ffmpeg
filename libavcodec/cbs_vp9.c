@@ -416,6 +416,9 @@ static int cbs_vp9_split_fragment(CodedBitstreamContext *ctx,
     uint8_t superframe_header;
     int err;
 
+    if (frag->data_size == 0)
+        return 0;
+
     // Last byte in the packet.
     superframe_header = frag->data[frag->data_size - 1];
 
@@ -427,6 +430,12 @@ static int cbs_vp9_split_fragment(CodedBitstreamContext *ctx,
 
         index_size = 2 + (((superframe_header & 0x18) >> 3) + 1) *
                           ((superframe_header & 0x07) + 1);
+        if (index_size > frag->data_size) {
+            av_log(ctx->log_ctx, AV_LOG_ERROR, "Superframe index (%"
+                   SIZE_SPECIFIER" bytes) is larger than whole frame (%"
+                   SIZE_SPECIFIER" bytes).\n", index_size, frag->data_size);
+            return AVERROR_INVALIDDATA;
+        }
 
         err = init_get_bits(&gbc, frag->data + frag->data_size - index_size,
                             8 * index_size);
