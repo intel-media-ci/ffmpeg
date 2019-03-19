@@ -1,8 +1,5 @@
 /*
- * VP9 compatible video decoder
- *
- * Copyright (C) 2013 Ronald S. Bultje <rsbultje gmail com>
- * Copyright (C) 2013 Clément Bœsch <u pkh me>
+ * VP9 parser
  *
  * This file is part of FFmpeg.
  *
@@ -21,50 +18,96 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/intreadwrite.h"
-#include "libavcodec/get_bits.h"
+#include "libavutil/avassert.h"
+#include "cbs.h"
+#include "cbs_vp9.h"
 #include "parser.h"
 
-static int parse(AVCodecParserContext *ctx,
-                 AVCodecContext *avctx,
-                 const uint8_t **out_data, int *out_size,
-                 const uint8_t *data, int size)
+typedef struct VP9ParserContext {
+    CodedBitstreamContext *cbc;
+    VP9RawFrameHeader frame_header;
+} VP9ParserContext;
+
+static const enum AVPixelFormat vp9_pix_fmts[3][2][2] = {
+    { // 8-bit.
+        { AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV440P },
+        { AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P },
+    },
+    { // 10-bit.
+        { AV_PIX_FMT_YUV444P10, AV_PIX_FMT_YUV440P10 },
+        { AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV420P10 },
+    },
+    { // 12-bit.
+        { AV_PIX_FMT_YUV444P12, AV_PIX_FMT_YUV440P12 },
+        { AV_PIX_FMT_YUV422P12, AV_PIX_FMT_YUV420P12 },
+    },
+};
+
+static int vp9_parser_parse(AVCodecParserContext *ctx,
+                            AVCodecContext *avctx,
+                            const uint8_t **out_data, int *out_size,
+                            const uint8_t *data, int size)
 {
-    GetBitContext gb;
-    int res, profile, keyframe;
+    VP9ParserContext *s = ctx->priv_data;
+    const CodedBitstreamVP9Context *vp9 = s->cbc->priv_data;
+    const VP9RawFrameHeader *fh;
+    int err;
 
     *out_data = data;
     *out_size = size;
 
-    if (!size || (res = init_get_bits8(&gb, data, size)) < 0)
-        return size; // parsers can't return errors
-    get_bits(&gb, 2); // frame marker
-    profile  = get_bits1(&gb);
-    profile |= get_bits1(&gb) << 1;
-    if (profile == 3) profile += get_bits1(&gb);
-    if (profile > 3)
-        return size;
+    if (!size)
+        return 0;
 
-    avctx->profile = profile;
+    s->cbc->log_ctx = avctx;
 
-    if (get_bits1(&gb)) {
-        keyframe = 0;
-    } else {
-        keyframe  = !get_bits1(&gb);
+    err = ff_cbs_vp9_parse_headers(s->cbc, &s->frame_header, data, size);
+    if (err < 0) {
+        av_log(avctx, AV_LOG_WARNING, "Failed to parse VP9 frame headers.\n");
+        goto end;
     }
+    fh = &s->frame_header;
 
-    if (!keyframe) {
-        ctx->pict_type = AV_PICTURE_TYPE_P;
-        ctx->key_frame = 0;
-    } else {
-        ctx->pict_type = AV_PICTURE_TYPE_I;
-        ctx->key_frame = 1;
-    }
+    avctx->profile = vp9->profile;
+    avctx->level   = FF_LEVEL_UNKNOWN;
+
+    ctx->width  = ctx->coded_width  = vp9->frame_width;
+    ctx->height = ctx->coded_height = vp9->frame_height;
+
+    ctx->pict_type = fh->intra_only ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
+    ctx->key_frame = !fh->frame_type;
+
+    ctx->picture_structure = AV_PICTURE_STRUCTURE_FRAME;
+
+    av_assert0(vp9->bit_depth == 8  ||
+               vp9->bit_depth == 10 ||
+               vp9->bit_depth == 12);
+
+    ctx->format = vp9_pix_fmts[(vp9->bit_depth - 8) / 2]
+                              [vp9->subsampling_x][vp9->subsampling_y];
+
+end:
+    s->cbc->log_ctx = NULL;
 
     return size;
 }
 
+static av_cold int vp9_parser_init(AVCodecParserContext *ctx)
+{
+    VP9ParserContext *s = ctx->priv_data;
+    return ff_cbs_init(&s->cbc, AV_CODEC_ID_VP9, NULL);
+}
+
+static av_cold void vp9_parser_close(AVCodecParserContext *ctx)
+{
+    VP9ParserContext *s = ctx->priv_data;
+    ff_cbs_close(&s->cbc);
+}
+
 AVCodecParser ff_vp9_parser = {
     .codec_ids      = { AV_CODEC_ID_VP9 },
-    .parser_parse   = parse,
+    .priv_data_size = sizeof(VP9ParserContext),
+    .parser_init    = vp9_parser_init,
+    .parser_close   = vp9_parser_close,
+    .parser_parse   = vp9_parser_parse,
 };
