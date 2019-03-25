@@ -312,6 +312,8 @@ static av_always_inline float ff_exp2fi(int x) {
  */
 int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags);
 
+int ff_get_continuous_buffer(AVCodecContext *avctx, AVFrame *frame, AVBufferPool *pool);
+
 /**
  * Identical in function to av_frame_make_writable(), except it uses
  * ff_get_buffer() to allocate the buffer when needed.

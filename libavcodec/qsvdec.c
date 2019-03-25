@@ -234,19 +234,9 @@ static int alloc_frame(AVCodecContext *avctx, QSVContext *q, QSVFrame *frame)
         if (ret < 0)
             return ret;
     } else {
-        ff_decode_frame_props(avctx, frame->frame);
-
-        frame->frame->width       = avctx->width;
-        frame->frame->height      = avctx->height;
-        frame->frame->linesize[0] = FFALIGN(avctx->width, 128);
-        frame->frame->linesize[1] = frame->frame->linesize[0];
-        frame->frame->buf[0]      = av_buffer_pool_get(q->pool);
-        if (!frame->frame->buf[0])
-            return AVERROR(ENOMEM);
-
-        frame->frame->data[0] = frame->frame->buf[0]->data;
-        frame->frame->data[1] = frame->frame->data[0] +
-                                frame->frame->linesize[0] * FFALIGN(avctx->height, 64);
+        ret = ff_get_continuous_buffer(avctx, frame->frame, q->pool);
+        if (ret < 0)
+            return ret;
     }
 
     if (frame->frame->format == AV_PIX_FMT_QSV) {

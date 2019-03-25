@@ -653,6 +653,9 @@ static int decode_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
         /* the only case where decode data is not set should be decoders
          * that do not call ff_get_buffer() */
 
+        av_assert0((frame->private_ref && frame->private_ref->size == sizeof(FrameDecodeData)) ||
+                   !(avctx->codec->capabilities & AV_CODEC_CAP_DR1));
+
         if (frame->private_ref) {
             FrameDecodeData *fdd = (FrameDecodeData*)frame->private_ref->data;
 
@@ -1912,6 +1915,31 @@ end:
         av_frame_unref(frame);
 
     return ret;
+}
+
+int ff_get_continuous_buffer(AVCodecContext *avctx, AVFrame *frame, AVBufferPool *pool)
+{
+    int ret = 0;
+
+    ff_decode_frame_props(avctx, frame);
+
+    frame->width       = avctx->width;
+    frame->height      = avctx->height;
+    frame->linesize[0] = FFALIGN(avctx->width, 128);
+    frame->linesize[1] = frame->linesize[0];
+    frame->buf[0]      = av_buffer_pool_get(pool);
+    if (!frame->buf[0])
+        return AVERROR(ENOMEM);
+
+    frame->data[0] = frame->buf[0]->data;
+    frame->data[1] = frame->data[0] +
+                            frame->linesize[0] * FFALIGN(avctx->height, 64);
+
+    ret = ff_attach_decode_data(frame);
+    if (ret < 0)
+        return ret;
+
+    return 0;
 }
 
 int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags)
