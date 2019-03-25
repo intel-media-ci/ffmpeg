@@ -13121,6 +13121,26 @@ normalize=blackpt=red:whitept=cyan
 
 Pass the video source unchanged to the output.
 
+@section objectdetect
+Object Detection
+
+This filter uses Tensorflow for DNN inference. To enable this filter you
+need to install the TensorFlow for C library (see
+@url{https://www.tensorflow.org/install/install_c}) and configure FFmpeg with
+@code{--enable-libtensorflow}
+
+It accepts the following options:
+
+@table @option
+@item model
+Set path to model file specifying network architecture and its parameters.
+You can download tar.gz file from
+@url{https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/detection_model_zoo.md},
+do not download quantized models which is for tensorflow light. Unzip and use frozen_inference_graph.pb
+which is the frozen graph proto with weights baked into the graph as constants.
+
+@end table
+
 @section ocr
 Optical Character Recognition
 
