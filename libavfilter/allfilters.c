@@ -292,6 +292,7 @@ extern AVFilter ff_vf_noformat;
 extern AVFilter ff_vf_noise;
 extern AVFilter ff_vf_normalize;
 extern AVFilter ff_vf_null;
+extern AVFilter ff_vf_objectdetect;
 extern AVFilter ff_vf_ocr;
 extern AVFilter ff_vf_ocv;
 extern AVFilter ff_vf_oscilloscope;
