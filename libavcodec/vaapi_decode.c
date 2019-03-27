@@ -259,7 +259,16 @@ static const struct {
     // 4:4:0
     MAP(422V, YUV440P),
     // 4:4:4
+#ifdef VA_FOURCC_444P
     MAP(444P, YUV444P),
+#endif
+#ifdef VA_FOURCC_AYUV
+    MAP(AYUV, YUVA444P),
+#endif
+    // 4:4:4 10-bit
+#ifdef VA_FOURCC_Y410
+    MAP(Y410, YUV444P10LE),
+#endif
     // 4:2:0 10-bit
 #ifdef VA_FOURCC_P010
     MAP(P010, P010),
@@ -380,6 +389,10 @@ static const struct {
 #if VA_CHECK_VERSION(0, 37, 0)
     MAP(HEVC,        HEVC_MAIN,       HEVCMain    ),
     MAP(HEVC,        HEVC_MAIN_10,    HEVCMain10  ),
+#endif
+#if VA_CHECK_VERSION(1, 2, 0)
+    MAP(HEVC,        HEVC_REXT,       HEVCMain444 ),
+    MAP(HEVC,        HEVC_REXT,    HEVCMain444_10 ),
 #endif
     MAP(MJPEG,       MJPEG_HUFFMAN_BASELINE_DCT,
                                       JPEGBaseline),
