@@ -414,6 +414,18 @@ static const struct {
 #undef MAP
 };
 
+static const struct {
+    VAProfile va_profile;
+    enum AVPixelFormat pix_fmt;
+} rext_format_map[] = {
+#define MAP(vp, av) { VAProfileHEVCMain ## vp, AV_PIX_FMT_ ## av }
+    MAP(422_10,  YUV422P),
+    MAP(422_10,  YUV422P10LE),
+    MAP(444,     YUV444P),
+    MAP(444_10,  YUV444P10LE),
+#undef MAP
+};
+
 /*
  * Set *va_config and the frames_ref fields from the current codec parameters
  * in avctx.
@@ -426,7 +438,7 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
     AVVAAPIHWConfig       *hwconfig    = NULL;
     AVHWFramesConstraints *constraints = NULL;
     VAStatus vas;
-    int err, i, j;
+    int err, i, j, k;
     const AVCodecDescriptor *codec_desc;
     VAProfile *profile_list = NULL, matched_va_profile;
     int profile_count, exact_match, matched_ff_profile;
@@ -467,13 +479,22 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         if (avctx->profile == vaapi_profile_map[i].codec_profile ||
             vaapi_profile_map[i].codec_profile == FF_PROFILE_UNKNOWN)
             profile_match = 1;
-        for (j = 0; j < profile_count; j++) {
-            if (vaapi_profile_map[i].va_profile == profile_list[j]) {
+        if (avctx->profile == FF_PROFILE_HEVC_REXT) {
+            /* find the exact va_profile for HEVC_REXT */
+            for (j = 0; j < FF_ARRAY_ELEMS(rext_format_map); j++) {
+                if (avctx->pix_fmt == rext_format_map[j].pix_fmt)
+                   break;
+            }
+            if (vaapi_profile_map[i].va_profile != rext_format_map[j].va_profile)
+                continue;
+        }
+        for (k = 0; k < profile_count; k++) {
+            if (vaapi_profile_map[i].va_profile == profile_list[k]) {
                 exact_match = profile_match;
                 break;
             }
         }
-        if (j < profile_count) {
+        if (k < profile_count) {
             matched_va_profile = vaapi_profile_map[i].va_profile;
             matched_ff_profile = vaapi_profile_map[i].codec_profile;
             if (exact_match)
