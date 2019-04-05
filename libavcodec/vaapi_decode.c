@@ -24,6 +24,8 @@
 #include "decode.h"
 #include "internal.h"
 #include "vaapi_decode.h"
+#include "hevcdec.h"
+#include "h265_profile_level.h"
 
 
 int ff_vaapi_decode_make_param_buffer(AVCodecContext *avctx,
@@ -402,6 +404,33 @@ static const struct {
 };
 
 /*
+ * Find exact va_profile for HEVC Range Extension
+ */
+static VAProfile vaapi_decode_find_exact_profile(AVCodecContext *avctx)
+{
+    const HEVCContext *h = avctx->priv_data;
+    const HEVCSPS *sps = h->ps.sps;
+    const PTL *ptl = &(sps->ptl);
+    const PTLCommon *general_ptl = &(ptl->general_ptl);
+    const H265ProfileDescriptor *profile;
+
+    /* PTLCommon should match the member sequence in H265RawProfileTierLevel*/
+    profile = ff_h265_get_profile((H265RawProfileTierLevel *)general_ptl);
+
+#if VA_CHECK_VERSION(1, 2, 0)
+    if (!strcmp(profile->name, "Main 4:2:2 10"))
+        return VAProfileHEVCMain422_10;
+    else if (!strcmp(profile->name, "Main 4:4:4 Intra"))
+        return VAProfileHEVCMain444;
+    else if (!strcmp(profile->name, "Main 4:4:4 10 Intra"))
+        return VAProfileHEVCMain444_10;
+#else
+    av_log(avctx, AV_LOG_WARNING, "HEVC profile %s is "
+                        "not supported with this VA version.\n", profile->name);
+#endif
+    return VAProfileNone;
+}
+/*
  * Set *va_config and the frames_ref fields from the current codec parameters
  * in avctx.
  */
@@ -447,24 +476,38 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
     matched_va_profile = VAProfileNone;
     exact_match = 0;
 
-    for (i = 0; i < FF_ARRAY_ELEMS(vaapi_profile_map); i++) {
-        int profile_match = 0;
-        if (avctx->codec_id != vaapi_profile_map[i].codec_id)
-            continue;
-        if (avctx->profile == vaapi_profile_map[i].codec_profile ||
-            vaapi_profile_map[i].codec_profile == FF_PROFILE_UNKNOWN)
-            profile_match = 1;
-        for (j = 0; j < profile_count; j++) {
-            if (vaapi_profile_map[i].va_profile == profile_list[j]) {
-                exact_match = profile_match;
+    if (avctx->profile == FF_PROFILE_HEVC_REXT) {
+        /* find the exact va_profile for HEVC_REXT */
+        VAProfile va_profile = vaapi_decode_find_exact_profile(avctx);
+        for (i = 0; i < profile_count; i++) {
+            if (va_profile == profile_list[i]) {
+                exact_match = 1;
+                matched_va_profile = va_profile;
+                matched_ff_profile = FF_PROFILE_HEVC_REXT;
                 break;
             }
         }
-        if (j < profile_count) {
-            matched_va_profile = vaapi_profile_map[i].va_profile;
-            matched_ff_profile = vaapi_profile_map[i].codec_profile;
-            if (exact_match)
-                break;
+    } else {
+        /* find the exact va_profile according to codec_id and profile */
+        for (i = 0; i < FF_ARRAY_ELEMS(vaapi_profile_map); i++) {
+            int profile_match = 0;
+            if (avctx->codec_id != vaapi_profile_map[i].codec_id)
+                continue;
+            if (avctx->profile == vaapi_profile_map[i].codec_profile ||
+                vaapi_profile_map[i].codec_profile == FF_PROFILE_UNKNOWN)
+                profile_match = 1;
+            for (j = 0; j < profile_count; j++) {
+                if (vaapi_profile_map[i].va_profile == profile_list[j]) {
+                    exact_match = profile_match;
+                    break;
+                }
+            }
+            if (j < profile_count) {
+                matched_va_profile = vaapi_profile_map[i].va_profile;
+                matched_ff_profile = vaapi_profile_map[i].codec_profile;
+                if (exact_match)
+                    break;
+            }
         }
     }
     av_freep(&profile_list);
