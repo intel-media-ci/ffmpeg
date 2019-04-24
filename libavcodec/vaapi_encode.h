@@ -176,6 +176,15 @@ typedef struct VAAPIEncodeContext {
     // Desired B frame reference depth.
     int             desired_b_depth;
 
+    // Max Frame Size
+    int             max_frame_size;
+    // Number Of Passes
+    int             pass_num;
+    // Delta_qp For Each Pass
+    int             delta_qp;
+    // Array of delta_qp
+    uint8_t         *delta_qp_array;
+
     // Explicitly set RC mode (otherwise attempt to pick from
     // available modes).
     int             explicit_rc_mode;
@@ -267,7 +276,12 @@ typedef struct VAAPIEncodeContext {
         VAEncMiscParameterBufferQualityLevel quality;
     } quality_params;
 #endif
-
+#if VA_CHECK_VERSION(1, 3, 0)
+    struct {
+        VAEncMiscParameterBuffer misc;
+        VAEncMiscParameterBufferMultiPassFrameSize mfs;
+    } __attribute__((packed)) mfs_params;
+#endif
     // Per-sequence parameter structure (VAEncSequenceParameterBuffer*).
     void           *codec_sequence_params;
 

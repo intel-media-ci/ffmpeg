@@ -72,6 +72,9 @@ typedef struct VAAPIEncodeH264Context {
     int sei;
     int profile;
     int level;
+    int max_frame_size;
+    int pass_num;
+    int delta_qp;
 
     // Derived settings.
     int mb_width;
@@ -1233,6 +1236,12 @@ static av_cold int vaapi_encode_h264_init(AVCodecContext *avctx)
     if (priv->qp > 0)
         ctx->explicit_qp = priv->qp;
 
+    if (priv->max_frame_size > 0) {
+        ctx->max_frame_size = priv->max_frame_size;
+        ctx->pass_num       = priv->pass_num;
+        ctx->delta_qp       = priv->delta_qp;
+    }
+
     return ff_vaapi_encode_init(avctx);
 }
 
@@ -1266,6 +1275,12 @@ static const AVOption vaapi_encode_h264_options[] = {
 
     { "aud", "Include AUD",
       OFFSET(aud), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS },
+    { "max_frame_size", "Maximum frame size (in bytes)",
+      OFFSET(max_frame_size), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
+    { "pass_num", "number of passes, every pass can have different QP, currently can support up to 4 passes",
+      OFFSET(pass_num), AV_OPT_TYPE_INT, { .i64 = 4 }, 0, 4, FLAGS },
+    { "delta_qp", "delta QP for every pass",
+      OFFSET(delta_qp), AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 51, FLAGS },
 
     { "sei", "Set SEI to include",
       OFFSET(sei), AV_OPT_TYPE_FLAGS,

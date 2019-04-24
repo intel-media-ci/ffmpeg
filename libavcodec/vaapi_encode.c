@@ -235,7 +235,15 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
         if (err < 0)
             goto fail;
     }
-
+#if VA_CHECK_VERSION(1, 3, 0)
+    if (ctx->max_frame_size) {
+        err = vaapi_encode_make_param_buffer(avctx, pic, VAEncMiscParameterBufferType,
+                                            (char*) &ctx->mfs_params.misc,
+                                            sizeof(ctx->mfs_params));
+        if (err < 0)
+            goto fail;
+    }
+#endif
     if (pic->type == PICTURE_TYPE_IDR) {
         if (ctx->va_packed_headers & VA_ENC_PACKED_HEADER_SEQUENCE &&
             ctx->codec->write_sequence_header) {
@@ -1630,6 +1638,43 @@ rc_mode_found:
     return 0;
 }
 
+static av_cold int vaapi_encode_init_max_frame_size(AVCodecContext *avctx)
+{
+    VAAPIEncodeContext *ctx = avctx->priv_data;
+
+    uint32_t max_frame_size = ctx->max_frame_size;
+    uint8_t num_passes = ctx->pass_num;
+    int err = 0;
+    int i = 0;
+
+    ctx->delta_qp_array = av_mallocz_array(num_passes, sizeof(uint8_t));
+    if (!ctx->delta_qp_array) {
+        err = AVERROR(ENOMEM);
+        return err;
+    }
+    for (i = 0; i <num_passes; i++){
+        ctx->delta_qp_array[i] = ctx->delta_qp;
+    }
+
+
+#if VA_CHECK_VERSION(1, 3, 0)
+    ctx->mfs_params.misc.type = VAEncMiscParameterTypeMultiPassFrameSize;
+    ctx->mfs_params.mfs.type = VAEncMiscParameterTypeMultiPassFrameSize;
+    ctx->mfs_params.mfs.max_frame_size = max_frame_size;
+    ctx->mfs_params.mfs.num_passes = num_passes;
+    ctx->mfs_params.mfs.delta_qp = ctx->delta_qp_array;
+
+    av_log(avctx, AV_LOG_VERBOSE, "Max Frame Size: %d bytes, "
+                                  "num_passes: %d, delta_qp = %d.\n",
+                                    ctx->max_frame_size, num_passes, ctx->delta_qp);
+#else
+    av_log(avctx, AV_LOG_WARNING, "Max Frame Size is "
+                                    "not supported with this VA version.\n");
+#endif
+
+    return 0;
+}
+
 static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
@@ -2095,6 +2140,12 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
             goto fail;
     }
 
+    if (ctx->max_frame_size) {
+        err = vaapi_encode_init_max_frame_size(avctx);
+        if (err < 0)
+            goto fail;
+    }
+
     vas = vaCreateConfig(ctx->hwctx->display,
                          ctx->va_profile, ctx->va_entrypoint,
                          ctx->config_attributes, ctx->nb_config_attributes,
@@ -2218,6 +2269,9 @@ av_cold int ff_vaapi_encode_close(AVCodecContext *avctx)
         vaDestroyConfig(ctx->hwctx->display, ctx->va_config);
         ctx->va_config = VA_INVALID_ID;
     }
+
+    if (ctx->delta_qp_array)
+        av_freep(&ctx->delta_qp_array);
 
     av_freep(&ctx->codec_sequence_params);
     av_freep(&ctx->codec_picture_params);
