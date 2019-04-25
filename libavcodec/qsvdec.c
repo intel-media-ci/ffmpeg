@@ -120,6 +120,29 @@ static inline unsigned int qsv_fifo_size(const AVFifoBuffer* fifo)
     return av_fifo_size(fifo) / qsv_fifo_item_size();
 }
 
+static int check_dec_param(AVCodecContext *avctx, QSVContext *q, mfxVideoParam *param_in)
+{
+    mfxVideoParam param_out = { .mfx.CodecId = param_in->mfx.CodecId };
+    mfxStatus ret;
+
+#define UNMATCH(x) (param_out.mfx.x != param_in->mfx.x)
+
+    ret = MFXVideoDECODE_Query(q->session, param_in, &param_out);
+
+    if (ret < 0) {
+        if (UNMATCH(CodecId))
+            av_log(avctx, AV_LOG_ERROR, "Current codec type is unsupported\n");
+        if (UNMATCH(CodecProfile))
+            av_log(avctx, AV_LOG_ERROR, "Current profile is unsupported\n");
+        if (UNMATCH(CodecLevel))
+              av_log(avctx, AV_LOG_ERROR, "Current level is unsupported\n");
+        if (UNMATCH(FrameInfo.Width) || UNMATCH(FrameInfo.Height))
+              av_log(avctx, AV_LOG_ERROR, "Current resolution is unsupported\n");
+        return 0;
+    }
+    return 1;
+}
+
 static int qsv_decode_init(AVCodecContext *avctx, QSVContext *q)
 {
     const AVPixFmtDescriptor *desc;
@@ -205,6 +228,12 @@ static int qsv_decode_init(AVCodecContext *avctx, QSVContext *q)
     param.AsyncDepth  = q->async_depth;
     param.ExtParam    = q->ext_buffers;
     param.NumExtParam = q->nb_ext_buffers;
+
+    if (!check_dec_param(avctx, q, &param)) {
+        av_log(avctx, AV_LOG_ERROR,
+               "current input bitstream is not supported by QSV decoder.\n");
+        return AVERROR(ENOSYS);
+    }
 
     ret = MFXVideoDECODE_Init(q->session, &param);
     if (ret < 0)
