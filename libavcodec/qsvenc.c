@@ -750,15 +750,18 @@ FF_ENABLE_DEPRECATION_WARNINGS
             }
 #endif
         }
+
+        if (avctx->codec_id != AV_CODEC_ID_MPEG2VIDEO && QSV_RUNTIME_VERSION_ATLEAST(q->ver, 1, 11)) {
 #if QSV_HAVE_CO3
-        q->extco3.Header.BufferId      = MFX_EXTBUFF_CODING_OPTION3;
-        q->extco3.Header.BufferSz      = sizeof(q->extco3);
+            q->extco3.Header.BufferId      = MFX_EXTBUFF_CODING_OPTION3;
+            q->extco3.Header.BufferSz      = sizeof(q->extco3);
 #if QSV_HAVE_GPB
-        if (avctx->codec_id == AV_CODEC_ID_HEVC)
-            q->extco3.GPB              = q->gpb ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
+            if (avctx->codec_id == AV_CODEC_ID_HEVC)
+                q->extco3.GPB              = q->gpb ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
 #endif
-        q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco3;
+            q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco3;
 #endif
+        }
     }
 
     if (!check_enc_param(avctx,q)) {
