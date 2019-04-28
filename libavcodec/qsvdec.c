@@ -132,10 +132,14 @@ static int check_dec_param(AVCodecContext *avctx, QSVContext *q, mfxVideoParam *
     if (ret < 0) {
         if (UNMATCH(CodecId))
             av_log(avctx, AV_LOG_ERROR, "Current codec type is unsupported\n");
-        if (UNMATCH(CodecProfile))
+        if (UNMATCH(CodecProfile)) {
             av_log(avctx, AV_LOG_ERROR, "Current profile is unsupported\n");
-        if (UNMATCH(CodecLevel))
+            av_log(avctx, AV_LOG_ERROR, "in profile is %d, out profile is %d\n", param_in->mfx.CodecProfile, param_out.mfx.CodecProfile);
+        }
+        if (UNMATCH(CodecLevel)) {
               av_log(avctx, AV_LOG_ERROR, "Current level is unsupported\n");
+              av_log(avctx, AV_LOG_ERROR, "in level is %d, out level is %d\n", param_in->mfx.CodecLevel, param_out.mfx.CodecLevel);
+        }      
         if (UNMATCH(FrameInfo.Width) || UNMATCH(FrameInfo.Height))
               av_log(avctx, AV_LOG_ERROR, "Current resolution is unsupported\n");
         return 0;
