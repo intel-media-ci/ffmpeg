@@ -256,10 +256,22 @@ static const struct {
 #ifdef VA_FOURCC_YV16
     MAP(YV16, YUV422P),
 #endif
+#ifdef VA_FOURCC_YUY2
+    MAP(YUY2, YUYV422),
+#endif
+#ifdef VA_FOURCC_Y210
+    MAP(Y210, Y210LE),
+#endif
     // 4:4:0
     MAP(422V, YUV440P),
     // 4:4:4
     MAP(444P, YUV444P),
+#ifdef VA_FOURCC_AYUV
+    MAP(AYUV, AYUV),
+#endif
+#ifdef VA_FOURCC_Y410
+    MAP(Y410, Y410LE),
+#endif
     // 4:2:0 10-bit
 #ifdef VA_FOURCC_P010
     MAP(P010, P010),
