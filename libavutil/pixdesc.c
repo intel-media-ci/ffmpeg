@@ -2895,7 +2895,7 @@ enum AVPixelFormat av_find_best_pix_fmt_of_2(enum AVPixelFormat dst_pix_fmt1, en
             if(av_get_padded_bits_per_pixel(desc2) != av_get_padded_bits_per_pixel(desc1)) {
                 dst_pix_fmt = av_get_padded_bits_per_pixel(desc2) < av_get_padded_bits_per_pixel(desc1) ? dst_pix_fmt2 : dst_pix_fmt1;
             } else {
-                dst_pix_fmt = desc2->nb_components < desc1->nb_components ? dst_pix_fmt2 : dst_pix_fmt1;
+                dst_pix_fmt = desc2->nb_components <= desc1->nb_components ? dst_pix_fmt2 : dst_pix_fmt1;
             }
         } else {
             dst_pix_fmt = score1 < score2 ? dst_pix_fmt2 : dst_pix_fmt1;
