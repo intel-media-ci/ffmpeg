@@ -91,12 +91,17 @@ typedef struct SliceHeader {
     int slice_cb_qp_offset;
     int slice_cr_qp_offset;
 
+    int slice_act_y_qp_offset;
+    int slice_act_cb_qp_offset;
+    int slice_act_cr_qp_offset;
+
     uint8_t cu_chroma_qp_offset_enabled_flag;
 
     int beta_offset;    ///< beta_offset_div2 * 2
     int tc_offset;      ///< tc_offset_div2 * 2
 
     unsigned int max_num_merge_cand; ///< 5 - 5_minus_max_num_merge_cand
+    int     use_integer_mv_flag;
 
     unsigned *entry_point_offset;
     int * offset;
@@ -306,6 +311,16 @@ typedef struct HEVCSPS {
     int persistent_rice_adaptation_enabled_flag;
     int cabac_bypass_alignment_enabled_flag;
 
+    int sps_curr_pic_ref_enabled_flag;
+    int palette_mode_enabled_flag;
+    int palette_max_size;
+    int delta_palette_max_predictor_size;
+    int sps_palette_predictor_initializers_present_flag;
+    int sps_num_palette_predictor_initializers_minus1;
+    int sps_palette_predictor_initializer[3][6];
+    int motion_vector_resolution_control_idc;
+    int intra_boundary_filtering_disabled_flag;
+
     ///< coded frame dimension in various units
     int width;
     int height;
@@ -388,6 +403,19 @@ typedef struct HEVCPPS {
     int8_t  cr_qp_offset_list[6];
     uint8_t log2_sao_offset_scale_luma;
     uint8_t log2_sao_offset_scale_chroma;
+
+    uint8_t pps_curr_pic_ref_enabled_flag;
+    uint8_t residual_adaptive_colour_transform_enabled_flag;
+    uint8_t pps_slice_act_qp_offsets_present_flag;
+    uint8_t pps_act_y_qp_offset_plus5;
+    uint8_t pps_act_cb_qp_offset_plus5;
+    uint8_t pps_act_cr_qp_offset_plus3;
+    uint8_t pps_palette_predictor_initializers_present_flag;
+    uint8_t pps_num_palette_predictor_initializers;
+    uint8_t monochrome_palette_flag;
+    uint8_t luma_bit_depth_entry_minus8;
+    uint8_t chroma_bit_depth_entry_minus8;
+    uint8_t pps_palette_predictor_initializer[3][6]; // ?
 
     // Inferred parameters
     unsigned int *column_width;  ///< ColumnWidth
