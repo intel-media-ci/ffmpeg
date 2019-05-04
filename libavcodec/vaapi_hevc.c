@@ -285,13 +285,19 @@ static int vaapi_hevc_end_frame(AVCodecContext *avctx)
 {
     const HEVCContext        *h = avctx->priv_data;
     VAAPIDecodePictureHEVC *pic = h->ref->hwaccel_picture_private;
+    const HEVCSPS          *sps = h->ps.sps;
     int ret;
 
     if (pic->last_size) {
         pic->last_slice_param.base.LongSliceFlags.fields.LastSliceOfPic = 1;
-        ret = ff_vaapi_decode_make_slice_buffer(avctx, &pic->pic,
-                                                &pic->last_slice_param, sizeof(pic->last_slice_param),
-                                                pic->last_buffer, pic->last_size);
+        if (sps->sps_range_extension_flag)
+            ret = ff_vaapi_decode_make_slice_buffer(avctx, &pic->pic,
+                                                    &pic->last_slice_param, sizeof(pic->last_slice_param),
+                                                    pic->last_buffer, pic->last_size);
+        else
+            ret = ff_vaapi_decode_make_slice_buffer(avctx, &pic->pic,
+                                                    &pic->last_slice_param.base, sizeof(pic->last_slice_param.base),
+                                                    pic->last_buffer, pic->last_size);
         if (ret < 0)
             goto fail;
     }
@@ -391,9 +397,15 @@ static int vaapi_hevc_decode_slice(AVCodecContext *avctx,
     int err, i, list_idx;
 
     if (!sh->first_slice_in_pic_flag) {
-        err = ff_vaapi_decode_make_slice_buffer(avctx, &pic->pic,
-                                                &pic->last_slice_param, sizeof(pic->last_slice_param),
-                                                pic->last_buffer, pic->last_size);
+        if (sps->sps_range_extension_flag)
+            err = ff_vaapi_decode_make_slice_buffer(avctx, &pic->pic,
+                                                    &pic->last_slice_param, sizeof(pic->last_slice_param),
+                                                    pic->last_buffer, pic->last_size);
+        else
+            err = ff_vaapi_decode_make_slice_buffer(avctx, &pic->pic,
+                                                    &pic->last_slice_param.base, sizeof(pic->last_slice_param.base),
+                                                    pic->last_buffer, pic->last_size);
+
         pic->last_buffer = NULL;
         pic->last_size   = 0;
         if (err) {
