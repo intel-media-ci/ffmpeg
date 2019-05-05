@@ -463,13 +463,8 @@ static int vaapi_hevc_decode_slice(AVCodecContext *avctx,
         pic->last_slice_param.rext = (VASliceParameterBufferHEVCRext) {
             .slice_ext_flags.bits = {
                 .cu_chroma_qp_offset_enabled_flag   = sh->cu_chroma_qp_offset_enabled_flag,
-                .use_integer_mv_flag                = sh->use_integer_mv_flag,
             },
-            .slice_act_y_qp_offset  = sh->slice_act_y_qp_offset,
-            .slice_act_cb_qp_offset = sh->slice_act_cb_qp_offset,
-            .slice_act_cr_qp_offset = sh->slice_act_cr_qp_offset,
         };
-
         memcpy(pic->last_slice_param.rext.luma_offset_l0, pic->last_slice_param.base.luma_offset_l0,
                                                  sizeof(pic->last_slice_param.base.luma_offset_l0));
         memcpy(pic->last_slice_param.rext.luma_offset_l1, pic->last_slice_param.base.luma_offset_l1,

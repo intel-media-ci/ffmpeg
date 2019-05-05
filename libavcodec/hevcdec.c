@@ -782,9 +782,6 @@ static int hls_slice_header(HEVCContext *s)
                        sh->max_num_merge_cand);
                 return AVERROR_INVALIDDATA;
             }
-
-            if (s->ps.sps->motion_vector_resolution_control_idc == 2)
-                sh->use_integer_mv_flag = get_bits1(gb);
         }
 
         sh->slice_qp_delta = get_se_golomb(gb);
@@ -795,16 +792,6 @@ static int hls_slice_header(HEVCContext *s)
         } else {
             sh->slice_cb_qp_offset = 0;
             sh->slice_cr_qp_offset = 0;
-        }
-
-        if (s->ps.pps->pps_slice_act_qp_offsets_present_flag) {
-            sh->slice_act_y_qp_offset  = get_se_golomb(gb);
-            sh->slice_act_cb_qp_offset = get_se_golomb(gb);
-            sh->slice_act_cr_qp_offset = get_se_golomb(gb);
-        } else {
-            sh->slice_act_y_qp_offset  = 0;
-            sh->slice_act_cb_qp_offset = 0;
-            sh->slice_act_cr_qp_offset = 0;
         }
 
         if (s->ps.pps->chroma_qp_offset_list_enabled_flag)
