@@ -40,6 +40,7 @@
 #include "qsv.h"
 #include "qsv_internal.h"
 #include "qsvdec.h"
+#include <va/va.h>
 
 const AVCodecHWConfigInternal *ff_qsv_hw_configs[] = {
     &(const AVCodecHWConfigInternal) {
@@ -211,8 +212,20 @@ static int qsv_decode_init(AVCodecContext *avctx, QSVContext *q)
     param.mfx.FrameInfo.FourCC         = q->fourcc;
     param.mfx.FrameInfo.Width          = frame_width;
     param.mfx.FrameInfo.Height         = frame_height;
-    //param.mfx.FrameInfo.ChromaFormat   = MFX_CHROMAFORMAT_YUV420;
-    param.mfx.FrameInfo.ChromaFormat   = MFX_CHROMAFORMAT_YUV422;
+
+    switch (q->fourcc) {
+    case VA_FOURCC_YUY2:
+    case VA_FOURCC_Y210:
+        param.mfx.FrameInfo.ChromaFormat   = MFX_CHROMAFORMAT_YUV422;
+        break;
+    case VA_FOURCC_AYUV:
+    case VA_FOURCC_Y410:
+        param.mfx.FrameInfo.ChromaFormat   = MFX_CHROMAFORMAT_YUV444;
+        break;
+    default:
+        param.mfx.FrameInfo.ChromaFormat   = MFX_CHROMAFORMAT_YUV420;
+        break;
+    }
 
     switch (avctx->field_order) {
     case AV_FIELD_PROGRESSIVE:
