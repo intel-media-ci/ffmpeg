@@ -785,8 +785,8 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
         break;
     case AV_PIX_FMT_Y210LE:
         surface->Data.Y16 = frame->data[0];
-        surface->Data.U16 = frame->data[1];
-        surface->Data.V16 = frame->data[2];
+        surface->Data.U16 = frame->data[0] + 2;
+        surface->Data.V16 = frame->data[0] + 6;
         break;
     default:
         return MFX_ERR_UNSUPPORTED;
