@@ -107,6 +107,8 @@ static const struct {
                        MFX_FOURCC_YUY2 },
     { AV_PIX_FMT_Y210LE,
                        MFX_FOURCC_Y210 },
+    { AV_PIX_FMT_AYUV,
+                       MFX_FOURCC_AYUV },
 };
 
 static uint32_t qsv_fourcc_from_pix_fmt(enum AVPixelFormat pix_fmt)
@@ -764,22 +766,28 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
         surface->Data.Y  = frame->data[0];
         surface->Data.UV = frame->data[1];
         break;
-
     case AV_PIX_FMT_YUV420P:
         surface->Data.Y = frame->data[0];
         surface->Data.U = frame->data[1];
         surface->Data.V = frame->data[2];
         break;
-
     case AV_PIX_FMT_BGRA:
+    case AV_PIX_FMT_AYUV:
         surface->Data.B = frame->data[0];
         surface->Data.G = frame->data[0] + 1;
         surface->Data.R = frame->data[0] + 2;
         surface->Data.A = frame->data[0] + 3;
         break;
     case AV_PIX_FMT_YUYV422:
-    case AV_PIX_FMT_Y210LE:
         surface->Data.Y = frame->data[0];
+        surface->Data.U = frame->data[0] + 1;
+        surface->Data.V = frame->data[0] + 3;
+        break;
+    case AV_PIX_FMT_Y210LE:
+        surface->Data.Y16 = frame->data[0];
+        surface->Data.U16 = frame->data[1];
+        surface->Data.V16 = frame->data[2];
+        break;
     default:
         return MFX_ERR_UNSUPPORTED;
     }
