@@ -109,6 +109,8 @@ static const struct {
                        MFX_FOURCC_Y210 },
     { AV_PIX_FMT_AYUV,
                        MFX_FOURCC_AYUV },
+    { AV_PIX_FMT_Y410LE,
+                       MFX_FOURCC_Y410 },
 };
 
 static uint32_t qsv_fourcc_from_pix_fmt(enum AVPixelFormat pix_fmt)
@@ -321,7 +323,8 @@ static int qsv_init_surface(AVHWFramesContext *ctx, mfxFrameSurface1 *surf)
 
     surf->Info.BitDepthLuma   = desc->comp[0].depth;
     surf->Info.BitDepthChroma = desc->comp[0].depth;
-    surf->Info.Shift          = desc->comp[0].depth > 8;
+    surf->Info.Shift          = desc->comp[0].depth > 8 ?
+                                fourcc != VA_FOURCC_Y410 : 0;
 
     if (desc->log2_chroma_w && desc->log2_chroma_h)
         surf->Info.ChromaFormat   = MFX_CHROMAFORMAT_YUV420;
@@ -787,6 +790,9 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
         surface->Data.Y16 = frame->data[0];
         surface->Data.U16 = frame->data[0] + 2;
         surface->Data.V16 = frame->data[0] + 6;
+        break;
+    case AV_PIX_FMT_Y410LE:
+        surface->Data.U = frame->data[0];
         break;
     default:
         return MFX_ERR_UNSUPPORTED;

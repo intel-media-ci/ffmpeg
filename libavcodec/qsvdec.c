@@ -208,7 +208,9 @@ static int qsv_decode_init(AVCodecContext *avctx, QSVContext *q)
 
     param.mfx.FrameInfo.BitDepthLuma   = desc->comp[0].depth;
     param.mfx.FrameInfo.BitDepthChroma = desc->comp[0].depth;
-    param.mfx.FrameInfo.Shift          = desc->comp[0].depth > 8;
+    // Y410 has no shift
+    param.mfx.FrameInfo.Shift          = desc->comp[0].depth > 8 ?
+                                            q->fourcc != VA_FOURCC_Y410 : 0;
     param.mfx.FrameInfo.FourCC         = q->fourcc;
     param.mfx.FrameInfo.Width          = frame_width;
     param.mfx.FrameInfo.Height         = frame_height;
