@@ -210,18 +210,26 @@ static int qsv_decode_init(AVCodecContext *avctx, QSVContext *q)
     param.mfx.FrameInfo.BitDepthChroma = desc->comp[0].depth;
     // Y410 has no shift
     param.mfx.FrameInfo.Shift          = desc->comp[0].depth > 8 ?
-                                            q->fourcc != VA_FOURCC_Y410 : 0;
+#ifdef VA_FOURCC_Y410
+                                        q->fourcc != VA_FOURCC_Y410 : 0;
+#else
+                                        1 : 0;
+#endif
     param.mfx.FrameInfo.FourCC         = q->fourcc;
     param.mfx.FrameInfo.Width          = frame_width;
     param.mfx.FrameInfo.Height         = frame_height;
 
     switch (q->fourcc) {
     case VA_FOURCC_YUY2:
+#ifdef VA_FOURCC_Y210
     case VA_FOURCC_Y210:
+#endif
         param.mfx.FrameInfo.ChromaFormat   = MFX_CHROMAFORMAT_YUV422;
         break;
     case VA_FOURCC_AYUV:
+#ifdef VA_FOURCC_Y410
     case VA_FOURCC_Y410:
+#endif
         param.mfx.FrameInfo.ChromaFormat   = MFX_CHROMAFORMAT_YUV444;
         break;
     default:

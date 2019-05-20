@@ -324,7 +324,11 @@ static int qsv_init_surface(AVHWFramesContext *ctx, mfxFrameSurface1 *surf)
     surf->Info.BitDepthLuma   = desc->comp[0].depth;
     surf->Info.BitDepthChroma = desc->comp[0].depth;
     surf->Info.Shift          = desc->comp[0].depth > 8 ?
+#ifdef VA_FOURCC_Y410
                                 fourcc != VA_FOURCC_Y410 : 0;
+#else
+                                1 : 0;
+#endif
 
     if (desc->log2_chroma_w && desc->log2_chroma_h)
         surf->Info.ChromaFormat   = MFX_CHROMAFORMAT_YUV420;
