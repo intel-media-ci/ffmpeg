@@ -1371,6 +1371,7 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
     // * If bitrate and maxrate are set and have the same value, try CBR.
     // * If a bitrate is set, try AVBR, then VBR, then CBR.
     // * If no bitrate is set, try ICQ, then CQP.
+    // * If low power is set, ICQ is not supported.
 
 #define TRY_RC_MODE(mode, fail) do { \
         rc_mode = &vaapi_encode_rc_modes[mode]; \
@@ -1405,7 +1406,8 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
         TRY_RC_MODE(RC_MODE_QVBR, 0);
 
     if (avctx->global_quality > 0) {
-        TRY_RC_MODE(RC_MODE_ICQ, 0);
+        if (!ctx->low_power)
+            TRY_RC_MODE(RC_MODE_ICQ, 0);
         TRY_RC_MODE(RC_MODE_CQP, 0);
     }
 
@@ -1417,7 +1419,8 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
         TRY_RC_MODE(RC_MODE_VBR, 0);
         TRY_RC_MODE(RC_MODE_CBR, 0);
     } else {
-        TRY_RC_MODE(RC_MODE_ICQ, 0);
+        if (!ctx->low_power)
+            TRY_RC_MODE(RC_MODE_ICQ, 0);
         TRY_RC_MODE(RC_MODE_CQP, 0);
     }
 
