@@ -392,10 +392,9 @@ static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
         if (!out_frame->frame->buf[0])
             return NULL;
 
-        out_frame->frame->data[0] = out_frame->frame->buf[0]->data;
-        out_frame->frame->data[1] = out_frame->frame->data[0] +
-                                    out_frame->frame->linesize[0] *
-                                    FFALIGN(outlink->h, 64);
+        av_image_fill_pointers(out_frame->frame->data, out_frame->frame->format,
+                                FFALIGN(outlink->h, 64), out_frame->frame->buf[0]->data,
+                                                            out_frame->frame->linesize);
 
         if (!out_frame->frame)
             return NULL;
