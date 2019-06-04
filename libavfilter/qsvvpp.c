@@ -350,7 +350,7 @@ static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     QSVFrame        *out_frame;
-    int              ret;
+    int              i, ret;
 
     clear_unused_frames(s->out_frame_list);
 
@@ -374,12 +374,26 @@ static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
         out_frame->surface = (mfxFrameSurface1 *)out_frame->frame->data[3];
     } else {
         /* Get a frame with aligned dimensions.
-         * Libmfx need system memory being 128x64 aligned */
-        out_frame->frame = ff_get_video_buffer(outlink,
-                                               FFALIGN(outlink->w, 128),
-                                               FFALIGN(outlink->h, 64));
-        if (!out_frame->frame)
+         * Libmfx need system memory being 128x64 aligned
+         * and continuously allocated across Y and UV */
+        out_frame->frame = av_frame_alloc();
+        if (!out_frame->frame) {
             return NULL;
+        }
+
+        out_frame->frame->width  = FFALIGN(outlink->w, 128);
+        out_frame->frame->height = FFALIGN(outlink->h, 64);
+        out_frame->frame->format = outlink->format;
+
+        ret = av_frame_get_buffer(out_frame->frame, 128);
+        if (ret < 0)
+            return NULL;
+
+        /* remove plane_padding introduced by av_frame_get_buffer */
+        for (i = 1; i < 4; i++) {
+            if (out_frame->frame->data[i])
+                out_frame->frame->data[i] -= i * 128;
+        }
 
         out_frame->frame->width  = outlink->w;
         out_frame->frame->height = outlink->h;
