@@ -295,6 +295,7 @@ extern AVFilter ff_vf_oscilloscope;
 extern AVFilter ff_vf_overlay;
 extern AVFilter ff_vf_overlay_opencl;
 extern AVFilter ff_vf_overlay_qsv;
+extern AVFilter ff_vf_overlay_vaapi;
 extern AVFilter ff_vf_owdenoise;
 extern AVFilter ff_vf_pad;
 extern AVFilter ff_vf_palettegen;
