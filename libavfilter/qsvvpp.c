@@ -27,6 +27,7 @@
 #include "libavutil/hwcontext_qsv.h"
 #include "libavutil/time.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/imgutils.h"
 
 #include "internal.h"
 #include "qsvvpp.h"
@@ -346,12 +347,63 @@ static QSVFrame *submit_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *p
     return qsv_frame;
 }
 
+static int get_continuous_buffer(AVFrame *frame, int align)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
+    int ret, i, padded_height;
+
+    if (!desc)
+        return AVERROR(EINVAL);
+
+    if ((ret = av_image_check_size(frame->width, frame->height, 0, NULL)) < 0)
+        return ret;
+
+    if (!frame->linesize[0]) {
+        if (align <= 0)
+            align = 32; /* STRIDE_ALIGN. Should be av_cpu_max_align() */
+
+        for (i=1; i<=align; i+=i) {
+            ret = av_image_fill_linesizes(frame->linesize, frame->format,
+                                          FFALIGN(frame->width, i));
+            if (ret < 0)
+                return ret;
+            if (!(frame->linesize[0] & (align-1)))
+                break;
+        }
+
+        for (i = 0; i < 4 && frame->linesize[i]; i++)
+            frame->linesize[i] = FFALIGN(frame->linesize[i], align);
+    }
+
+    padded_height = FFALIGN(frame->height, 64);
+    if ((ret = av_image_fill_pointers(frame->data, frame->format, padded_height,
+                                      NULL, frame->linesize)) < 0)
+        return ret;
+
+    frame->buf[0] = av_buffer_alloc(ret);
+    if (!frame->buf[0]) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+
+    if ((ret = av_image_fill_pointers(frame->data, frame->format, padded_height,
+                                      frame->buf[0]->data, frame->linesize)) < 0)
+        goto fail;
+
+    frame->extended_data = frame->data;
+
+    return 0;
+fail:
+    av_frame_unref(frame);
+    return ret;
+}
+
 /* get the output surface */
 static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     QSVFrame        *out_frame;
-    int              ret;
+    int             ret;
 
     clear_unused_frames(s->out_frame_list);
 
@@ -375,15 +427,20 @@ static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
         out_frame->surface = (mfxFrameSurface1 *)out_frame->frame->data[3];
     } else {
         /* Get a frame with aligned dimensions.
-         * Libmfx need system memory being 128x64 aligned */
-        out_frame->frame = ff_get_video_buffer(outlink,
-                                               FFALIGN(outlink->w, 128),
-                                               FFALIGN(outlink->h, 64));
-        if (!out_frame->frame)
+         * Libmfx need system memory being 128x64 aligned
+         * and continuously allocated across Y and UV */
+        out_frame->frame = av_frame_alloc();
+        if (!out_frame->frame) {
             return NULL;
+        }
 
         out_frame->frame->width  = outlink->w;
         out_frame->frame->height = outlink->h;
+        out_frame->frame->format = outlink->format;
+
+        ret = get_continuous_buffer(out_frame->frame, 128);
+        if (ret < 0)
+            return NULL;
 
         ret = map_frame_to_surface(out_frame->frame,
                                   &out_frame->surface_internal);
