@@ -169,6 +169,7 @@ static attribute_align_arg void *frame_worker_thread(void *arg)
 {
     PerThreadContext *p = arg;
     AVCodecContext *avctx = p->avctx;
+    AVCodecContext *user_avctx = p->avctx->internal->user_avctx;
     const AVCodec *codec = avctx->codec;
 
     pthread_mutex_lock(&p->mutex);
@@ -199,6 +200,10 @@ static attribute_align_arg void *frame_worker_thread(void *arg)
         av_frame_unref(p->frame);
         p->got_frame = 0;
         p->result = codec->decode(avctx, p->frame, &p->got_frame, &p->avpkt);
+
+        if (user_avctx) {
+            user_avctx->internal->hwaccel_priv_data = p->avctx->internal->hwaccel_priv_data;
+        }
 
         if ((p->result < 0 || !p->got_frame) && p->frame->buf[0]) {
             if (avctx->internal->allocate_progress)
@@ -282,7 +287,6 @@ static int update_context_from_thread(AVCodecContext *dst, AVCodecContext *src, 
         dst->sample_rate    = src->sample_rate;
         dst->sample_fmt     = src->sample_fmt;
         dst->channel_layout = src->channel_layout;
-        dst->internal->hwaccel_priv_data = src->internal->hwaccel_priv_data;
 
         if (!!dst->hw_frames_ctx != !!src->hw_frames_ctx ||
             (dst->hw_frames_ctx && dst->hw_frames_ctx->data != src->hw_frames_ctx->data)) {
@@ -411,6 +415,7 @@ static int submit_packet(PerThreadContext *p, AVCodecContext *user_avctx,
         }
 
         err = update_context_from_thread(p->avctx, prev_thread->avctx, 0);
+        p->avctx->internal->hwaccel_priv_data = prev_thread->avctx->internal->hwaccel_priv_data;
         if (err) {
             pthread_mutex_unlock(&p->mutex);
             return err;
@@ -728,6 +733,8 @@ int ff_frame_thread_init(AVCodecContext *avctx)
     FrameThreadContext *fctx;
     int i, err = 0;
 
+    avctx->internal->user_avctx = avctx;
+
     if (!thread_count) {
         int nb_cpus = av_cpu_count();
 #if FF_API_DEBUG_MV
@@ -800,6 +807,7 @@ int ff_frame_thread_init(AVCodecContext *avctx)
         *copy->internal = *src->internal;
         copy->internal->thread_ctx = p;
         copy->internal->last_pkt_props = &p->avpkt;
+        copy->internal->user_avctx = avctx;
 
         if (!i) {
             src = copy;

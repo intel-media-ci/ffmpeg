@@ -162,6 +162,11 @@ typedef struct AVCodecInternal {
 
     void *thread_ctx;
 
+    /**
+     * User thread AVCodecContext pointer
+     */
+    void *user_avctx;
+
     DecodeSimpleContext ds;
     DecodeFilterContext filter;
 
