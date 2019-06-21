@@ -140,6 +140,8 @@ typedef struct FrameThreadContext {
 #define THREAD_SAFE_CALLBACKS(avctx) \
 ((avctx)->thread_safe_callbacks || (avctx)->get_buffer2 == avcodec_default_get_buffer2)
 
+static int update_context_from_thread(AVCodecContext *dst, AVCodecContext *src, int for_user);
+
 static void async_lock(FrameThreadContext *fctx)
 {
     pthread_mutex_lock(&fctx->async_mutex);
@@ -157,7 +159,6 @@ static void async_unlock(FrameThreadContext *fctx)
     pthread_cond_broadcast(&fctx->async_cond);
     pthread_mutex_unlock(&fctx->async_mutex);
 }
-
 /**
  * Codec worker thread.
  *
@@ -169,6 +170,7 @@ static attribute_align_arg void *frame_worker_thread(void *arg)
 {
     PerThreadContext *p = arg;
     AVCodecContext *avctx = p->avctx;
+    AVCodecContext *user_avctx = p->avctx->internal->user_avctx;
     const AVCodec *codec = avctx->codec;
 
     pthread_mutex_lock(&p->mutex);
@@ -199,6 +201,12 @@ static attribute_align_arg void *frame_worker_thread(void *arg)
         av_frame_unref(p->frame);
         p->got_frame = 0;
         p->result = codec->decode(avctx, p->frame, &p->got_frame, &p->avpkt);
+
+        if (user_avctx) {
+            pthread_mutex_lock(&user_avctx->internal->context_mutex);
+            update_context_from_thread(user_avctx, p->avctx, 1);
+            pthread_mutex_unlock(&user_avctx->internal->context_mutex);
+        }
 
         if ((p->result < 0 || !p->got_frame) && p->frame->buf[0]) {
             if (avctx->internal->allocate_progress)
@@ -390,7 +398,9 @@ static int submit_packet(PerThreadContext *p, AVCodecContext *user_avctx,
 
     pthread_mutex_lock(&p->mutex);
 
+    pthread_mutex_lock(&user_avctx->internal->context_mutex);
     ret = update_context_from_user(p->avctx, user_avctx);
+    pthread_mutex_unlock(&user_avctx->internal->context_mutex);
     if (ret) {
         pthread_mutex_unlock(&p->mutex);
         return ret;
@@ -539,8 +549,6 @@ int ff_thread_decode_frame(AVCodecContext *avctx,
 
         if (finished >= avctx->thread_count) finished = 0;
     } while (!avpkt->size && !*got_picture_ptr && err >= 0 && finished != fctx->next_finished);
-
-    update_context_from_thread(avctx, p->avctx, 1);
 
     if (fctx->next_decoding >= avctx->thread_count) fctx->next_decoding = 0;
 
@@ -713,6 +721,8 @@ void ff_frame_thread_free(AVCodecContext *avctx, int thread_count)
     pthread_mutex_destroy(&fctx->async_mutex);
     pthread_cond_destroy(&fctx->async_cond);
 
+    pthread_mutex_destroy(&avctx->internal->context_mutex);
+
     av_freep(&avctx->internal->thread_ctx);
 
     if (avctx->priv_data && avctx->codec && avctx->codec->priv_class)
@@ -727,6 +737,8 @@ int ff_frame_thread_init(AVCodecContext *avctx)
     AVCodecContext *src = avctx;
     FrameThreadContext *fctx;
     int i, err = 0;
+
+    avctx->internal->user_avctx = avctx;
 
     if (!thread_count) {
         int nb_cpus = av_cpu_count();
@@ -760,6 +772,8 @@ int ff_frame_thread_init(AVCodecContext *avctx)
     pthread_mutex_init(&fctx->hwaccel_mutex, NULL);
     pthread_mutex_init(&fctx->async_mutex, NULL);
     pthread_cond_init(&fctx->async_cond, NULL);
+
+    pthread_mutex_init(&avctx->internal->context_mutex, NULL);
 
     fctx->async_lock = 1;
     fctx->delaying = 1;
@@ -800,6 +814,7 @@ int ff_frame_thread_init(AVCodecContext *avctx)
         *copy->internal = *src->internal;
         copy->internal->thread_ctx = p;
         copy->internal->last_pkt_props = &p->avpkt;
+        copy->internal->user_avctx = avctx;
 
         if (!i) {
             src = copy;
