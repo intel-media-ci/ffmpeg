@@ -114,6 +114,9 @@ typedef struct MJpegDecodeContext {
     int restart_interval;
     int restart_count;
 
+    int reinit_idct;
+    int size_change;
+
     int buggy_avid;
     int cs_itu601;
     int interlace_polarity;
@@ -160,6 +163,7 @@ int ff_mjpeg_decode_frame(AVCodecContext *avctx,
                           AVPacket *avpkt);
 int ff_mjpeg_decode_dqt(MJpegDecodeContext *s);
 int ff_mjpeg_decode_dht(MJpegDecodeContext *s);
+int ff_mjpeg_decode_header(MJpegDecodeContext *s);
 int ff_mjpeg_decode_sof(MJpegDecodeContext *s);
 int ff_mjpeg_decode_sos(MJpegDecodeContext *s,
                         const uint8_t *mb_bitmask,int mb_bitmask_size,

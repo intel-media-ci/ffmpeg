@@ -157,6 +157,8 @@ av_cold int ff_mjpeg_decode_init(AVCodecContext *avctx)
     s->start_code    = -1;
     s->first_picture = 1;
     s->got_picture   = 0;
+    s->reinit_idct   = 0;
+    s->size_change   = 0;
     s->org_height    = avctx->coded_height;
     avctx->chroma_sample_location = AVCHROMA_LOC_CENTER;
     avctx->colorspace = AVCOL_SPC_BT470BG;
@@ -302,9 +304,9 @@ int ff_mjpeg_decode_dht(MJpegDecodeContext *s)
     return 0;
 }
 
-int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
+int ff_mjpeg_decode_header(MJpegDecodeContext *s)
 {
-    int len, nb_components, i, width, height, bits, ret, size_change;
+    int len, nb_components, i, width, height, bits, ret;
     unsigned pix_fmt_id;
     int h_count[MAX_COMPONENTS] = { 0 };
     int v_count[MAX_COMPONENTS] = { 0 };
@@ -324,7 +326,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     if (s->avctx->bits_per_raw_sample != bits) {
         av_log(s->avctx, s->avctx->bits_per_raw_sample > 0 ? AV_LOG_INFO : AV_LOG_DEBUG, "Changing bps from %d to %d\n", s->avctx->bits_per_raw_sample, bits);
         s->avctx->bits_per_raw_sample = bits;
-        init_idct(s->avctx);
+        s->reinit_idct = 1;
     }
     if (s->pegasus_rct)
         bits = 9;
@@ -417,7 +419,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     if (width != s->width || height != s->height || bits != s->bits ||
         memcmp(s->h_count, h_count, sizeof(h_count))                ||
         memcmp(s->v_count, v_count, sizeof(v_count))) {
-        size_change = 1;
+        s->size_change = 1;
 
         s->width      = width;
         s->height     = height;
@@ -444,8 +446,6 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             return ret;
 
         s->first_picture = 0;
-    } else {
-        size_change = 0;
     }
 
     if (s->got_picture && s->interlaced && (s->bottom_field == !s->interlace_polarity)) {
@@ -673,9 +673,28 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             av_log(s->avctx, AV_LOG_ERROR, "Could not get a pixel format descriptor.\n");
             return AVERROR_BUG;
         }
+    }
 
-        if (s->avctx->pix_fmt == s->hwaccel_sw_pix_fmt && !size_change) {
+    return 0;
+}
+
+int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
+{
+    int i, ret;
+
+    ret = ff_mjpeg_decode_header(s);
+    if (ret < 0)
+        return ret;
+
+    if (s->reinit_idct) {
+        init_idct(s->avctx);
+        s->reinit_idct = 0;
+    }
+
+    if (!(s->got_picture && s->interlaced && (s->bottom_field == !s->interlace_polarity))) {
+        if (s->avctx->pix_fmt == s->hwaccel_sw_pix_fmt && !s->size_change) {
             s->avctx->pix_fmt = s->hwaccel_pix_fmt;
+            s->size_change = 0;
         } else {
             enum AVPixelFormat pix_fmts[] = {
 #if CONFIG_MJPEG_NVDEC_HWACCEL
@@ -728,8 +747,8 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
 
     /* totally blank picture as progressive JPEG will only add details to it */
     if (s->progressive) {
-        int bw = (width  + s->h_max * 8 - 1) / (s->h_max * 8);
-        int bh = (height + s->v_max * 8 - 1) / (s->v_max * 8);
+        int bw = (s->width  + s->h_max * 8 - 1) / (s->h_max * 8);
+        int bh = (s->height + s->v_max * 8 - 1) / (s->v_max * 8);
         for (i = 0; i < s->nb_components; i++) {
             int size = bw * bh * s->h_count[i] * s->v_count[i];
             av_freep(&s->blocks[i]);
