@@ -76,6 +76,13 @@ void ff_decode_bsfs_uninit(AVCodecContext *avctx);
 int ff_decode_get_hw_frames_ctx(AVCodecContext *avctx,
                                 enum AVHWDeviceType dev_type);
 
+/**
+ * Get new hw_frames_ctx even if the context is aread initialized.
+ * Similar to ff_decode_get_hw_frames_ctx.
+ */
+int ff_decode_get_new_hw_frames_ctx(AVCodecContext *avctx,
+                                enum AVHWDeviceType dev_type);
+
 int ff_attach_decode_data(AVFrame *frame);
 
 #endif /* AVCODEC_DECODE_H */

@@ -1254,6 +1254,52 @@ int ff_decode_get_hw_frames_ctx(AVCodecContext *avctx,
 
     frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
 
+    if (frames_ctx->initial_pool_size) {
+        // We guarantee 4 base work surfaces. The function above guarantees 1
+        // (the absolute minimum), so add the missing count.
+        frames_ctx->initial_pool_size += 3;
+    }
+
+    ret = av_hwframe_ctx_init(avctx->hw_frames_ctx);
+    if (ret < 0) {
+        av_buffer_unref(&avctx->hw_frames_ctx);
+        return ret;
+    }
+
+    return 0;
+}
+
+int ff_decode_get_new_hw_frames_ctx(AVCodecContext *avctx,
+                                enum AVHWDeviceType dev_type)
+{
+    AVHWDeviceContext *device_ctx;
+    AVHWFramesContext *frames_ctx;
+    int ret;
+
+    if (!avctx->hwaccel)
+        return AVERROR(ENOSYS);
+    if (!avctx->hw_device_ctx) {
+        av_log(avctx, AV_LOG_ERROR, "A hardware frames or device context is "
+                "required for hardware accelerated decoding.\n");
+        return AVERROR(EINVAL);
+    }
+
+    device_ctx = (AVHWDeviceContext *)avctx->hw_device_ctx->data;
+    if (device_ctx->type != dev_type) {
+        av_log(avctx, AV_LOG_ERROR, "Device type %s expected for hardware "
+               "decoding, but got %s.\n", av_hwdevice_get_type_name(dev_type),
+               av_hwdevice_get_type_name(device_ctx->type));
+        return AVERROR(EINVAL);
+    }
+
+    ret = avcodec_get_hw_frames_parameters(avctx,
+                                           avctx->hw_device_ctx,
+                                           avctx->hwaccel->pix_fmt,
+                                           &avctx->hw_frames_ctx);
+    if (ret < 0)
+        return ret;
+
+    frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
 
     if (frames_ctx->initial_pool_size) {
         // We guarantee 4 base work surfaces. The function above guarantees 1
@@ -1333,7 +1379,7 @@ static int hwaccel_init(AVCodecContext *avctx,
         return AVERROR_PATCHWELCOME;
     }
 
-    if (hwaccel->priv_data_size) {
+    if (hwaccel->priv_data_size && !avctx->internal->hwaccel_priv_data) {
         avctx->internal->hwaccel_priv_data =
             av_mallocz(hwaccel->priv_data_size);
         if (!avctx->internal->hwaccel_priv_data)
@@ -1397,8 +1443,9 @@ int ff_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt)
 
     for (;;) {
         // Remove the previous hwaccel, if there was one.
-        hwaccel_uninit(avctx);
-
+        // and is not vaapi
+        if (choices[0] != AV_PIX_FMT_VAAPI_VLD)
+            hwaccel_uninit(avctx);
         user_choice = avctx->get_format(avctx, choices);
         if (user_choice == AV_PIX_FMT_NONE) {
             // Explicitly chose nothing, give up.
