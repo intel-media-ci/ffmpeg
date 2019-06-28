@@ -207,7 +207,7 @@ static int qsv_decode_init(AVCodecContext *avctx, QSVContext *q)
 
     param.mfx.FrameInfo.BitDepthLuma   = desc->comp[0].depth;
     param.mfx.FrameInfo.BitDepthChroma = desc->comp[0].depth;
-    param.mfx.FrameInfo.Shift          = desc->comp[0].depth > 8;
+    param.mfx.FrameInfo.Shift          = desc->comp[0].shift > 0;
     param.mfx.FrameInfo.FourCC         = q->fourcc;
     param.mfx.FrameInfo.Width          = frame_width;
     param.mfx.FrameInfo.Height         = frame_height;
