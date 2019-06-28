@@ -348,6 +348,12 @@ enum AVPixelFormat {
     AV_PIX_FMT_NV24,      ///< planar YUV 4:4:4, 24bpp, 1 plane for Y and 1 plane for the UV components, which are interleaved (first byte U and the following byte V)
     AV_PIX_FMT_NV42,      ///< as above, but U and V bytes are swapped
 
+    AV_PIX_FMT_Y210LE,    ///< packed YUV 4:2:2, 32bpp, Y0 Cb Y1 Cr, little-endian
+    AV_PIX_FMT_Y210BE,    ///< packed YUV 4:2:2, 32bpp, Y0 Cb Y1 Cr, big-endian
+    AV_PIX_FMT_AYUV,      ///< packed YUV 4:4:4, 32bpp,  A Y Cb Cr
+    AV_PIX_FMT_Y410LE,    ///< packed YUV 4:4:4, 32bpp, Cr Y Cb A, little-endian
+    AV_PIX_FMT_Y410BE,    ///< packed YUV 4:4:4, 32bpp, Cr Y Cb A, big-endian
+
     AV_PIX_FMT_NB         ///< number of pixel formats, DO NOT USE THIS if you want to link with shared libav* because the number of formats might differ between versions
 };
 
