@@ -2648,7 +2648,7 @@ void ff_check_pixfmt_descriptors(void){
 
         if (!d->name && !d->nb_components && !d->log2_chroma_w && !d->log2_chroma_h && !d->flags)
             continue;
-//         av_log(NULL, AV_LOG_DEBUG, "Checking: %s\n", d->name);
+        av_log(NULL, AV_LOG_INFO, "Checking: %s\n", d->name);
         av_assert0(d->log2_chroma_w <= 3);
         av_assert0(d->log2_chroma_h <= 3);
         av_assert0(d->nb_components <= 4);
@@ -2669,6 +2669,7 @@ void ff_check_pixfmt_descriptors(void){
             if (d->flags & AV_PIX_FMT_FLAG_BAYER)
                 continue;
             av_read_image_line(tmp, (void*)data, linesize, d, 0, 0, j, 2, 0);
+            av_log(NULL, AV_LOG_INFO, "tmp[0]:%d, tmp[1]: %d \n", tmp[0], tmp[1]);
             av_assert0(tmp[0] == 0 && tmp[1] == 0);
             tmp[0] = tmp[1] = (1<<c->depth) - 1;
             av_write_image_line(tmp, data, linesize, d, 0, 0, j, 2);
