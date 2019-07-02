@@ -100,7 +100,7 @@ static const struct {
 #if QSV_HAVE_VCM
     { MFX_RATECONTROL_VCM,     "VCM" },
 #endif
-#if QSV_VERSION_ATLEAST(1, 10)
+#if QSV_HAVE_LA_EXT
     { MFX_RATECONTROL_LA_EXT,  "LA_EXT" },
 #endif
 #if QSV_HAVE_LA_HRD
@@ -183,6 +183,9 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
     else if (info->RateControlMethod == MFX_RATECONTROL_LA
 #if QSV_HAVE_LA_HRD
              || info->RateControlMethod == MFX_RATECONTROL_LA_HRD
+#endif
+#if QSV_HAVE_LA_EXT
+             || info->RateControlMethod == MFX_RATECONTROL_LA_EXT
 #endif
              ) {
         av_log(avctx, AV_LOG_VERBOSE,
@@ -349,6 +352,12 @@ static int select_rc_mode(AVCodecContext *avctx, QSVEncContext *q)
         if (avctx->global_quality > 0) {
             rc_mode = MFX_RATECONTROL_LA_ICQ;
             rc_desc = "intelligent constant quality with lookahead (LA_ICQ)";
+        }
+#endif
+#if QSV_HAVE_LA_EXT
+        else if (q->extbrc >= 0) {
+            rc_mode = MFX_RATECONTROL_LA_EXT;
+            rc_desc = "extended bitrate control with lookahead (LA_EXT)";
         }
 #endif
     }
@@ -638,6 +647,9 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
 #endif
 #if QSV_HAVE_LA
     case MFX_RATECONTROL_LA:
+#if QSV_HAVE_LA_EXT
+    case MFX_RATECONTROL_LA_EXT:
+#endif
         q->param.mfx.TargetKbps  = target_bitrate_kbps / brc_param_multiplier;
         q->extco2.LookAheadDepth = q->look_ahead_depth;
         q->param.mfx.BRCParamMultiplier = brc_param_multiplier;
