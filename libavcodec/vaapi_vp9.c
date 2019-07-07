@@ -25,6 +25,7 @@
 #include "hwconfig.h"
 #include "vaapi_decode.h"
 #include "vp9shared.h"
+#include "internal.h"
 
 static VASurfaceID vaapi_vp9_surface_id(const VP9Frame *vf)
 {
@@ -43,6 +44,9 @@ static int vaapi_vp9_start_frame(AVCodecContext          *avctx,
     VADecPictureParameterBufferVP9 pic_param;
     const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(avctx->sw_pix_fmt);
     int err, i;
+
+    // keep hardware context because of DRC support for VP9
+    avctx->internal->hwaccel_priv_data_keeping = 1;
 
     pic->output_surface = vaapi_vp9_surface_id(&h->frames[CUR_FRAME]);
 

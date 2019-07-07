@@ -309,6 +309,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
             return err;
 
         dst->internal->hwaccel_priv_data = src->internal->hwaccel_priv_data;
+        dst->internal->hwaccel_priv_data_keeping = src->internal->hwaccel_priv_data_keeping;
 
         if (!!dst->hw_frames_ctx != !!src->hw_frames_ctx ||
             (dst->hw_frames_ctx && dst->hw_frames_ctx->data != src->hw_frames_ctx->data)) {
@@ -371,6 +372,7 @@ FF_DISABLE_DEPRECATION_WARNINGS
     dst->thread_safe_callbacks = src->thread_safe_callbacks;
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
+    dst->internal->hwaccel_priv_data_keeping = src->internal->hwaccel_priv_data_keeping;
 
     if (src->slice_count && src->slice_offset) {
         if (dst->slice_count < src->slice_count) {

@@ -1062,7 +1062,7 @@ static int hwaccel_init(AVCodecContext *avctx,
         return AVERROR_PATCHWELCOME;
     }
 
-    if (hwaccel->priv_data_size) {
+    if (hwaccel->priv_data_size && !avctx->internal->hwaccel_priv_data) {
         avctx->internal->hwaccel_priv_data =
             av_mallocz(hwaccel->priv_data_size);
         if (!avctx->internal->hwaccel_priv_data)
@@ -1123,9 +1123,10 @@ int ff_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt)
         return AV_PIX_FMT_NONE;
 
     for (;;) {
-        // Remove the previous hwaccel, if there was one.
-        hwaccel_uninit(avctx);
-
+        // Remove the previous hwaccel, if there was one,
+        // and no need for keeping.
+        if (!avctx->internal->hwaccel_priv_data_keeping)
+            hwaccel_uninit(avctx);
         user_choice = avctx->get_format(avctx, choices);
         if (user_choice == AV_PIX_FMT_NONE) {
             // Explicitly chose nothing, give up.

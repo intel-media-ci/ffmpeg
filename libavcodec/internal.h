@@ -118,6 +118,7 @@ typedef struct AVCodecInternal {
      * hwaccel-specific private data
      */
     void *hwaccel_priv_data;
+    int hwaccel_priv_data_keeping;
 
     /**
      * checks API usage: after codec draining, flush is required to resume operation

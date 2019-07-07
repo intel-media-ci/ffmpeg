@@ -639,9 +639,13 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     VAStatus vas;
     int err;
 
-    ctx->va_config  = VA_INVALID_ID;
-    ctx->va_context = VA_INVALID_ID;
+    if (!ctx->va_config && !ctx->va_context){
+        ctx->va_config  = VA_INVALID_ID;
+        ctx->va_context = VA_INVALID_ID;
+    }
 
+    // Get a new hw_frames_ctx even if there is already one
+    // recreate surface without reconstuct va_context
     err = ff_decode_get_hw_frames_ctx(avctx, AV_HWDEVICE_TYPE_VAAPI);
     if (err < 0)
         goto fail;
@@ -656,21 +660,23 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     if (err)
         goto fail;
 
-    vas = vaCreateContext(ctx->hwctx->display, ctx->va_config,
-                          avctx->coded_width, avctx->coded_height,
-                          VA_PROGRESSIVE,
-                          ctx->hwfc->surface_ids,
-                          ctx->hwfc->nb_surfaces,
-                          &ctx->va_context);
-    if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to create decode "
-               "context: %d (%s).\n", vas, vaErrorStr(vas));
-        err = AVERROR(EIO);
-        goto fail;
-    }
+    if (ctx->va_context == VA_INVALID_ID) {
+        vas = vaCreateContext(ctx->hwctx->display, ctx->va_config,
+                              avctx->coded_width, avctx->coded_height,
+                              VA_PROGRESSIVE,
+                              ctx->hwfc->surface_ids,
+                              ctx->hwfc->nb_surfaces,
+                              &ctx->va_context);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to create decode "
+                   "context: %d (%s).\n", vas, vaErrorStr(vas));
+            err = AVERROR(EIO);
+            goto fail;
+        }
 
-    av_log(avctx, AV_LOG_DEBUG, "Decode context initialised: "
-           "%#x/%#x.\n", ctx->va_config, ctx->va_context);
+        av_log(avctx, AV_LOG_DEBUG, "Decode context initialised: "
+               "%#x/%#x.\n", ctx->va_config, ctx->va_context);
+    }
 
     return 0;
 
