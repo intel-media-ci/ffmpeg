@@ -291,6 +291,7 @@ static int update_context_from_thread(AVCodecContext *dst, AVCodecContext *src, 
         dst->sample_fmt     = src->sample_fmt;
         dst->channel_layout = src->channel_layout;
         dst->internal->hwaccel_priv_data = src->internal->hwaccel_priv_data;
+        dst->internal->hwaccel_priv_data_keeping = src->internal->hwaccel_priv_data_keeping;
 
         if (!!dst->hw_frames_ctx != !!src->hw_frames_ctx ||
             (dst->hw_frames_ctx && dst->hw_frames_ctx->data != src->hw_frames_ctx->data)) {
@@ -348,6 +349,7 @@ static int update_context_from_user(AVCodecContext *dst, AVCodecContext *src)
     dst->frame_number     = src->frame_number;
     dst->reordered_opaque = src->reordered_opaque;
     dst->thread_safe_callbacks = src->thread_safe_callbacks;
+    dst->internal->hwaccel_priv_data_keeping = src->internal->hwaccel_priv_data_keeping;
 
     if (src->slice_count && src->slice_offset) {
         if (dst->slice_count < src->slice_count) {
