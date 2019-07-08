@@ -958,11 +958,12 @@ int ff_hevc_parse_sps(HEVCSPS *sps, GetBitContext *gb, unsigned int *sps_id,
     sps->bit_depth   = get_ue_golomb_long(gb) + 8;
     bit_depth_chroma = get_ue_golomb_long(gb) + 8;
     if (sps->chroma_format_idc && bit_depth_chroma != sps->bit_depth) {
-        av_log(avctx, AV_LOG_ERROR,
+        av_log(avctx, AV_LOG_WARNING,
                "Luma bit depth (%d) is different from chroma bit depth (%d), "
                "this is unsupported.\n",
                sps->bit_depth, bit_depth_chroma);
-        return AVERROR_INVALIDDATA;
+	bit_depth_chroma = bit_depth_chroma > sps->bit_depth : bit_depth_chroma ? sps->bit_depth;
+        //return AVERROR_INVALIDDATA;
     }
     sps->bit_depth_chroma = bit_depth_chroma;
 
