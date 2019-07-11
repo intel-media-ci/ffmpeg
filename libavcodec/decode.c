@@ -959,7 +959,7 @@ int ff_decode_get_hw_frames_ctx(AVCodecContext *avctx,
         return AVERROR(ENOSYS);
 
     if (avctx->hw_frames_ctx)
-        return 0;
+        av_buffer_unref(&avctx->hw_frames_ctx);
     if (!avctx->hw_device_ctx) {
         av_log(avctx, AV_LOG_ERROR, "A hardware frames or device context is "
                 "required for hardware accelerated decoding.\n");

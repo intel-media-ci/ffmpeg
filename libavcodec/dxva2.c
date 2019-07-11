@@ -667,9 +667,11 @@ int ff_dxva2_decode_init(AVCodecContext *avctx)
     // (avctx->pix_fmt is not updated yet at this point)
     sctx->pix_fmt = avctx->hwaccel->pix_fmt;
 
-    ret = ff_decode_get_hw_frames_ctx(avctx, dev_type);
-    if (ret < 0)
-        return ret;
+    if (!avctx->hw_frames_ctx) {
+        ret = ff_decode_get_hw_frames_ctx(avctx, dev_type);
+        if (ret < 0)
+            return ret;
+    }
 
     frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
     sctx->device_ctx = frames_ctx->device_ctx;

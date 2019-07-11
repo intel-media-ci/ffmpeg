@@ -187,10 +187,11 @@ int ff_vdpau_common_init(AVCodecContext *avctx, VdpDecoderProfile profile,
         AVHWFramesContext *frames_ctx;
         AVVDPAUDeviceContext *dev_ctx;
 
-        ret = ff_decode_get_hw_frames_ctx(avctx, AV_HWDEVICE_TYPE_VDPAU);
-        if (ret < 0)
-            return ret;
-
+        if (!avctx->hw_frames_ctx) {
+            ret = ff_decode_get_hw_frames_ctx(avctx, AV_HWDEVICE_TYPE_VDPAU);
+            if (ret < 0)
+                return ret;
+        }
         frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
         dev_ctx = frames_ctx->device_ctx->hwctx;
 
