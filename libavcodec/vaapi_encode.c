@@ -365,6 +365,17 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
             goto fail;
     }
 
+#if VA_CHECK_VERSION(1, 5, 0)
+    if (ctx->max_frame_size) {
+        err = vaapi_encode_make_misc_param_buffer(avctx, pic,
+                                                  VAEncMiscParameterTypeMaxFrameSize,
+                                                  &ctx->mfs_params,
+                                                  sizeof(ctx->mfs_params));
+        if (err < 0)
+            goto fail;
+    }
+#endif
+
     if (pic->type == PICTURE_TYPE_IDR) {
         if (ctx->va_packed_headers & VA_ENC_PACKED_HEADER_SEQUENCE &&
             ctx->codec->write_sequence_header) {
@@ -1869,6 +1880,54 @@ rc_mode_found:
     return 0;
 }
 
+static av_cold int vaapi_encode_init_max_frame_size(AVCodecContext *avctx)
+{
+#if VA_CHECK_VERSION(1, 5, 0)
+    VAAPIEncodeContext  *ctx = avctx->priv_data;
+    VAConfigAttrib      attr = { VAConfigAttribMaxFrameSize };
+    VAStatus vas;
+
+    vas = vaGetConfigAttributes(ctx->hwctx->display,
+                                ctx->va_profile,
+                                ctx->va_entrypoint,
+                                &attr, 1);
+    if (vas != VA_STATUS_SUCCESS) {
+        ctx->max_frame_size = 0;
+        av_log(avctx, AV_LOG_ERROR, "Failed to query max frame size "
+               "config attribute: %d (%s).\n", vas, vaErrorStr(vas));
+        return AVERROR_EXTERNAL;
+    }
+
+    if (attr.value == VA_ATTRIB_NOT_SUPPORTED) {
+        ctx->max_frame_size = 0;
+        av_log(avctx, AV_LOG_WARNING, "Max frame size attribute "
+               "is not supported.\n");
+    } else {
+        VAConfigAttribValMaxFrameSize attr_mfs;
+        attr_mfs.value = attr.value;
+        // Prefer to use VAEncMiscParameterTypeMaxFrameSize for max frame size.
+        if (!attr_mfs.bits.max_frame_size && attr_mfs.bits.multiple_pass) {
+            ctx->max_frame_size = 0;
+            av_log(avctx, AV_LOG_WARNING, "Driver only support multiple pass "
+                   "max frame size which have not been implemented in FFmpeg.\n");
+            return 0;
+        }
+
+        ctx->mfs_params = (VAEncMiscParameterBufferMaxFrameSize){
+            .max_frame_size = ctx->max_frame_size * 8,
+        };
+
+        av_log(avctx, AV_LOG_VERBOSE, "Max Frame Size: %d bytes.\n",
+               ctx->max_frame_size);
+    }
+#else
+    av_log(avctx, AV_LOG_WARNING, "Max Frame Size is not support with "
+           "this VA version.\n");
+#endif
+
+    return 0;
+}
+
 static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
@@ -2471,6 +2530,12 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
 
     if (avctx->compression_level >= 0) {
         err = vaapi_encode_init_quality(avctx);
+        if (err < 0)
+            goto fail;
+    }
+
+    if (ctx->va_rc_mode != VA_RC_CQP && ctx->max_frame_size) {
+        err = vaapi_encode_init_max_frame_size(avctx);
         if (err < 0)
             goto fail;
     }
