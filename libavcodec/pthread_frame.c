@@ -282,7 +282,6 @@ static int update_context_from_thread(AVCodecContext *dst, AVCodecContext *src, 
         dst->sample_rate    = src->sample_rate;
         dst->sample_fmt     = src->sample_fmt;
         dst->channel_layout = src->channel_layout;
-        dst->internal->hwaccel_priv_data = src->internal->hwaccel_priv_data;
 
         if (!!dst->hw_frames_ctx != !!src->hw_frames_ctx ||
             (dst->hw_frames_ctx && dst->hw_frames_ctx->data != src->hw_frames_ctx->data)) {
@@ -410,6 +409,7 @@ static int submit_packet(PerThreadContext *p, AVCodecContext *user_avctx,
             pthread_mutex_unlock(&prev_thread->progress_mutex);
         }
 
+        p->avctx->internal->hwaccel_priv_data = prev_thread->avctx->internal->hwaccel_priv_data;
         err = update_context_from_thread(p->avctx, prev_thread->avctx, 0);
         if (err) {
             pthread_mutex_unlock(&p->mutex);
@@ -476,7 +476,7 @@ int ff_thread_decode_frame(AVCodecContext *avctx,
     FrameThreadContext *fctx = avctx->internal->thread_ctx;
     int finished = fctx->next_finished;
     PerThreadContext *p;
-    int err;
+    int err, cur_decoding;
 
     /* release the async lock, permitting blocked hwaccel threads to
      * go forward while we are in this function */
@@ -543,6 +543,13 @@ int ff_thread_decode_frame(AVCodecContext *avctx,
     update_context_from_thread(avctx, p->avctx, 1);
 
     if (fctx->next_decoding >= avctx->thread_count) fctx->next_decoding = 0;
+
+    /* update hwaccel_priv_data from decoding thread */
+    cur_decoding = fctx->next_decoding - 1;
+    if (cur_decoding < 0) cur_decoding += avctx->thread_count;
+
+    p = &fctx->threads[cur_decoding];
+    avctx->internal->hwaccel_priv_data = p->avctx->internal->hwaccel_priv_data;
 
     fctx->next_finished = finished;
 
