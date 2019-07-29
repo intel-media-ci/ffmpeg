@@ -743,7 +743,9 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         MATCH_PER_STREAM_OPT(ts_scale, dbl, ist->ts_scale, ic, st);
 
         ist->autorotate = 1;
+        ist->autoscale  = 1;
         MATCH_PER_STREAM_OPT(autorotate, i, ist->autorotate, ic, st);
+        MATCH_PER_STREAM_OPT(autoscale, i, ist->autoscale, ic, st);
 
         MATCH_PER_STREAM_OPT(codec_tags, str, codec_tag, ic, st);
         if (codec_tag) {
@@ -3650,6 +3652,12 @@ const OptionDef options[] = {
     { "autorotate",       HAS_ARG | OPT_BOOL | OPT_SPEC |
                           OPT_EXPERT | OPT_INPUT,                                { .off = OFFSET(autorotate) },
         "automatically insert correct rotate filters" },
+    { "autoscale",        HAS_ARG | OPT_BOOL | OPT_SPEC |
+                          OPT_EXPERT | OPT_INPUT,                                { .off = OFFSET(autoscale) },
+        "automatically insert a scale filter at the end of the filter graph if a resolution"
+        "change is detected. This ensures all frames are the same resolution as the first frame"
+        "when they leave the filter chain (this option is enabled by default)."
+        "If disabled, some encoders/muxers may not support this mode."},
 
     /* audio options */
     { "aframes",        OPT_AUDIO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_audio_frames },
