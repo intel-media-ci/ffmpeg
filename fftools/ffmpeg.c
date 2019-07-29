@@ -2125,6 +2125,7 @@ static int ifilter_send_frame(InputFilter *ifilter, AVFrame *frame)
 
     /* determine if the parameters for this input changed */
     need_reinit = ifilter->format != frame->format;
+    fg->autoscale = ifilter->ist->autoscale;
 
     switch (ifilter->ist->st->codecpar->codec_type) {
     case AVMEDIA_TYPE_AUDIO:
