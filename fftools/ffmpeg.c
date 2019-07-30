@@ -1056,6 +1056,15 @@ static void do_video_out(OutputFile *of,
     InputStream *ist = NULL;
     AVFilterContext *filter = ost->filter->filter;
 
+    if (next_picture && (enc->width != next_picture->width ||
+                         enc->height != next_picture->height)) {
+        if (!(enc->codec->capabilities & AV_CODEC_CAP_VARIABLE_DIMENSIONS)) {
+            av_log(NULL, AV_LOG_ERROR, "Variable dimension encoding "
+                            "is not supported by %s.\n", enc->codec->name);
+            goto error;
+        }
+    }
+
     if (ost->source_index >= 0)
         ist = input_streams[ost->source_index];
 
