@@ -1067,6 +1067,15 @@ static int vpx_encode(AVCodecContext *avctx, AVPacket *pkt,
     int res, coded_size;
     vpx_enc_frame_flags_t flags = 0;
 
+    if (frame && (avctx->width != frame->width ||
+                  avctx->height != frame->height)) {
+        avctx->width  = frame->width;
+        avctx->height = frame->height;
+
+        avctx->codec->close(avctx);
+        avctx->codec->init(avctx);
+    }
+
     if (frame) {
         rawimg                      = &ctx->rawimg;
         rawimg->planes[VPX_PLANE_Y] = frame->data[0];
@@ -1295,7 +1304,7 @@ AVCodec ff_libvpx_vp8_encoder = {
     .init           = vp8_init,
     .encode2        = vpx_encode,
     .close          = vpx_free,
-    .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_AUTO_THREADS,
+    .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_AUTO_THREADS | AV_CODEC_CAP_PARAM_CHANGE,
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NONE },
     .priv_class     = &class_vp8,
     .defaults       = defaults,
@@ -1325,7 +1334,7 @@ AVCodec ff_libvpx_vp9_encoder = {
     .init           = vp9_init,
     .encode2        = vpx_encode,
     .close          = vpx_free,
-    .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_AUTO_THREADS,
+    .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_AUTO_THREADS | AV_CODEC_CAP_PARAM_CHANGE,
     .profiles       = NULL_IF_CONFIG_SMALL(ff_vp9_profiles),
     .priv_class     = &class_vp9,
     .defaults       = defaults,
