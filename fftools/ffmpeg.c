@@ -130,6 +130,7 @@ static void do_video_stats(OutputStream *ost, int frame_size);
 static BenchmarkTimeStamps get_benchmark_time_stamps(void);
 static int64_t getmaxrss(void);
 static int ifilter_has_all_input_formats(FilterGraph *fg);
+static void flush_encoders(void);
 
 static int run_as_daemon  = 0;
 static int nb_frames_dup = 0;
@@ -1067,6 +1068,19 @@ static void do_video_out(OutputFile *of,
     int frame_size = 0;
     InputStream *ist = NULL;
     AVFilterContext *filter = ost->filter->filter;
+
+    /* flush encoders in dynamic resolution encode */
+    if (next_picture && (enc->width != next_picture->width ||
+                         enc->height != next_picture->height)) {
+        flush_encoders();
+        avcodec_flush_buffers(enc);
+
+        if (!(enc->codec->capabilities & AV_CODEC_CAP_PARAM_CHANGE)) {
+            av_log(NULL, AV_LOG_ERROR, "Dynamic resolution encode "
+                            "is not supported by %s.\n", enc->codec->name);
+            goto error;
+        }
+    }
 
     if (ost->source_index >= 0)
         ist = input_streams[ost->source_index];
