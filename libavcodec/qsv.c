@@ -79,7 +79,8 @@ static const struct {
     MAP(MPEG2VIDEO,  MPEG2_HIGH,      MPEG2_HIGH   ),
 
     MAP(H264,        H264_BASELINE,   AVC_BASELINE ),
-    MAP(H264,        H264_CONSTRAINED_BASELINE, AVC_BASELINE),
+    MAP(H264,        H264_CONSTRAINED_BASELINE,
+                                      AVC_BASELINE ),
 #if QSV_VERSION_ATLEAST(1, 3)
     MAP(H264,        H264_EXTENDED,   AVC_EXTENDED ),
 #endif
@@ -90,11 +91,13 @@ static const struct {
 #if QSV_VERSION_ATLEAST(1, 8)
     MAP(HEVC,        HEVC_MAIN,       HEVC_MAIN    ),
     MAP(HEVC,        HEVC_MAIN_10,    HEVC_MAIN10  ),
-    MAP(HEVC,        HEVC_MAIN_STILL_PICTURE,    HEVC_MAINSP ),
+    MAP(HEVC,        HEVC_MAIN_STILL_PICTURE,
+                                      HEVC_MAINSP  ),
 #endif
 #if QSV_VERSION_ATLEAST(1, 16)
     MAP(HEVC,        HEVC_REXT,       HEVC_REXT    ),
 #endif
+    MAP(HEVC,        UNKNOWN,         HEVC_MAIN    ),
 
     MAP(VC1,         VC1_SIMPLE,      VC1_SIMPLE   ),
     MAP(VC1,         VC1_MAIN,        VC1_MAIN     ),
@@ -103,17 +106,33 @@ static const struct {
 #undef MAP
 };
 
-int ff_qsv_profile_to_mfx(enum AVCodecID codec_id, int profile)
+int ff_qsv_profile_to_mfx(AVCodecContext *avctx)
 {
+    const AVCodecDescriptor *codec_desc;
+    int codec_id = avctx->codec_id;
+    int profile = avctx->profile;
     int i;
-    if (profile == FF_PROFILE_UNKNOWN)
+
+    codec_desc = avcodec_descriptor_get(avctx->codec_id);
+    if (!codec_desc) {
         return MFX_PROFILE_UNKNOWN;
+    }
 
     for (i = 0; i < FF_ARRAY_ELEMS(qsv_profile_map); i++) {
         if (qsv_profile_map[i].codec_id != codec_id)
             continue;
         if (qsv_profile_map[i].codec_profile == profile)
             return qsv_profile_map[i].mfx_profile;
+        if (avctx->hwaccel_flags & AV_HWACCEL_FLAG_ALLOW_PROFILE_MISMATCH &&
+            qsv_profile_map[i].codec_profile == FF_PROFILE_UNKNOWN ) {
+
+            av_log(avctx, AV_LOG_VERBOSE, "Codec %s profile %d not "
+                "supported for hardware decode.\n", codec_desc->name, profile);
+            av_log(avctx, AV_LOG_WARNING, "Using possibly-incompatible "
+                "mfx profile %d instead.\n", qsv_profile_map[i].mfx_profile);
+
+            return qsv_profile_map[i].mfx_profile;
+        }
     }
 
     return MFX_PROFILE_UNKNOWN;
