@@ -1069,11 +1069,29 @@ static int vpx_encode(AVCodecContext *avctx, AVPacket *pkt,
 
     if (frame && (avctx->width != frame->width ||
                   avctx->height != frame->height)) {
-        avctx->width  = frame->width;
-        avctx->height = frame->height;
 
-        avctx->codec->close(avctx);
-        avctx->codec->init(avctx);
+        if (frame->width <= avctx->width &&
+            frame->height <= avctx->height &&
+            !ctx->lag_in_frames) {
+
+            // set enc_config without reinit
+            struct vpx_codec_enc_cfg new_cfg = { 0 };
+            memcpy(&new_cfg, ctx->encoder.config.enc, sizeof(struct vpx_codec_enc_cfg));
+
+            new_cfg.g_w = frame->width;
+            new_cfg.g_h = frame->height;
+
+            vpx_codec_enc_config_set(&ctx->encoder, &new_cfg);
+
+            avctx->width  = frame->width;
+            avctx->height = frame->height;
+        } else {
+            // since frame enlarge leads to force key frame, reinit directly
+            avctx->width  = frame->width;
+            avctx->height = frame->height;
+            avctx->codec->close(avctx);
+            avctx->codec->init(avctx);
+        }
     }
 
     if (frame) {
@@ -1084,6 +1102,8 @@ static int vpx_encode(AVCodecContext *avctx, AVPacket *pkt,
         rawimg->stride[VPX_PLANE_Y] = frame->linesize[0];
         rawimg->stride[VPX_PLANE_U] = frame->linesize[1];
         rawimg->stride[VPX_PLANE_V] = frame->linesize[2];
+        rawimg->d_w                 = frame->width;
+        rawimg->d_h                 = frame->height;
         if (ctx->is_alpha) {
             uint8_t *u_plane, *v_plane;
             rawimg_alpha = &ctx->rawimg_alpha;
