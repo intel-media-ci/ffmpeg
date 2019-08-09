@@ -8737,6 +8737,19 @@ ffmpeg -i INPUT -f lavfi -i nullsrc=hd720,geq='r=128+80*(sin(sqrt((X-W/2)*(X-W/2
 @end example
 @end itemize
 
+@section dnn_rgb_processing
+
+Do image processing with deep neural networks for RGB-based format.
+
+The filter accepts the following options:
+
+@table @option
+@item dnn_backend
+
+@item model
+
+@end table
+
 @section drawbox
 
 Draw a colored box on the input image.
