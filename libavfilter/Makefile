@@ -27,6 +27,7 @@ OBJS-$(HAVE_THREADS)                         += pthread.o
 # subsystems
 OBJS-$(CONFIG_QSVVPP)                        += qsvvpp.o
 OBJS-$(CONFIG_SCENE_SAD)                     += scene_sad.o
+OBJS-$(CONFIG_DNN)                           += dnn_filter_utils.o
 include $(SRC_PATH)/libavfilter/dnn/Makefile
 
 # audio filters
@@ -222,6 +223,7 @@ OBJS-$(CONFIG_DILATION_OPENCL_FILTER)        += vf_neighbor_opencl.o opencl.o \
                                                 opencl/neighbor.o
 OBJS-$(CONFIG_DISPLACE_FILTER)               += vf_displace.o framesync.o
 OBJS-$(CONFIG_DOUBLEWEAVE_FILTER)            += vf_weave.o
+OBJS-$(CONFIG_DNN_RGB_PROCESSING_FILTER)     += vf_dnn_rgb_processing.o
 OBJS-$(CONFIG_DRAWBOX_FILTER)                += vf_drawbox.o
 OBJS-$(CONFIG_DRAWGRAPH_FILTER)              += f_drawgraph.o
 OBJS-$(CONFIG_DRAWGRID_FILTER)               += vf_drawbox.o
