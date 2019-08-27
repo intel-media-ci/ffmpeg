@@ -205,6 +205,19 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
             { 0, 4, 1, 0, 8, 3, 7, 2 },        /* V */
         },
     },
+    [AV_PIX_FMT_AYUV] = {
+        .name = "ayuv",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 4, 1, 0, 8, 3, 7, 2 },        /* Y */
+            { 0, 4, 2, 0, 8, 3, 7, 3 },        /* U */
+            { 0, 4, 3, 0, 8, 3, 7, 4 },        /* V */
+            { 0, 4, 0, 0, 8, 3, 7, 1 },        /* A */
+        },
+        .flags = AV_PIX_FMT_FLAG_ALPHA,
+    },
     [AV_PIX_FMT_RGB24] = {
         .name = "rgb24",
         .nb_components = 3,
