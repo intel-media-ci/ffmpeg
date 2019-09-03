@@ -1145,27 +1145,6 @@ static int qsv_device_derive_from_child(AVHWDeviceContext *ctx,
 
     err = MFXInit(implementation, &ver, &hwctx->session);
     if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
-               "%d.\n", err);
-        ret = AVERROR_UNKNOWN;
-        goto fail;
-    }
-
-    err = MFXQueryVersion(hwctx->session, &ver);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR, "Error querying an MFX session: %d.\n", err);
-        ret = AVERROR_UNKNOWN;
-        goto fail;
-    }
-
-    av_log(ctx, AV_LOG_VERBOSE,
-           "Initialize MFX session: API version is %d.%d, implementation version is %d.%d\n",
-           MFX_VERSION_MAJOR, MFX_VERSION_MINOR, ver.Major, ver.Minor);
-
-    MFXClose(hwctx->session);
-
-    err = MFXInit(implementation, &ver, &hwctx->session);
-    if (err != MFX_ERR_NONE) {
         av_log(ctx, AV_LOG_ERROR,
                "Error initializing an MFX session: %d.\n", err);
         ret = AVERROR_UNKNOWN;
@@ -1182,7 +1161,8 @@ static int qsv_device_derive_from_child(AVHWDeviceContext *ctx,
 
     ret = MFXQueryVersion(hwctx->session,&ver);
     if (ret == MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_VERBOSE, "MFX compile/runtime API: %d.%d/%d.%d\n",
+        av_log(ctx, AV_LOG_VERBOSE,
+               "Initialize MFX session: API version is %d.%d, implementation version is %d.%d\n",
                MFX_VERSION_MAJOR, MFX_VERSION_MINOR, ver.Major, ver.Minor);
     }
     return 0;
