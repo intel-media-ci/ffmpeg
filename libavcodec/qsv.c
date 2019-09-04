@@ -348,7 +348,79 @@ load_plugin_fail:
 
 }
 
-int ff_qsv_init_internal_session(AVCodecContext *avctx, mfxSession *session,
+//This code is only required for Linux since a display handle is required.
+//For Windows the session is complete and ready to use.
+//For releases of Media Server Studio >= 2015 R4 the
+//render nodes interface is preferred (/dev/dri/renderD).
+//Using Media Server Studio 2015 R4 or newer is recommended
+//but the older /dev/dri/card interface is also searched for broader compatibility.
+
+#ifdef AVCODEC_QSV_LINUX_SESSION_HANDLE
+static int ff_qsv_set_display_handle(AVCodecContext *avctx, QSVSession *qs)
+{
+    // VAAPI display handle
+    int ret = 0;
+    VADisplay va_dpy = NULL;
+    VAStatus va_res = VA_STATUS_SUCCESS;
+    int major_version = 0, minor_version = 0;
+    int fd = -1;
+    char adapterpath[256];
+    int adapter_num;
+
+    qs->fd_display = -1;
+    qs->va_display = NULL;
+
+    //search for valid graphics device
+    for (adapter_num = 0;adapter_num < 6;adapter_num++) {
+
+        if (adapter_num<3) {
+            snprintf(adapterpath,sizeof(adapterpath),
+                "/dev/dri/renderD%d", adapter_num+128);
+        } else {
+            snprintf(adapterpath,sizeof(adapterpath),
+                "/dev/dri/card%d", adapter_num-3);
+        }
+
+        fd = open(adapterpath, O_RDWR);
+        if (fd < 0) {
+            av_log(avctx, AV_LOG_ERROR,
+                "mfx init: %s fd open failed\n", adapterpath);
+            continue;
+        }
+
+        va_dpy = vaGetDisplayDRM(fd);
+        if (!va_dpy) {
+            av_log(avctx, AV_LOG_ERROR,
+                "mfx init: %s vaGetDisplayDRM failed\n", adapterpath);
+            close(fd);
+            continue;
+        }
+
+        va_res = vaInitialize(va_dpy, &major_version, &minor_version);
+        if (VA_STATUS_SUCCESS != va_res) {
+            av_log(avctx, AV_LOG_ERROR,
+                "mfx init: %s vaInitialize failed\n", adapterpath);
+            close(fd);
+            fd = -1;
+            continue;
+        } else {
+            av_log(avctx, AV_LOG_VERBOSE,
+            "mfx initialization: %s vaInitialize successful\n",adapterpath);
+            qs->fd_display = fd;
+            qs->va_display = va_dpy;
+            ret = MFXVideoCORE_SetHandle(qs->session,
+                  (mfxHandleType)MFX_HANDLE_VA_DISPLAY, (mfxHDL)va_dpy);
+            if (ret < 0) {
+                return ff_qsv_print_error(avctx, ret, "Error %d during set display handle\n");
+            }
+            break;
+        }
+    }
+    return 0;
+}
+#endif //AVCODEC_QSV_LINUX_SESSION_HANDLE
+
+int ff_qsv_init_internal_session(AVCodecContext *avctx, QSVSession *qs,
                                  const char *load_plugins)
 {
     mfxIMPL impl   = MFX_IMPL_AUTO_ANY;
@@ -357,18 +429,24 @@ int ff_qsv_init_internal_session(AVCodecContext *avctx, mfxSession *session,
     const char *desc;
     int ret;
 
-    ret = MFXInit(impl, &ver, session);
+    ret = MFXInit(impl, &ver, &qs->session);
     if (ret < 0)
         return ff_qsv_print_error(avctx, ret,
                                   "Error initializing an internal MFX session");
 
-    ret = qsv_load_plugins(*session, load_plugins, avctx);
+#ifdef AVCODEC_QSV_LINUX_SESSION_HANDLE
+    ret = ff_qsv_set_display_handle(avctx, qs);
+    if (ret < 0)
+        return ret;
+#endif
+
+    ret = qsv_load_plugins(qs->session, load_plugins, avctx);
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR, "Error loading plugins\n");
         return ret;
     }
 
-    MFXQueryIMPL(*session, &impl);
+    MFXQueryIMPL(qs->session, &impl);
 
     switch (MFX_IMPL_BASETYPE(impl)) {
     case MFX_IMPL_SOFTWARE:
@@ -756,5 +834,24 @@ int ff_qsv_init_session_frames(AVCodecContext *avctx, mfxSession *psession,
     }
 
     *psession = session;
+    return 0;
+}
+
+int ff_qsv_close_internal_session(QSVSession *qs)
+{
+    if (qs->session) {
+        MFXClose(qs->session);
+        qs->session = NULL;
+    }
+#ifdef AVCODEC_QSV_LINUX_SESSION_HANDLE
+    if (qs->va_display) {
+        vaTerminate(qs->va_display);
+        qs->va_display = NULL;
+    }
+    if (qs->fd_display > 0) {
+        close(qs->fd_display);
+        qs->fd_display = -1;
+    }
+#endif
     return 0;
 }
