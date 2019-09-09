@@ -205,6 +205,68 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
             { 0, 4, 1, 0, 8, 3, 7, 2 },        /* V */
         },
     },
+    [AV_PIX_FMT_Y210LE] = {
+        .name = "y210le",
+        .nb_components = 3,
+        .log2_chroma_w = 1,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 4, 0, 6, 10, 3, 9, 1 },        /* Y */
+            { 0, 8, 2, 6, 10, 7, 9, 3 },        /* U */
+            { 0, 8, 6, 6, 10, 7, 9, 7 },        /* V */
+        },
+    },
+    [AV_PIX_FMT_Y210BE] = {
+        .name = "y210be",
+        .nb_components = 3,
+        .log2_chroma_w = 1,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 4, 0, 6, 10, 3, 9, 1 },        /* Y */
+            { 0, 8, 2, 6, 10, 7, 9, 3 },        /* U */
+            { 0, 8, 6, 6, 10, 7, 9, 7 },        /* V */
+        },
+        .flags = AV_PIX_FMT_FLAG_BE,
+    },
+    [AV_PIX_FMT_AYUV] = {
+        .name = "ayuv",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 4, 1, 0, 8, 3, 7, 2 },        /* Y */
+            { 0, 4, 2, 0, 8, 3, 7, 3 },        /* U */
+            { 0, 4, 3, 0, 8, 3, 7, 4 },        /* V */
+            { 0, 4, 0, 0, 8, 3, 7, 1 },        /* A */
+        },
+        .flags = AV_PIX_FMT_FLAG_ALPHA,
+    },
+    [AV_PIX_FMT_Y410LE] = {
+        .name = "y410le",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 32, 10, 0, 10, 31, 9, 11 },        /* Y */
+            { 0, 32,  0, 0, 10, 31, 9,  1 },        /* U */
+            { 0, 32, 20, 0, 10, 31, 9, 21 },        /* V */
+            { 0, 32, 30, 0,  2, 31, 1, 31 },        /* A */
+        },
+        .flags = AV_PIX_FMT_FLAG_ALPHA | AV_PIX_FMT_FLAG_BITSTREAM,
+    },
+    [AV_PIX_FMT_Y410BE] = {
+        .name = "y410be",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 32, 10, 0, 10, 31, 9, 11 },        /* Y */
+            { 0, 32,  0, 0, 10, 31, 9,  1 },        /* U */
+            { 0, 32, 20, 0, 10, 31, 9, 21 },        /* V */
+            { 0, 32, 30, 0,  2, 31, 1, 31 },        /* A */
+        },
+        .flags = AV_PIX_FMT_FLAG_ALPHA | AV_PIX_FMT_FLAG_BITSTREAM | AV_PIX_FMT_FLAG_BE,
+    },
     [AV_PIX_FMT_RGB24] = {
         .name = "rgb24",
         .nb_components = 3,
