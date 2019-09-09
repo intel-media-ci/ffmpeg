@@ -116,6 +116,15 @@ static const VAAPIFormatDescriptor vaapi_format_map[] = {
 #endif
     MAP(UYVY, YUV422,  UYVY422, 0),
     MAP(YUY2, YUV422,  YUYV422, 0),
+#ifdef VA_FOURCC_Y210
+    MAP(Y210, YUV422_10,Y210, 0),
+#endif
+#define VA_RT_FORMAT_AYUV VA_FOURCC_AYUV
+    MAP(AYUV,   AYUV,     AYUV, 0),
+#undef VA_RT_FORMAT_AYUV
+#ifdef VA_FOURCC_Y410
+    MAP(Y410, YUV444_10,Y410, 0),
+#endif
     MAP(411P, YUV411,  YUV411P, 0),
     MAP(422V, YUV422,  YUV440P, 0),
     MAP(444P, YUV444,  YUV444P, 0),
