@@ -323,7 +323,7 @@ static int qsv_init_surface(AVHWFramesContext *ctx, mfxFrameSurface1 *surf)
 
     surf->Info.BitDepthLuma   = desc->comp[0].depth;
     surf->Info.BitDepthChroma = desc->comp[0].depth;
-    surf->Info.Shift          = desc->comp[0].depth > 8;
+    surf->Info.Shift          = desc->comp[0].shift > 0;
 
     if (desc->log2_chroma_w && desc->log2_chroma_h)
         surf->Info.ChromaFormat   = MFX_CHROMAFORMAT_YUV420;
