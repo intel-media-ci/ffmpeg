@@ -44,6 +44,10 @@
 #include "pixdesc.h"
 #include "time.h"
 
+#define QSV_VERSION_ATLEAST(MAJOR, MINOR)   \
+    (MFX_VERSION_MAJOR > (MAJOR) ||         \
+     MFX_VERSION_MAJOR == (MAJOR) && MFX_VERSION_MINOR >= (MINOR))
+
 typedef struct QSVDevicePriv {
     AVBufferRef *child_device_ctx;
 } QSVDevicePriv;
@@ -103,6 +107,18 @@ static const struct {
     { AV_PIX_FMT_BGRA, MFX_FOURCC_RGB4 },
     { AV_PIX_FMT_P010, MFX_FOURCC_P010 },
     { AV_PIX_FMT_PAL8, MFX_FOURCC_P8   },
+    { AV_PIX_FMT_YUYV422,
+                       MFX_FOURCC_YUY2 },
+#if QSV_VERSION_ATLEAST(1, 17)
+    { AV_PIX_FMT_0YUV,
+                       MFX_FOURCC_AYUV },
+#endif
+#if QSV_VERSION_ATLEAST(1, 27)
+    { AV_PIX_FMT_Y210,
+                       MFX_FOURCC_Y210 },
+    { AV_PIX_FMT_Y410,
+                       MFX_FOURCC_Y410 },
+#endif
 };
 
 static uint32_t qsv_fourcc_from_pix_fmt(enum AVPixelFormat pix_fmt)
@@ -772,6 +788,29 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
         surface->Data.G = frame->data[0] + 1;
         surface->Data.R = frame->data[0] + 2;
         surface->Data.A = frame->data[0] + 3;
+        break;
+
+    case AV_PIX_FMT_YUYV422:
+        surface->Data.Y = frame->data[0];
+        surface->Data.U = frame->data[0] + 1;
+        surface->Data.V = frame->data[0] + 3;
+        break;
+
+    case AV_PIX_FMT_Y210:
+        surface->Data.Y16 = frame->data[0];
+        surface->Data.U16 = frame->data[0] + 2;
+        surface->Data.V16 = frame->data[0] + 6;
+        break;
+
+    case AV_PIX_FMT_0YUV:
+        surface->Data.V = frame->data[0];
+        surface->Data.U = frame->data[0] + 1;
+        surface->Data.Y = frame->data[0] + 2;
+        surface->Data.A = frame->data[0] + 3;
+        break;
+
+    case AV_PIX_FMT_Y410:
+        surface->Data.U = frame->data[0];
         break;
 
     default:
