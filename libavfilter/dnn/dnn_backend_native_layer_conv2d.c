@@ -57,7 +57,10 @@ int dnn_execute_layer_DLT_CONV2D(DnnOperand *operands, const int32_t *input_oper
     for (int y = pad_size; y < height - pad_size; ++y) {
         for (int x = pad_size; x < width - pad_size; ++x) {
             for (int n_filter = 0; n_filter < conv_params->output_num; ++n_filter) {
-                output[n_filter] = conv_params->biases[n_filter];
+                if (conv_params->has_bias)
+                    output[n_filter] = conv_params->biases[n_filter];
+                else
+                    output[n_filter] = 0.f;
 
                 for (int ch = 0; ch < conv_params->input_num; ++ch) {
                     for (int kernel_y = 0; kernel_y < conv_params->kernel_size; ++kernel_y) {

@@ -100,7 +100,7 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
     char header_expected[] = "FFMPEGDNNNATIVE";
     char *buf;
     size_t size;
-    int version, header_size, major_version_expected = 0;
+    int version, header_size, major_version_expected = 1;
     ConvolutionalNetwork *network = NULL;
     AVIOContext *model_file_context;
     int file_size, dnn_size, kernel_size, i;
@@ -203,9 +203,14 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
             conv_params->input_num = (int32_t)avio_rl32(model_file_context);
             conv_params->output_num = (int32_t)avio_rl32(model_file_context);
             conv_params->kernel_size = (int32_t)avio_rl32(model_file_context);
+            conv_params->has_bias = (int32_t)avio_rl32(model_file_context);
+
             kernel_size = conv_params->input_num * conv_params->output_num *
                           conv_params->kernel_size * conv_params->kernel_size;
-            dnn_size += 24 + (kernel_size + conv_params->output_num << 2);
+            dnn_size += 28 + kernel_size * 4;
+            if (conv_params->has_bias)
+                dnn_size += conv_params->output_num * 4;
+
             if (dnn_size > file_size || conv_params->input_num <= 0 ||
                 conv_params->output_num <= 0 || conv_params->kernel_size <= 0){
                 avio_closep(&model_file_context);
@@ -213,12 +218,11 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
                 ff_dnn_free_model_native(&model);
                 return NULL;
             }
+
             conv_params->kernel = av_malloc(kernel_size * sizeof(float));
-            conv_params->biases = av_malloc(conv_params->output_num * sizeof(float));
-            if (!conv_params->kernel || !conv_params->biases){
+            if (!conv_params->kernel){
                 avio_closep(&model_file_context);
                 av_freep(&conv_params->kernel);
-                av_freep(&conv_params->biases);
                 av_freep(&conv_params);
                 ff_dnn_free_model_native(&model);
                 return NULL;
@@ -226,9 +230,23 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
             for (i = 0; i < kernel_size; ++i){
                 conv_params->kernel[i] = av_int2float(avio_rl32(model_file_context));
             }
-            for (i = 0; i < conv_params->output_num; ++i){
-                conv_params->biases[i] = av_int2float(avio_rl32(model_file_context));
+
+            conv_params->biases = NULL;
+            if (conv_params->has_bias) {
+                conv_params->biases = av_malloc(conv_params->output_num * sizeof(float));
+                if (!conv_params->biases){
+                    avio_closep(&model_file_context);
+                    av_freep(&conv_params->kernel);
+                    av_freep(&conv_params->biases);
+                    av_freep(&conv_params);
+                    ff_dnn_free_model_native(&model);
+                    return NULL;
+                }
+                for (i = 0; i < conv_params->output_num; ++i){
+                    conv_params->biases[i] = av_int2float(avio_rl32(model_file_context));
+                }
             }
+
             network->layers[layer].input_operand_indexes[0] = (int32_t)avio_rl32(model_file_context);
             network->layers[layer].output_operand_index = (int32_t)avio_rl32(model_file_context);
             dnn_size += 8;
