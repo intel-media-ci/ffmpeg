@@ -30,6 +30,7 @@
 #include "internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/avassert.h"
 #include "libavformat/avio.h"
 #include "libswscale/swscale.h"
 #include "dnn_interface.h"
@@ -87,7 +88,6 @@ static av_cold int init(AVFilterContext *context)
         return AVERROR(EIO);
     }
 
-    sr_context->input.dt = DNN_FLOAT;
     sr_context->sws_contexts[0] = NULL;
     sr_context->sws_contexts[1] = NULL;
     sr_context->sws_contexts[2] = NULL;
@@ -129,6 +129,7 @@ static int config_props(AVFilterLink *inlink)
         av_log(context, AV_LOG_ERROR, "could not set input and output for the model\n");
         return AVERROR(EIO);
     }
+    av_assert0(sr_context->input.dt == DNN_FLOAT);
 
     result = (sr_context->dnn_module->execute_model)(sr_context->model, &sr_context->output, 1);
     if (result != DNN_SUCCESS){

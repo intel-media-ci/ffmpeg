@@ -120,6 +120,7 @@ static DNNReturnType set_input_output_tf(void *model, DNNInputData *input, const
     if (tf_model->input_tensor){
         TF_DeleteTensor(tf_model->input_tensor);
     }
+    input->dt = TF_OperationOutputType(tf_model->input);
     tf_model->input_tensor = allocate_input_tensor(input);
     if (!tf_model->input_tensor){
         return DNN_ERROR;
