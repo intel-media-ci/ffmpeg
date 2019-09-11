@@ -20140,6 +20140,78 @@ Convert HDR(PQ/HLG) video to bt2020-transfer-characteristic p010 format using li
 @end example
 @end itemize
 
+@section tonemap_vappi
+
+Perform HDR(High Dynamic Range) to HDR and HDR to SDR conversion with tone-mapping.
+It maps the dynamic range of HDR10 content to the dynamic range of the
+display panel.
+
+It accepts the following parameters:
+
+@table @option
+@item type
+Specify the tone-mapping operator to be used.
+
+Possible values are:
+@table @var
+@item h2h
+Perform H2H(HDR to HDR), convert from p010 to r10g10b10a2
+@item h2s
+Perform H2S(HDR to SDR), convert from p010 to argb
+@end table
+
+@item display
+Set mastering display metadata for H2H
+
+Can assume the following values:
+@table @var
+@item G
+Green primary G(x|y).
+The value for x and y shall be in the range of 0 to 50000 inclusive.
+@item B
+Blue primary B(x|y).
+The value for x and y shall be in the range of 0 to 50000 inclusive.
+@item R
+Red primary R(x|y).
+The value for x and y shall be in the range of 0 to 50000 inclusive.
+@item WP
+White point WP(x|y).
+The value for x and y shall be in the range of 0 to 50000 inclusive.
+@item L
+Display mastering luminance L(min|max).
+The value is in units of 0.0001 candelas per square metre.
+@end table
+
+@item light
+Set content light level for H2H
+
+Can assume the following values:
+@table @var
+@item CLL
+Max content light level.
+The value is in units of 0.0001 candelas per square metre.
+@item FALL
+Max average light level per frame.
+The value is in units of 0.0001 candelas per square metre.
+@end table
+
+@end table
+
+@subsection Example
+
+@itemize
+@item
+Convert HDR video to HDR video from p010 format to r10g10b10a format.
+@example
+-i INPUT -vf "tonemap_vaapi=h2h:display=G(13250|34500)B(7500|3000)R(34000|16000)WP(15635|16450)L(2000|12000):light=CLL(10000)FALL(1000)" OUTPUT
+@end example
+@item
+Convert HDR video to SDR video from p010 format to argb format.
+@example
+-i INPUT -vf "tonemap_vaapi=h2s" OUTPUT
+@end example
+@end itemize
+
 @section unsharp_opencl
 
 Sharpen or blur the input video.

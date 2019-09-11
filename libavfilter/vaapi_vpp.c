@@ -257,6 +257,11 @@ static const VAAPIColourProperties vaapi_colour_standard_map[] = {
     { VAProcColorStandardSMPTE170M,   6,  6,  6 },
     { VAProcColorStandardSMPTE240M,   7,  7,  7 },
     { VAProcColorStandardGenericFilm, 8,  1,  1 },
+
+#if VA_CHECK_VERSION(2, 3, 0)
+    { VAProcColorStandardExplicit,    9,  16, AVCOL_SPC_BT2020_NCL},
+#endif
+
 #if VA_CHECK_VERSION(1, 1, 0)
     { VAProcColorStandardSRGB,        1, 13,  0 },
     { VAProcColorStandardXVYCC601,    1, 11,  5 },
