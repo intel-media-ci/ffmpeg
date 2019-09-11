@@ -40,7 +40,7 @@ typedef struct DRContext {
     DNNBackendType     backend_type;
     DNNModule         *dnn_module;
     DNNModel          *model;
-    DNNInputData       input;
+    DNNData            input;
     DNNData            output;
 } DRContext;
 
@@ -126,6 +126,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_log(ctx, AV_LOG_ERROR, "failed to execute model\n");
         return AVERROR(EIO);
     }
+    av_assert0(dr_context->output.dt == DNN_FLOAT);
 
     out->height = dr_context->output.height;
     out->width  = dr_context->output.width;
@@ -139,7 +140,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             int t = i * out->width * 3 + j;
 
             int t_in =  (i + pad_size) * in->width * 3 + j + pad_size * 3;
-            out->data[0][k] = CLIP((int)((((float *)dr_context->input.data)[t_in] - dr_context->output.data[t]) * 255), 0, 255);
+            out->data[0][k] = CLIP((int)((((float *)dr_context->input.data)[t_in] - ((float *)dr_context->output.data)[t]) * 255), 0, 255);
         }
     }
 
