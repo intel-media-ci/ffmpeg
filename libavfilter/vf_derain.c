@@ -26,6 +26,7 @@
 
 #include "libavformat/avio.h"
 #include "libavutil/opt.h"
+#include "libavutil/avassert.h"
 #include "avfilter.h"
 #include "dnn_interface.h"
 #include "formats.h"
@@ -90,6 +91,7 @@ static int config_inputs(AVFilterLink *inlink)
         av_log(ctx, AV_LOG_ERROR, "could not set input and output for the model\n");
         return AVERROR(EIO);
     }
+    av_assert0(dr_context->input.dt == DNN_FLOAT);
 
     return 0;
 }
@@ -150,7 +152,6 @@ static av_cold int init(AVFilterContext *ctx)
 {
     DRContext *dr_context = ctx->priv;
 
-    dr_context->input.dt = DNN_FLOAT;
     dr_context->dnn_module = ff_get_dnn_module(dr_context->backend_type);
     if (!dr_context->dnn_module) {
         av_log(ctx, AV_LOG_ERROR, "could not create DNN module for requested backend\n");

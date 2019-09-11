@@ -39,7 +39,6 @@ static DNNReturnType set_input_output_native(void *model, DNNInputData *input, c
         return DNN_ERROR;
 
     /* inputs */
-    av_assert0(input->dt == DNN_FLOAT);
     for (int i = 0; i < network->operands_num; ++i) {
         oprd = &network->operands[i];
         if (strncmp(oprd->name, input_name, sizeof(oprd->name)) == 0) {
@@ -65,6 +64,7 @@ static DNNReturnType set_input_output_native(void *model, DNNInputData *input, c
         return DNN_ERROR;
 
     input->data = oprd->data;
+    input->dt = oprd->data_type;
 
     /* outputs */
     network->nb_output = 0;
