@@ -24,7 +24,7 @@
 #include "decode.h"
 #include "internal.h"
 #include "vaapi_decode.h"
-
+#include "vaapi_hevc.h"
 
 int ff_vaapi_decode_make_param_buffer(AVCodecContext *avctx,
                                       VAAPIDecodePicture *pic,
@@ -256,10 +256,22 @@ static const struct {
 #ifdef VA_FOURCC_YV16
     MAP(YV16, YUV422P),
 #endif
+#ifdef VA_FOURCC_YUY2
+    MAP(YUY2, YUYV422),
+#endif
+#ifdef VA_FOURCC_Y210
+    MAP(Y210, Y210),
+#endif
     // 4:4:0
     MAP(422V, YUV440P),
     // 4:4:4
     MAP(444P, YUV444P),
+#ifdef VA_FOURCC_AYUV
+    MAP(AYUV, AYUV),
+#endif
+#ifdef VA_FOURCC_Y410
+    MAP(Y410, Y410),
+#endif
     // 4:2:0 10-bit
 #ifdef VA_FOURCC_P010
     MAP(P010, P010),
@@ -364,39 +376,44 @@ static const struct {
     enum AVCodecID codec_id;
     int codec_profile;
     VAProfile va_profile;
+    VAProfile (*profile_parser)(AVCodecContext *avctx);
 } vaapi_profile_map[] = {
-#define MAP(c, p, v) { AV_CODEC_ID_ ## c, FF_PROFILE_ ## p, VAProfile ## v }
-    MAP(MPEG2VIDEO,  MPEG2_SIMPLE,    MPEG2Simple ),
-    MAP(MPEG2VIDEO,  MPEG2_MAIN,      MPEG2Main   ),
-    MAP(H263,        UNKNOWN,         H263Baseline),
-    MAP(MPEG4,       MPEG4_SIMPLE,    MPEG4Simple ),
+#define MAP(c, p, v, f) { AV_CODEC_ID_ ## c, FF_PROFILE_ ## p, VAProfile ## v, f}
+    MAP(MPEG2VIDEO,  MPEG2_SIMPLE,    MPEG2Simple , NULL ),
+    MAP(MPEG2VIDEO,  MPEG2_MAIN,      MPEG2Main   , NULL ),
+    MAP(H263,        UNKNOWN,         H263Baseline, NULL ),
+    MAP(MPEG4,       MPEG4_SIMPLE,    MPEG4Simple , NULL ),
     MAP(MPEG4,       MPEG4_ADVANCED_SIMPLE,
-                               MPEG4AdvancedSimple),
-    MAP(MPEG4,       MPEG4_MAIN,      MPEG4Main   ),
+                               MPEG4AdvancedSimple, NULL ),
+    MAP(MPEG4,       MPEG4_MAIN,      MPEG4Main   , NULL ),
     MAP(H264,        H264_CONSTRAINED_BASELINE,
-                           H264ConstrainedBaseline),
-    MAP(H264,        H264_MAIN,       H264Main    ),
-    MAP(H264,        H264_HIGH,       H264High    ),
+                           H264ConstrainedBaseline, NULL ),
+    MAP(H264,        H264_MAIN,       H264Main    , NULL ),
+    MAP(H264,        H264_HIGH,       H264High    , NULL ),
 #if VA_CHECK_VERSION(0, 37, 0)
-    MAP(HEVC,        HEVC_MAIN,       HEVCMain    ),
-    MAP(HEVC,        HEVC_MAIN_10,    HEVCMain10  ),
+    MAP(HEVC,        HEVC_MAIN,       HEVCMain    , NULL ),
+    MAP(HEVC,        HEVC_MAIN_10,    HEVCMain10  , NULL ),
+#endif
+#if VA_CHECK_VERSION(1, 2, 0)
+    MAP(HEVC,        HEVC_REXT,       None,
+                              ff_vaapi_parse_rext_profile),
 #endif
     MAP(MJPEG,       MJPEG_HUFFMAN_BASELINE_DCT,
-                                      JPEGBaseline),
-    MAP(WMV3,        VC1_SIMPLE,      VC1Simple   ),
-    MAP(WMV3,        VC1_MAIN,        VC1Main     ),
-    MAP(WMV3,        VC1_COMPLEX,     VC1Advanced ),
-    MAP(WMV3,        VC1_ADVANCED,    VC1Advanced ),
-    MAP(VC1,         VC1_SIMPLE,      VC1Simple   ),
-    MAP(VC1,         VC1_MAIN,        VC1Main     ),
-    MAP(VC1,         VC1_COMPLEX,     VC1Advanced ),
-    MAP(VC1,         VC1_ADVANCED,    VC1Advanced ),
-    MAP(VP8,         UNKNOWN,       VP8Version0_3 ),
+                                      JPEGBaseline, NULL ),
+    MAP(WMV3,        VC1_SIMPLE,      VC1Simple   , NULL ),
+    MAP(WMV3,        VC1_MAIN,        VC1Main     , NULL ),
+    MAP(WMV3,        VC1_COMPLEX,     VC1Advanced , NULL ),
+    MAP(WMV3,        VC1_ADVANCED,    VC1Advanced , NULL ),
+    MAP(VC1,         VC1_SIMPLE,      VC1Simple   , NULL ),
+    MAP(VC1,         VC1_MAIN,        VC1Main     , NULL ),
+    MAP(VC1,         VC1_COMPLEX,     VC1Advanced , NULL ),
+    MAP(VC1,         VC1_ADVANCED,    VC1Advanced , NULL ),
+    MAP(VP8,         UNKNOWN,       VP8Version0_3 , NULL ),
 #if VA_CHECK_VERSION(0, 38, 0)
-    MAP(VP9,         VP9_0,           VP9Profile0 ),
+    MAP(VP9,         VP9_0,           VP9Profile0 , NULL ),
 #endif
 #if VA_CHECK_VERSION(0, 39, 0)
-    MAP(VP9,         VP9_2,           VP9Profile2 ),
+    MAP(VP9,         VP9_2,           VP9Profile2 , NULL ),
 #endif
 #undef MAP
 };
@@ -415,8 +432,8 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
     VAStatus vas;
     int err, i, j;
     const AVCodecDescriptor *codec_desc;
-    VAProfile *profile_list = NULL, matched_va_profile;
-    int profile_count, exact_match, matched_ff_profile;
+    VAProfile *profile_list = NULL, matched_va_profile, va_profile;
+    int profile_count, exact_match, matched_ff_profile, codec_profile;
 
     AVHWDeviceContext    *device = (AVHWDeviceContext*)device_ref->data;
     AVVAAPIDeviceContext *hwctx = device->hwctx;
@@ -454,15 +471,21 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         if (avctx->profile == vaapi_profile_map[i].codec_profile ||
             vaapi_profile_map[i].codec_profile == FF_PROFILE_UNKNOWN)
             profile_match = 1;
+
+        va_profile = vaapi_profile_map[i].profile_parser ?
+                     vaapi_profile_map[i].profile_parser(avctx) :
+                     vaapi_profile_map[i].va_profile;
+        codec_profile = vaapi_profile_map[i].codec_profile;
+
         for (j = 0; j < profile_count; j++) {
-            if (vaapi_profile_map[i].va_profile == profile_list[j]) {
+            if (va_profile == profile_list[j]) {
                 exact_match = profile_match;
                 break;
             }
         }
         if (j < profile_count) {
-            matched_va_profile = vaapi_profile_map[i].va_profile;
-            matched_ff_profile = vaapi_profile_map[i].codec_profile;
+            matched_va_profile = va_profile;
+            matched_ff_profile = codec_profile;
             if (exact_match)
                 break;
         }
