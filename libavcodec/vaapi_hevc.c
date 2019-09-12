@@ -27,6 +27,8 @@
 #include "hevcdec.h"
 #include "hwaccel.h"
 #include "vaapi_decode.h"
+#include "vaapi_hevc.h"
+#include "h265_profile_level.h"
 
 typedef struct VAAPIDecodePictureHEVC {
 #if VA_CHECK_VERSION(1, 2, 0)
@@ -509,6 +511,73 @@ static int vaapi_hevc_decode_slice(AVCodecContext *avctx,
     pic->last_size   = size;
 
     return 0;
+}
+
+static int ptl_convert(const PTLCommon *general_ptl, H265RawProfileTierLevel *h265_raw_ptl)
+{
+    h265_raw_ptl->general_profile_space = general_ptl->profile_space;
+    h265_raw_ptl->general_tier_flag     = general_ptl->tier_flag;
+    h265_raw_ptl->general_profile_idc   = general_ptl->profile_idc;
+
+    memcpy(h265_raw_ptl->general_profile_compatibility_flag,
+                                  general_ptl->profile_compatibility_flag, 32 * sizeof(int));
+
+    h265_raw_ptl->general_progressive_source_flag          = general_ptl->progressive_source_flag;
+    h265_raw_ptl->general_interlaced_source_flag           = general_ptl->interlaced_source_flag;
+    h265_raw_ptl->general_non_packed_constraint_flag       = general_ptl->non_packed_constraint_flag;
+    h265_raw_ptl->general_frame_only_constraint_flag       = general_ptl->frame_only_constraint_flag;
+    h265_raw_ptl->general_max_12bit_constraint_flag        = general_ptl->max_12bit_constraint_flag;
+    h265_raw_ptl->general_max_10bit_constraint_flag        = general_ptl->max_10bit_constraint_flag;
+    h265_raw_ptl->general_max_8bit_constraint_flag         = general_ptl->max_8bit_constraint_flag;
+    h265_raw_ptl->general_max_422chroma_constraint_flag    = general_ptl->max_422chroma_constraint_flag;
+    h265_raw_ptl->general_max_420chroma_constraint_flag    = general_ptl->max_420chroma_constraint_flag;
+    h265_raw_ptl->general_max_monochrome_constraint_flag   = general_ptl->max_monochrome_constraint_flag;
+    h265_raw_ptl->general_intra_constraint_flag            = general_ptl->intra_constraint_flag;
+    h265_raw_ptl->general_one_picture_only_constraint_flag = general_ptl->one_picture_only_constraint_flag;
+    h265_raw_ptl->general_lower_bit_rate_constraint_flag   = general_ptl->lower_bit_rate_constraint_flag;
+    h265_raw_ptl->general_max_14bit_constraint_flag        = general_ptl->max_14bit_constraint_flag;
+    h265_raw_ptl->general_inbld_flag                       = general_ptl->inbld_flag;
+    h265_raw_ptl->general_level_idc                        = general_ptl->level_idc;
+
+    return 0;
+}
+
+/*
+ * Find exact va_profile for HEVC Range Extension
+ */
+VAProfile ff_vaapi_parse_rext_profile(AVCodecContext *avctx)
+{
+    const HEVCContext *h = avctx->priv_data;
+    const HEVCSPS *sps = h->ps.sps;
+    const PTL *ptl = &(sps->ptl);
+    const PTLCommon *general_ptl = &(ptl->general_ptl);
+    const H265ProfileDescriptor *profile = NULL;
+
+    H265RawProfileTierLevel *h265_raw_ptl = av_mallocz(sizeof(H265RawProfileTierLevel));
+    /* convert PTLCommon to H265RawProfileTierLevel */
+    ptl_convert(general_ptl, h265_raw_ptl);
+
+    profile = ff_h265_get_profile(h265_raw_ptl);
+    av_freep(&h265_raw_ptl);
+
+    if (!profile)
+        return VAProfileNone;
+
+#if VA_CHECK_VERSION(1, 2, 0)
+    if (!strcmp(profile->name, "Main 4:2:2 10") ||
+        !strcmp(profile->name, "Main 4:2:2 10 Intra"))
+        return VAProfileHEVCMain422_10;
+    else if (!strcmp(profile->name, "Main 4:4:4") ||
+             !strcmp(profile->name, "Main 4:4:4 Intra"))
+        return VAProfileHEVCMain444;
+    else if (!strcmp(profile->name, "Main 4:4:4 10") ||
+             !strcmp(profile->name, "Main 4:4:4 10 Intra"))
+        return VAProfileHEVCMain444_10;
+#else
+    av_log(avctx, AV_LOG_WARNING, "HEVC profile %s is "
+                        "not supported with this VA version.\n", profile->name);
+#endif
+    return VAProfileNone;
 }
 
 const AVHWAccel ff_hevc_vaapi_hwaccel = {
