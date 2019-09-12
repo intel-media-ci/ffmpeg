@@ -30,7 +30,13 @@
 
 typedef struct VAAPIDecodePictureHEVC {
     VAPictureParameterBufferHEVC pic_param;
+#if VA_CHECK_VERSION(1, 2, 0)
+    VAPictureParameterBufferHEVCRext pic_rext_param;
+#endif
     VASliceParameterBufferHEVC last_slice_param;
+#if VA_CHECK_VERSION(1, 2, 0)
+    VASliceParameterBufferHEVCRext slice_rext_param;
+#endif
     const uint8_t *last_buffer;
     size_t         last_size;
 
@@ -118,6 +124,11 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
 
     const ScalingList *scaling_list = NULL;
     int err, i;
+
+    int pic_param_size = sizeof(pic->pic_param);
+#if VA_CHECK_VERSION(1, 2, 0)
+    pic_param_size += sizeof(pic->pic_rext_param);
+#endif
 
     pic->pic.output_surface = ff_vaapi_get_surface_id(h->ref->frame);
 
@@ -208,9 +219,38 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
         pic->pic_param.st_rps_bits = 0;
     }
 
+#if VA_CHECK_VERSION(1, 2, 0)
+    if (sps->sps_range_extension_flag) {
+        pic->pic_rext_param = (VAPictureParameterBufferHEVCRext) {
+            .range_extension_pic_fields.bits  = {
+                .transform_skip_rotation_enabled_flag       = sps->transform_skip_rotation_enabled_flag,
+                .transform_skip_context_enabled_flag        = sps->transform_skip_context_enabled_flag,
+                .implicit_rdpcm_enabled_flag                = sps->implicit_rdpcm_enabled_flag,
+                .explicit_rdpcm_enabled_flag                = sps->explicit_rdpcm_enabled_flag,
+                .extended_precision_processing_flag         = sps->extended_precision_processing_flag,
+                .intra_smoothing_disabled_flag              = sps->intra_smoothing_disabled_flag,
+                .high_precision_offsets_enabled_flag        = sps->high_precision_offsets_enabled_flag,
+                .persistent_rice_adaptation_enabled_flag    = sps->persistent_rice_adaptation_enabled_flag,
+                .cabac_bypass_alignment_enabled_flag        = sps->cabac_bypass_alignment_enabled_flag,
+                .cross_component_prediction_enabled_flag    = pps->cross_component_prediction_enabled_flag,
+                .chroma_qp_offset_list_enabled_flag         = pps->chroma_qp_offset_list_enabled_flag,
+            },
+            .diff_cu_chroma_qp_offset_depth                 = pps->diff_cu_chroma_qp_offset_depth,
+            .chroma_qp_offset_list_len_minus1               = pps->chroma_qp_offset_list_len_minus1,
+            .log2_sao_offset_scale_luma                     = pps->log2_sao_offset_scale_luma,
+            .log2_sao_offset_scale_chroma                   = pps->log2_sao_offset_scale_chroma,
+            .log2_max_transform_skip_block_size_minus2      = pps->log2_max_transform_skip_block_size - 2,
+        };
+
+        for (i = 0; i < 6; i++)
+            pic->pic_rext_param.cb_qp_offset_list[i]        = pps->cb_qp_offset_list[i];
+        for (i = 0; i < 6; i++)
+            pic->pic_rext_param.cr_qp_offset_list[i]        = pps->cr_qp_offset_list[i];
+    }
+#endif
     err = ff_vaapi_decode_make_param_buffer(avctx, &pic->pic,
                                             VAPictureParameterBufferType,
-                                            &pic->pic_param, sizeof(pic->pic_param));
+                                            &pic->pic_param, pic_param_size);
     if (err < 0)
         goto fail;
 
@@ -255,12 +295,19 @@ static int vaapi_hevc_end_frame(AVCodecContext *avctx)
 {
     const HEVCContext        *h = avctx->priv_data;
     VAAPIDecodePictureHEVC *pic = h->ref->hwaccel_picture_private;
+    const HEVCSPS          *sps = h->ps.sps;
     int ret;
+
+    int slice_param_size = sizeof(pic->last_slice_param);
+#if VA_CHECK_VERSION(1, 2, 0)
+    if (sps->sps_range_extension_flag)
+        slice_param_size += sizeof(pic->slice_rext_param);
+#endif
 
     if (pic->last_size) {
         pic->last_slice_param.LongSliceFlags.fields.LastSliceOfPic = 1;
         ret = ff_vaapi_decode_make_slice_buffer(avctx, &pic->pic,
-                                                &pic->last_slice_param, sizeof(pic->last_slice_param),
+                                                &pic->last_slice_param, slice_param_size,
                                                 pic->last_buffer, pic->last_size);
         if (ret < 0)
             goto fail;
@@ -351,6 +398,7 @@ static int vaapi_hevc_decode_slice(AVCodecContext *avctx,
                                    uint32_t        size)
 {
     const HEVCContext        *h = avctx->priv_data;
+    const HEVCSPS          *sps = h->ps.sps;
     const SliceHeader       *sh = &h->sh;
     VAAPIDecodePictureHEVC *pic = h->ref->hwaccel_picture_private;
 
@@ -358,10 +406,15 @@ static int vaapi_hevc_decode_slice(AVCodecContext *avctx,
                   2 : (sh->slice_type == HEVC_SLICE_I ? 0 : 1);
 
     int err, i, list_idx;
+    int slice_param_size = sizeof(pic->last_slice_param);
+#if VA_CHECK_VERSION(1, 2, 0)
+    if (sps->sps_range_extension_flag)
+        slice_param_size += sizeof(pic->slice_rext_param);
+#endif
 
     if (!sh->first_slice_in_pic_flag) {
         err = ff_vaapi_decode_make_slice_buffer(avctx, &pic->pic,
-                                                &pic->last_slice_param, sizeof(pic->last_slice_param),
+                                                &pic->last_slice_param, slice_param_size,
                                                 pic->last_buffer, pic->last_size);
         pic->last_buffer = NULL;
         pic->last_size   = 0;
@@ -414,6 +467,26 @@ static int vaapi_hevc_decode_slice(AVCodecContext *avctx,
     }
 
     fill_pred_weight_table(h, sh, &pic->last_slice_param);
+
+#if VA_CHECK_VERSION(1, 2, 0)
+    if (sps->sps_range_extension_flag) {
+        // pass the slice parameter for REXT
+        pic->slice_rext_param = (VASliceParameterBufferHEVCRext) {
+            .slice_ext_flags.bits = {
+                .cu_chroma_qp_offset_enabled_flag = sh->cu_chroma_qp_offset_enabled_flag,
+            },
+        };
+
+        memcpy(pic->slice_rext_param.luma_offset_l0, pic->last_slice_param.luma_offset_l0,
+                                                sizeof(pic->last_slice_param.luma_offset_l0));
+        memcpy(pic->slice_rext_param.luma_offset_l1, pic->last_slice_param.luma_offset_l1,
+                                                sizeof(pic->last_slice_param.luma_offset_l1));
+        memcpy(pic->slice_rext_param.ChromaOffsetL0, pic->last_slice_param.ChromaOffsetL0,
+                                                sizeof(pic->last_slice_param.ChromaOffsetL0));
+        memcpy(pic->slice_rext_param.ChromaOffsetL1, pic->last_slice_param.ChromaOffsetL1,
+                                                sizeof(pic->last_slice_param.ChromaOffsetL1));
+    }
+#endif
 
     pic->last_buffer = buffer;
     pic->last_size   = size;
