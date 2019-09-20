@@ -410,7 +410,9 @@ static const struct {
     MAP(VP9,         VP9_0,           VP9Profile0 ),
 #endif
 #if VA_CHECK_VERSION(0, 39, 0)
+    MAP(VP9,         VP9_1,           VP9Profile1 ),
     MAP(VP9,         VP9_2,           VP9Profile2 ),
+    MAP(VP9,         VP9_3,           VP9Profile3 ),
 #endif
 #if VA_CHECK_VERSION(1, 8, 0)
     MAP(AV1,         AV1_MAIN,        AV1Profile0),
