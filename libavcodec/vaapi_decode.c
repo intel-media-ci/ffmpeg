@@ -413,7 +413,9 @@ static const struct {
     MAP(VP9,         VP9_0,           VP9Profile0 , NULL ),
 #endif
 #if VA_CHECK_VERSION(0, 39, 0)
+    MAP(VP9,         VP9_1,           VP9Profile1 , NULL ),
     MAP(VP9,         VP9_2,           VP9Profile2 , NULL ),
+    MAP(VP9,         VP9_3,           VP9Profile3 , NULL ),
 #endif
 #undef MAP
 };
