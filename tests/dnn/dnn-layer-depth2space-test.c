@@ -79,7 +79,7 @@ static int test(void)
     operands[1].data = NULL;
 
     input_indexes[0] = 0;
-    depth_to_space(operands, input_indexes, 1, 2);
+    dnn_execute_layer_DLT_DEPTH_TO_SPACE(operands, input_indexes, 1, 2);
 
     output = operands[1].data;
     for (int i = 0; i < sizeof(expected_output) / sizeof(float); i++) {
