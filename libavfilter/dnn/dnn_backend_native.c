@@ -331,10 +331,6 @@ DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, DNNData *output
 {
     ConvolutionalNetwork *network = (ConvolutionalNetwork *)model->model;
     int32_t layer;
-    ConvolutionalParams *conv_params;
-    DepthToSpaceParams *depth_to_space_params;
-    LayerPadParams *pad_params;
-    DnnLayerMaximumParams *maximum_params;
     uint32_t nb = FFMIN(nb_output, network->nb_output);
 
     if (network->layers_num <= 0 || network->operands_num <= 0)
@@ -344,28 +340,24 @@ DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, DNNData *output
 
     for (layer = 0; layer < network->layers_num; ++layer){
         switch (network->layers[layer].type){
-        case DLT_CONV2D:
-            conv_params = (ConvolutionalParams *)network->layers[layer].params;
-            convolve(network->operands, network->layers[layer].input_operand_indexes,
-                     network->layers[layer].output_operand_index, conv_params);
-            break;
-        case DLT_DEPTH_TO_SPACE:
-            depth_to_space_params = (DepthToSpaceParams *)network->layers[layer].params;
-            depth_to_space(network->operands, network->layers[layer].input_operand_indexes,
-                           network->layers[layer].output_operand_index, depth_to_space_params->block_size);
-            break;
-        case DLT_MIRROR_PAD:
-            pad_params = (LayerPadParams *)network->layers[layer].params;
-            dnn_execute_layer_pad(network->operands, network->layers[layer].input_operand_indexes,
-                                  network->layers[layer].output_operand_index, pad_params);
-            break;
-        case DLT_MAXIMUM:
-            maximum_params = (DnnLayerMaximumParams *)network->layers[layer].params;
-            dnn_execute_layer_maximum(network->operands, network->layers[layer].input_operand_indexes,
-                                  network->layers[layer].output_operand_index, maximum_params);
-            break;
+
+#if 0
+#define SETUP_LAYER(layer_type)                                                          \
+        case layer_type:                                                                 \
+            dnn_execute_layer_##layer_type(network->operands,                            \
+                                           network->layers[layer].input_operand_indexes, \
+                                           network->layers[layer].output_operand_index,  \
+                                           network->layers[layer].params);               \
+        break;
+#include "dnn_backend_native_layers.hxx"
+#undef SETUP_LAYER
+#endif
+
         case DLT_INPUT:
             return DNN_ERROR;
+        default:
+            av_assert0(!"should not reach here");
+            break;
         }
     }
 

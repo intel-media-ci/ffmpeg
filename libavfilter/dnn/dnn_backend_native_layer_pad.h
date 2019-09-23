@@ -36,7 +36,7 @@ typedef struct LayerPadParams{
     float constant_values;
 } LayerPadParams;
 
-int dnn_execute_layer_pad(DnnOperand *operands, const int32_t *input_operand_indexes, int32_t output_operand_index,
-                           const LayerPadParams *params);
+int dnn_execute_layer_pad(DnnOperand *operands, const int32_t *input_operand_indexes,
+                          int32_t output_operand_index, const void *parameters);
 
 #endif
