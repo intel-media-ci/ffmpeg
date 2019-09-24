@@ -133,6 +133,12 @@ static const VAAPIFormatDescriptor vaapi_format_map[] = {
 #endif
     MAP(ARGB, RGB32,   ARGB, 0),
     MAP(XRGB, RGB32,   0RGB, 0),
+#ifdef VA_FOURCC_A2R10G10B10
+    MAP(A2R10G10B10, RGB32_10, A2R10G10B10, 0),
+#endif
+#ifdef VA_FOURCC_A2B10G10R10
+    MAP(A2B10G10R10, RGB32_10, A2B10G10R10, 0),
+#endif
 };
 #undef MAP
 
