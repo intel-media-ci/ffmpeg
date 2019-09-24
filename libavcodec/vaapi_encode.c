@@ -1236,14 +1236,8 @@ static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
                ctx->input_frames->sw_format);
         return AVERROR(EINVAL);
     }
+    // It's not quite proper since comp[0].depth may not equal to depth in other component.
     depth = desc->comp[0].depth;
-    for (i = 1; i < desc->nb_components; i++) {
-        if (desc->comp[i].depth != depth) {
-            av_log(avctx, AV_LOG_ERROR, "Invalid input pixfmt (%s).\n",
-                   desc->name);
-            return AVERROR(EINVAL);
-        }
-    }
     av_log(avctx, AV_LOG_VERBOSE, "Input surface format is %s.\n",
            desc->name);
 
