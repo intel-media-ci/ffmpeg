@@ -33,6 +33,8 @@ is16BPS:
   yuva444p16le
 
 isNBPS:
+  a2b10g10r10
+  a2r10g10b10
   gbrap10be
   gbrap10le
   gbrap12be
@@ -363,6 +365,8 @@ isSemiPlanarYUV:
 isRGB:
   0bgr
   0rgb
+  a2b10g10r10
+  a2r10g10b10
   bayer_bggr16be
   bayer_bggr16le
   bayer_bggr8
@@ -507,6 +511,8 @@ Bayer:
 AnyRGB:
   0bgr
   0rgb
+  a2b10g10r10
+  a2r10g10b10
   bayer_bggr16be
   bayer_bggr16le
   bayer_bggr8
@@ -579,6 +585,8 @@ AnyRGB:
   rgba64le
 
 ALPHA:
+  a2b10g10r10
+  a2r10g10b10
   ayuv64be
   ayuv64le
   bgr32
@@ -631,6 +639,8 @@ ALPHA:
 Packed:
   0bgr
   0rgb
+  a2b10g10r10
+  a2r10g10b10
   ayuv64be
   ayuv64le
   bayer_bggr16be
@@ -800,6 +810,8 @@ Planar:
 PackedRGB:
   0bgr
   0rgb
+  a2b10g10r10
+  a2r10g10b10
   bayer_bggr16be
   bayer_bggr16le
   bayer_bggr8

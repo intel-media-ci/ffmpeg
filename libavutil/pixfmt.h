@@ -348,6 +348,9 @@ enum AVPixelFormat {
     AV_PIX_FMT_NV24,      ///< planar YUV 4:4:4, 24bpp, 1 plane for Y and 1 plane for the UV components, which are interleaved (first byte U and the following byte V)
     AV_PIX_FMT_NV42,      ///< as above, but U and V bytes are swapped
 
+    AV_PIX_FMT_A2R10G10B10, ///packed ARGB 2:10:10:10, 32bpp, ARGBARGB...
+    AV_PIX_FMT_A2B10G10R10, ///packed ABGR 2:10:10:10, 32bpp, ABGRABGR...
+
     AV_PIX_FMT_NB         ///< number of pixel formats, DO NOT USE THIS if you want to link with shared libav* because the number of formats might differ between versions
 };
 

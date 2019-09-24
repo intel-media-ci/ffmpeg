@@ -540,6 +540,32 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
         },
         .flags = AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_ALPHA,
     },
+    [AV_PIX_FMT_A2R10G10B10] = {
+        .name = "a2r10g10b10",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 32, 20, 0, 10, 31, 9, 21 },       /* R */
+            { 0, 32, 10, 0, 10, 31, 9, 11 },       /* G */
+            { 0, 32,  0, 0, 10, 31, 9,  1 },       /* B */
+            { 0, 32, 30, 0,  2, 31, 1, 31 },       /* A */
+        },
+        .flags = AV_PIX_FMT_FLAG_BITSTREAM | AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_ALPHA,
+    },
+    [AV_PIX_FMT_A2B10G10R10] = {
+        .name = "a2b10g10r10",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 32,  0, 0, 10, 31, 9,  1 },       /* R */
+            { 0, 32, 10, 0, 10, 31, 9, 11 },       /* G */
+            { 0, 32, 20, 0, 10, 31, 9, 21 },       /* B */
+            { 0, 32, 30, 0,  2, 31, 1, 31 },       /* A */
+        },
+        .flags = AV_PIX_FMT_FLAG_BITSTREAM | AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_ALPHA,
+    },
     [AV_PIX_FMT_0RGB] = {
         .name = "0rgb",
         .nb_components= 3,
