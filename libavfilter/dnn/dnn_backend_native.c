@@ -29,6 +29,7 @@
 #include "dnn_backend_native_layer_conv2d.h"
 #include "dnn_backend_native_layer_depth2space.h"
 #include "dnn_backend_native_layer_maximum.h"
+#include "dnn_backend_native_layers.h"
 
 static DNNReturnType set_input_output_native(void *model, DNNInputData *input, const char *input_name, const char **output_names, uint32_t nb_output)
 {
@@ -339,26 +340,11 @@ DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, DNNData *output
         return DNN_ERROR;
 
     for (layer = 0; layer < network->layers_num; ++layer){
-        switch (network->layers[layer].type){
-
-#if 0
-#define SETUP_LAYER(layer_type)                                                          \
-        case layer_type:                                                                 \
-            dnn_execute_layer_##layer_type(network->operands,                            \
-                                           network->layers[layer].input_operand_indexes, \
-                                           network->layers[layer].output_operand_index,  \
-                                           network->layers[layer].params);               \
-        break;
-#include "dnn_backend_native_layers.hxx"
-#undef SETUP_LAYER
-#endif
-
-        case DLT_INPUT:
-            return DNN_ERROR;
-        default:
-            av_assert0(!"should not reach here");
-            break;
-        }
+        DNNLayerType layer_type = network->layers[layer].type;
+        layer_funcs[layer_type](network->operands,
+                                  network->layers[layer].input_operand_indexes,
+                                  network->layers[layer].output_operand_index,
+                                  network->layers[layer].params);
     }
 
     for (uint32_t i = 0; i < nb; ++i) {
