@@ -30,13 +30,13 @@
 int dnn_load_layer_depth2space(Layer *layer, AVIOContext *model_file_context, int file_size)
 {
     DepthToSpaceParams *params;
-    int dnn_size;
+    int dnn_size = 0;
     params = av_malloc(sizeof(DepthToSpaceParams));
     if (!params)
         return 0;
 
     params->block_size = (int32_t)avio_rl32(model_file_context);
-    dnn_size = 4;
+    dnn_size += 4;
     layer->input_operand_indexes[0] = (int32_t)avio_rl32(model_file_context);
     layer->output_operand_index = (int32_t)avio_rl32(model_file_context);
     dnn_size += 8;

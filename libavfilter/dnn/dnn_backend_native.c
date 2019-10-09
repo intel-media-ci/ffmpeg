@@ -104,10 +104,9 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
     int version, header_size, major_version_expected = 0;
     ConvolutionalNetwork *network = NULL;
     AVIOContext *model_file_context;
-    int file_size, dnn_size, i, parsed_size;
+    int file_size, dnn_size, parsed_size;
     int32_t layer;
     DNNLayerType layer_type;
-    LayerPadParams *pad_params;
     DnnLayerMaximumParams *maximum_params;
 
     model = av_malloc(sizeof(DNNModel));
@@ -208,23 +207,13 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
             dnn_size += parsed_size;
             break;
         case DLT_MIRROR_PAD:
-            pad_params = av_malloc(sizeof(LayerPadParams));
-            if (!pad_params){
+            parsed_size = dnn_load_layer_pad(&network->layers[layer], model_file_context, file_size);
+            if (!parsed_size) {
                 avio_closep(&model_file_context);
                 ff_dnn_free_model_native(&model);
                 return NULL;
             }
-            pad_params->mode = (int32_t)avio_rl32(model_file_context);
-            dnn_size += 4;
-            for (i = 0; i < 4; ++i) {
-                pad_params->paddings[i][0] = avio_rl32(model_file_context);
-                pad_params->paddings[i][1] = avio_rl32(model_file_context);
-                dnn_size += 8;
-            }
-            network->layers[layer].input_operand_indexes[0] = (int32_t)avio_rl32(model_file_context);
-            network->layers[layer].output_operand_index = (int32_t)avio_rl32(model_file_context);
-            dnn_size += 8;
-            network->layers[layer].params = pad_params;
+            dnn_size += parsed_size;
             break;
         case DLT_MAXIMUM:
             maximum_params = av_malloc(sizeof(*maximum_params));

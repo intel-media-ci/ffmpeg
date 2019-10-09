@@ -27,7 +27,7 @@ int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int fil
 {
     ConvolutionalParams *conv_params;
     int kernel_size;
-    int dnn_size;
+    int dnn_size = 0;
     conv_params = av_malloc(sizeof(ConvolutionalParams));
     if (!conv_params)
         return 0;
@@ -40,7 +40,7 @@ int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int fil
     conv_params->kernel_size = (int32_t)avio_rl32(model_file_context);
     kernel_size = conv_params->input_num * conv_params->output_num *
                   conv_params->kernel_size * conv_params->kernel_size;
-    dnn_size = 24 + (kernel_size + conv_params->output_num << 2);
+    dnn_size += 24 + (kernel_size + conv_params->output_num << 2);
     if (dnn_size > file_size || conv_params->input_num <= 0 ||
         conv_params->output_num <= 0 || conv_params->kernel_size <= 0){
         av_freep(&conv_params);
