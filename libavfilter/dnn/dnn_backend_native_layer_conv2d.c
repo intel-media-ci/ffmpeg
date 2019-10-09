@@ -38,41 +38,27 @@ int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int fil
     conv_params->input_num = (int32_t)avio_rl32(model_file_context);
     conv_params->output_num = (int32_t)avio_rl32(model_file_context);
     conv_params->kernel_size = (int32_t)avio_rl32(model_file_context);
-    conv_params->has_bias = (int32_t)avio_rl32(model_file_context);
-    dnn_size = 28;
-
     kernel_size = conv_params->input_num * conv_params->output_num *
-                      conv_params->kernel_size * conv_params->kernel_size;
-    dnn_size += kernel_size * 4;
-    if (conv_params->has_bias)
-        dnn_size += conv_params->output_num * 4;
-
+                  conv_params->kernel_size * conv_params->kernel_size;
+    dnn_size = 24 + (kernel_size + conv_params->output_num << 2);
     if (dnn_size > file_size || conv_params->input_num <= 0 ||
         conv_params->output_num <= 0 || conv_params->kernel_size <= 0){
         av_freep(&conv_params);
         return 0;
     }
-
     conv_params->kernel = av_malloc(kernel_size * sizeof(float));
-    if (!conv_params->kernel) {
+    conv_params->biases = av_malloc(conv_params->output_num * sizeof(float));
+    if (!conv_params->kernel || !conv_params->biases){
+        av_freep(&conv_params->kernel);
+        av_freep(&conv_params->biases);
         av_freep(&conv_params);
         return 0;
     }
-    for (int i = 0; i < kernel_size; ++i) {
+    for (int i = 0; i < kernel_size; ++i){
         conv_params->kernel[i] = av_int2float(avio_rl32(model_file_context));
     }
-
-    conv_params->biases = NULL;
-    if (conv_params->has_bias) {
-        conv_params->biases = av_malloc(conv_params->output_num * sizeof(float));
-        if (!conv_params->biases){
-            av_freep(&conv_params->kernel);
-            av_freep(&conv_params);
-            return 0;
-        }
-        for (int i = 0; i < conv_params->output_num; ++i){
-            conv_params->biases[i] = av_int2float(avio_rl32(model_file_context));
-        }
+    for (int i = 0; i < conv_params->output_num; ++i){
+        conv_params->biases[i] = av_int2float(avio_rl32(model_file_context));
     }
 
     layer->params = conv_params;
