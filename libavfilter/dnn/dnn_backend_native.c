@@ -107,7 +107,6 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
     int file_size, dnn_size, parsed_size;
     int32_t layer;
     DNNLayerType layer_type;
-    DnnLayerMaximumParams *maximum_params;
 
     model = av_malloc(sizeof(DNNModel));
     if (!model){
@@ -216,18 +215,13 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
             dnn_size += parsed_size;
             break;
         case DLT_MAXIMUM:
-            maximum_params = av_malloc(sizeof(*maximum_params));
-            if (!maximum_params){
+            parsed_size = dnn_load_layer_maximum(&network->layers[layer], model_file_context, file_size);
+            if (!parsed_size) {
                 avio_closep(&model_file_context);
                 ff_dnn_free_model_native(&model);
                 return NULL;
             }
-            maximum_params->val.u32 = avio_rl32(model_file_context);
-            dnn_size += 4;
-            network->layers[layer].params = maximum_params;
-            network->layers[layer].input_operand_indexes[0] = (int32_t)avio_rl32(model_file_context);
-            network->layers[layer].output_operand_index = (int32_t)avio_rl32(model_file_context);
-            dnn_size += 8;
+            dnn_size += parsed_size;
             break;
         default:
             avio_closep(&model_file_context);
