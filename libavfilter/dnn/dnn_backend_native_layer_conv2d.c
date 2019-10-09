@@ -28,7 +28,7 @@ int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int fil
     ConvolutionalParams *conv_params;
     int kernel_size;
     int dnn_size = 0;
-    conv_params = av_malloc(sizeof(ConvolutionalParams));
+    conv_params = av_malloc(sizeof(*conv_params));
     if (!conv_params)
         return 0;
 

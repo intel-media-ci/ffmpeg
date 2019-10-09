@@ -31,7 +31,7 @@ int dnn_load_layer_depth2space(Layer *layer, AVIOContext *model_file_context, in
 {
     DepthToSpaceParams *params;
     int dnn_size = 0;
-    params = av_malloc(sizeof(DepthToSpaceParams));
+    params = av_malloc(sizeof(*params));
     if (!params)
         return 0;
 

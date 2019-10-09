@@ -26,7 +26,7 @@ int dnn_load_layer_pad(Layer *layer, AVIOContext *model_file_context, int file_s
 {
     LayerPadParams *params;
     int dnn_size = 0;
-    params = av_malloc(sizeof(LayerPadParams));
+    params = av_malloc(sizeof(*params));
     if (!params)
         return 0;
 
