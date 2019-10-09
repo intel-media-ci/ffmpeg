@@ -185,49 +185,21 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
     for (layer = 0; layer < network->layers_num; ++layer){
         layer_type = (int32_t)avio_rl32(model_file_context);
         dnn_size += 4;
-        network->layers[layer].type = layer_type;
-        switch (layer_type){
-        case DLT_CONV2D:
-            parsed_size = dnn_load_layer_conv2d(&network->layers[layer], model_file_context, file_size);
-            if (!parsed_size) {
-                avio_closep(&model_file_context);
-                ff_dnn_free_model_native(&model);
-                return NULL;
-            }
-            dnn_size += parsed_size;
-            break;
-        case DLT_DEPTH_TO_SPACE:
-            parsed_size = dnn_load_layer_depth2space(&network->layers[layer], model_file_context, file_size);
-            if (!parsed_size) {
-                avio_closep(&model_file_context);
-                ff_dnn_free_model_native(&model);
-                return NULL;
-            }
-            dnn_size += parsed_size;
-            break;
-        case DLT_MIRROR_PAD:
-            parsed_size = dnn_load_layer_pad(&network->layers[layer], model_file_context, file_size);
-            if (!parsed_size) {
-                avio_closep(&model_file_context);
-                ff_dnn_free_model_native(&model);
-                return NULL;
-            }
-            dnn_size += parsed_size;
-            break;
-        case DLT_MAXIMUM:
-            parsed_size = dnn_load_layer_maximum(&network->layers[layer], model_file_context, file_size);
-            if (!parsed_size) {
-                avio_closep(&model_file_context);
-                ff_dnn_free_model_native(&model);
-                return NULL;
-            }
-            dnn_size += parsed_size;
-            break;
-        default:
+
+        if (layer_type >= DLT_COUNT) {
             avio_closep(&model_file_context);
             ff_dnn_free_model_native(&model);
             return NULL;
         }
+
+        network->layers[layer].type = layer_type;
+        parsed_size = layer_funcs[layer_type].pf_load(&network->layers[layer], model_file_context, file_size);
+        if (!parsed_size) {
+            avio_closep(&model_file_context);
+            ff_dnn_free_model_native(&model);
+            return NULL;
+        }
+        dnn_size += parsed_size;
     }
 
     for (int32_t i = 0; i < network->operands_num; ++i){
@@ -282,7 +254,7 @@ DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, DNNData *output
 
     for (layer = 0; layer < network->layers_num; ++layer){
         DNNLayerType layer_type = network->layers[layer].type;
-        layer_funcs[layer_type](network->operands,
+        layer_funcs[layer_type].pf_exec(network->operands,
                                   network->layers[layer].input_operand_indexes,
                                   network->layers[layer].output_operand_index,
                                   network->layers[layer].params);
