@@ -107,7 +107,6 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
     int file_size, dnn_size, i, parsed_size;
     int32_t layer;
     DNNLayerType layer_type;
-    DepthToSpaceParams *depth_to_space_params;
     LayerPadParams *pad_params;
     DnnLayerMaximumParams *maximum_params;
 
@@ -200,18 +199,13 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename)
             dnn_size += parsed_size;
             break;
         case DLT_DEPTH_TO_SPACE:
-            depth_to_space_params = av_malloc(sizeof(DepthToSpaceParams));
-            if (!depth_to_space_params){
+            parsed_size = dnn_load_layer_depth2space(&network->layers[layer], model_file_context, file_size);
+            if (!parsed_size) {
                 avio_closep(&model_file_context);
                 ff_dnn_free_model_native(&model);
                 return NULL;
             }
-            depth_to_space_params->block_size = (int32_t)avio_rl32(model_file_context);
-            dnn_size += 4;
-            network->layers[layer].input_operand_indexes[0] = (int32_t)avio_rl32(model_file_context);
-            network->layers[layer].output_operand_index = (int32_t)avio_rl32(model_file_context);
-            dnn_size += 8;
-            network->layers[layer].params = depth_to_space_params;
+            dnn_size += parsed_size;
             break;
         case DLT_MIRROR_PAD:
             pad_params = av_malloc(sizeof(LayerPadParams));
