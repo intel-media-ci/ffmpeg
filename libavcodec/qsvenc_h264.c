@@ -124,7 +124,9 @@ static const AVOption options[] = {
     { "2x"                     , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_LOOKAHEAD_DS_2x      }, INT_MIN, INT_MAX,     VE, "look_ahead_downsampling" },
     { "4x"                     , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_LOOKAHEAD_DS_4x      }, INT_MIN, INT_MAX,     VE, "look_ahead_downsampling" },
 #endif
-
+#if QSV_HAVE_CO2_URR
+    { "use_raw_ref", "Use raw frames for reference",                             OFFSET(qsv.use_raw_ref),             AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+#endif
     { "int_ref_type", "Intra refresh type",                                      OFFSET(qsv.int_ref_type),            AV_OPT_TYPE_INT, { .i64 = -1 }, -1, UINT16_MAX, VE, "int_ref_type" },
         { "none",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, .flags = VE, "int_ref_type" },
         { "vertical", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 }, .flags = VE, "int_ref_type" },

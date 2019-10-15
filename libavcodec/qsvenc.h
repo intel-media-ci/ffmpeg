@@ -45,6 +45,7 @@
 #define QSV_HAVE_LA     QSV_VERSION_ATLEAST(1, 7)
 #define QSV_HAVE_LA_DS  QSV_VERSION_ATLEAST(1, 8)
 #define QSV_HAVE_LA_HRD QSV_VERSION_ATLEAST(1, 11)
+#define QSV_HAVE_CO2_URR QSV_VERSION_ATLEAST(1, 13)
 #define QSV_HAVE_VDENC  QSV_VERSION_ATLEAST(1, 15)
 
 #define QSV_HAVE_GPB    QSV_VERSION_ATLEAST(1, 18)
@@ -176,6 +177,7 @@ typedef struct QSVEncContext {
     int repeat_pps;
     int low_power;
     int gpb;
+    int use_raw_ref;
 
     int a53_cc;
 
