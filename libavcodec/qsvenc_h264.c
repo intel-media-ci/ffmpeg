@@ -150,6 +150,8 @@ static const AVOption options[] = {
 
     { "repeat_pps", "repeat pps for every frame", OFFSET(qsv.repeat_pps), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
 
+    { "no_latency", "Turn off some options to encode with no latency", OFFSET(qsv.no_latency), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+
     { NULL },
 };
 

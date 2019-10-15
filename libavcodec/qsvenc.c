@@ -291,6 +291,10 @@ static int select_rc_mode(AVCodecContext *avctx, QSVEncContext *q)
     const char *rc_desc;
     mfxU16      rc_mode;
 
+    if (q->no_latency) {
+        q->look_ahead = 0;
+    }
+
     int want_la     = q->look_ahead;
     int want_qscale = !!(avctx->flags & AV_CODEC_FLAG_QSCALE);
     int want_vcm    = q->vcm;
@@ -504,6 +508,10 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
 #endif
     } else
         q->param.mfx.LowPower = MFX_CODINGOPTION_OFF;
+
+    if (q->no_latency) {
+        avctx->max_b_frames = 0;
+    }
 
     q->param.mfx.CodecProfile       = q->profile;
     q->param.mfx.TargetUsage        = avctx->compression_level;
@@ -999,6 +1007,10 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
     int iopattern = 0;
     int opaque_alloc = 0;
     int ret;
+
+    if (q->no_latency) {
+        q->async_depth = 1;
+    }
 
     q->param.AsyncDepth = q->async_depth;
 
