@@ -150,6 +150,10 @@ static const AVOption options[] = {
 
     { "repeat_pps", "repeat pps for every frame", OFFSET(qsv.repeat_pps), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
 
+#if QSV_HAVE_CO2_URR
+    { "use_raw_ref", "Use raw frames for reference", OFFSET(qsv.use_raw_ref), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+#endif
+
     { NULL },
 };
 

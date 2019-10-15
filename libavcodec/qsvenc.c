@@ -505,6 +505,18 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     } else
         q->param.mfx.LowPower = MFX_CODINGOPTION_OFF;
 
+    if (q->use_raw_ref) {
+#if QSV_HAVE_CO2_URR
+        q->extco2.UseRawRef = MFX_CODINGOPTION_ON;
+#else
+        av_log(avctx, AV_LOG_WARNING, "The use_raw_ref option is "
+                            "not supported with this MSDK version.\n");
+        q->use_raw_ref = 0;
+        q->extco2.UseRawRef = MFX_CODINGOPTION_OFF;
+#endif
+    } else
+        q->extco2.UseRawRef = MFX_CODINGOPTION_OFF;
+
     q->param.mfx.CodecProfile       = q->profile;
     q->param.mfx.TargetUsage        = avctx->compression_level;
     q->param.mfx.GopPicSize         = FFMAX(0, avctx->gop_size);
