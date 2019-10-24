@@ -63,6 +63,9 @@ typedef struct VAAPIEncodeH265Context {
     int level;
     int sei;
 
+    int trows;
+    int tcols;
+
     // Derived settings.
     int fixed_qp_idr;
     int fixed_qp_p;
@@ -558,6 +561,36 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
     pps->pps_loop_filter_across_slices_enabled_flag = 1;
 
+    if (priv->trows && priv->tcols) {
+        pps->tiles_enabled_flag         = 1;
+
+        pps->num_tile_rows_minus1       = priv->trows - 1;
+        pps->num_tile_columns_minus1    = priv->tcols - 1;
+
+        pps->loop_filter_across_tiles_enabled_flag = 1;
+
+        for (i = 0; i <= pps->num_tile_rows_minus1; i++)
+            pps->row_height_minus1[i]   = ctx->slice_size - 1;
+        for (i = 0; i <= pps->num_tile_columns_minus1; i++)
+            pps->column_width_minus1[i] = ctx->slice_block_cols - 1;
+
+        int rounding = ctx->slice_block_rows - ctx->nb_slices * ctx->slice_size;
+        if (rounding > 0) {
+            if (rounding <= 2) {
+                for (i = 0; i < rounding; i++)
+                    ++pps->row_height_minus1[i];
+            } else {
+                for (i = 0; i < (rounding + 1) / 2; i++)
+                    ++pps->row_height_minus1[ctx->nb_slices - i - 1];
+                for (i = 0; i < rounding / 2; i++)
+                    ++pps->row_height_minus1[i];
+            }
+        } else if (rounding < 0) {
+            // Remove rounding error from last slice only.
+            av_assert0(rounding < ctx->slice_size);
+            //pic->slices[pic->nb_slices - 1].row_size += rounding;
+        }
+    }
 
     // Fill VAAPI parameter buffers.
 
@@ -665,6 +698,13 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
             .no_output_of_prior_pics_flag   = 0,
         },
     };
+
+    if (pps->tiles_enabled_flag) {
+        for (i = 0; i <= vpic->num_tile_rows_minus1; i++)
+            vpic->row_height_minus1[i] = pps->row_height_minus1[i];
+        for (i = 0; i <= vpic->num_tile_columns_minus1; i++)
+            vpic->column_width_minus1[i] = pps->column_width_minus1[i];
+    }
 
     return 0;
 }
@@ -1256,6 +1296,11 @@ static const AVOption vaapi_encode_h265_options[] = {
       0, AV_OPT_TYPE_CONST,
       { .i64 = SEI_MASTERING_DISPLAY | SEI_CONTENT_LIGHT_LEVEL },
       INT_MIN, INT_MAX, FLAGS, "sei" },
+
+    { "trows", "Number of rows for tiled encoding",
+      OFFSET(trows), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
+    { "tcols", "Number of cols for tiled encoding",
+      OFFSET(tcols), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
 
     { NULL },
 };
