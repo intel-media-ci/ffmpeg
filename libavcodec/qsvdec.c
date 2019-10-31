@@ -300,8 +300,11 @@ static int alloc_frame(AVCodecContext *avctx, QSVContext *q, QSVFrame *frame)
     else
         ret = ff_get_buffer(avctx, frame->frame, AV_GET_BUFFER_FLAG_REF);
 
-    if (ret < 0)
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "More memory in need, "
+            "try -extra_hw_frames to allocate more.\n");
         return ret;
+    }
 
     if (frame->frame->format == AV_PIX_FMT_QSV) {
         frame->surface = *(mfxFrameSurface1*)frame->frame->data[3];
