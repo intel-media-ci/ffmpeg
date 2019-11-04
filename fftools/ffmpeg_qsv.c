@@ -68,12 +68,37 @@ err_out:
     return err;
 }
 
+static int qsv_get_look_ahead_depth(OutputStream *ost)
+{
+    AVDictionaryEntry *la, *lad;
+
+    int look_ahead = 0;
+    int depth = 0;
+
+    if (la = av_dict_get(ost->encoder_opts, "look_ahead", NULL, 0))
+        look_ahead = atoi(la->value);
+
+    if (!look_ahead)
+        return 0;
+
+    if (lad = av_dict_get(ost->encoder_opts, "look_ahead_depth", NULL, 0))
+        depth = atoi(lad->value);
+
+    if (depth <= 0)
+        depth = 40;//default look_ahead_depth
+
+    return depth;
+}
+
 int qsv_init(AVCodecContext *s)
 {
     InputStream *ist = s->opaque;
+    OutputStream *ost = output_streams[0];
     AVHWFramesContext *frames_ctx;
     AVQSVFramesContext *frames_hwctx;
     int ret;
+
+    int look_ahead_depth = qsv_get_look_ahead_depth(ost);
 
     if (!hw_device_ctx) {
         ret = qsv_device_init(ist);
@@ -93,7 +118,7 @@ int qsv_init(AVCodecContext *s)
     frames_ctx->height            = FFALIGN(s->coded_height, 32);
     frames_ctx->format            = AV_PIX_FMT_QSV;
     frames_ctx->sw_format         = s->sw_pix_fmt;
-    frames_ctx->initial_pool_size = 24 + s->extra_hw_frames;
+    frames_ctx->initial_pool_size = 24 + look_ahead_depth + s->extra_hw_frames;
     frames_hwctx->frame_type      = MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET;
 
     ret = av_hwframe_ctx_init(ist->hw_frames_ctx);
