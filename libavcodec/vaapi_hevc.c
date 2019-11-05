@@ -421,6 +421,15 @@ static int vaapi_hevc_decode_slice(AVCodecContext *avctx,
     return 0;
 }
 
+static int ff_vaapi_hevc_frame_params(AVCodecContext *avctx,
+                                   AVBufferRef *hw_frames_ctx)
+{
+    const HEVCContext *s = avctx->priv_data;
+    const HEVCSPS   *sps = s->ps.sps;
+    return ff_vaapi_frame_params_with_dpb_size(avctx, hw_frames_ctx,
+                                               sps->temporal_layer[sps->max_sub_layers - 1].max_dec_pic_buffering);
+}
+
 const AVHWAccel ff_hevc_vaapi_hwaccel = {
     .name                 = "hevc_vaapi",
     .type                 = AVMEDIA_TYPE_VIDEO,
@@ -432,7 +441,7 @@ const AVHWAccel ff_hevc_vaapi_hwaccel = {
     .frame_priv_data_size = sizeof(VAAPIDecodePictureHEVC),
     .init                 = ff_vaapi_decode_init,
     .uninit               = ff_vaapi_decode_uninit,
-    .frame_params         = ff_vaapi_common_frame_params,
+    .frame_params         = ff_vaapi_hevc_frame_params,
     .priv_data_size       = sizeof(VAAPIDecodeContext),
     .caps_internal        = HWACCEL_CAP_ASYNC_SAFE,
 };

@@ -98,6 +98,9 @@ int ff_vaapi_decode_cancel(AVCodecContext *avctx,
 int ff_vaapi_decode_init(AVCodecContext *avctx);
 int ff_vaapi_decode_uninit(AVCodecContext *avctx);
 
+int ff_vaapi_frame_params_with_dpb_size(AVCodecContext *avctx,
+                                        AVBufferRef *hw_frames_ctx,
+                                        int dpb_size);
 int ff_vaapi_common_frame_params(AVCodecContext *avctx,
                                  AVBufferRef *hw_frames_ctx);
 

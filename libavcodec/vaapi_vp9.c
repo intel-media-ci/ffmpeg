@@ -168,6 +168,12 @@ static int vaapi_vp9_decode_slice(AVCodecContext *avctx,
     return 0;
 }
 
+static int ff_vaapi_vp9_frame_params(AVCodecContext *avctx,
+                                  AVBufferRef *hw_frames_ctx)
+{
+    return ff_vaapi_frame_params_with_dpb_size(avctx, hw_frames_ctx, 8);
+}
+
 const AVHWAccel ff_vp9_vaapi_hwaccel = {
     .name                 = "vp9_vaapi",
     .type                 = AVMEDIA_TYPE_VIDEO,
@@ -179,7 +185,7 @@ const AVHWAccel ff_vp9_vaapi_hwaccel = {
     .frame_priv_data_size = sizeof(VAAPIDecodePicture),
     .init                 = ff_vaapi_decode_init,
     .uninit               = ff_vaapi_decode_uninit,
-    .frame_params         = ff_vaapi_common_frame_params,
+    .frame_params         = ff_vaapi_vp9_frame_params,
     .priv_data_size       = sizeof(VAAPIDecodeContext),
     .caps_internal        = HWACCEL_CAP_ASYNC_SAFE,
 };

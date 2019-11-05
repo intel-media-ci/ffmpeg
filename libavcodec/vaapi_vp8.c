@@ -220,6 +220,12 @@ fail:
     return err;
 }
 
+static int ff_vaapi_vp8_frame_params(AVCodecContext *avctx,
+                                  AVBufferRef *hw_frames_ctx)
+{
+    return ff_vaapi_frame_params_with_dpb_size(avctx, hw_frames_ctx, 3);
+}
+
 const AVHWAccel ff_vp8_vaapi_hwaccel = {
     .name                 = "vp8_vaapi",
     .type                 = AVMEDIA_TYPE_VIDEO,
@@ -231,7 +237,7 @@ const AVHWAccel ff_vp8_vaapi_hwaccel = {
     .frame_priv_data_size = sizeof(VAAPIDecodePicture),
     .init                 = &ff_vaapi_decode_init,
     .uninit               = &ff_vaapi_decode_uninit,
-    .frame_params         = &ff_vaapi_common_frame_params,
+    .frame_params         = &ff_vaapi_vp8_frame_params,
     .priv_data_size       = sizeof(VAAPIDecodeContext),
     .caps_internal        = HWACCEL_CAP_ASYNC_SAFE,
 };

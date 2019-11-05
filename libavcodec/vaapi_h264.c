@@ -385,6 +385,15 @@ static int vaapi_h264_decode_slice(AVCodecContext *avctx,
     return 0;
 }
 
+static int ff_vaapi_h264_frame_params(AVCodecContext *avctx,
+                                   AVBufferRef *hw_frames_ctx)
+{
+    const H264Context *h = avctx->priv_data;
+    const SPS       *sps = h->ps.sps;
+    return ff_vaapi_frame_params_with_dpb_size(avctx, hw_frames_ctx,
+                                               sps->ref_frame_count + sps->num_reorder_frames);
+}
+
 const AVHWAccel ff_h264_vaapi_hwaccel = {
     .name                 = "h264_vaapi",
     .type                 = AVMEDIA_TYPE_VIDEO,
@@ -396,7 +405,7 @@ const AVHWAccel ff_h264_vaapi_hwaccel = {
     .frame_priv_data_size = sizeof(VAAPIDecodePicture),
     .init                 = &ff_vaapi_decode_init,
     .uninit               = &ff_vaapi_decode_uninit,
-    .frame_params         = &ff_vaapi_common_frame_params,
+    .frame_params         = &ff_vaapi_h264_frame_params,
     .priv_data_size       = sizeof(VAAPIDecodeContext),
     .caps_internal        = HWACCEL_CAP_ASYNC_SAFE,
 };

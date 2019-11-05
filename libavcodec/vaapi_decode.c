@@ -408,7 +408,8 @@ static const struct {
 static int vaapi_decode_make_config(AVCodecContext *avctx,
                                     AVBufferRef *device_ref,
                                     VAConfigID *va_config,
-                                    AVBufferRef *frames_ref)
+                                    AVBufferRef *frames_ref,
+                                    int dpb_size)
 {
     AVVAAPIHWConfig       *hwconfig    = NULL;
     AVHWFramesConstraints *constraints = NULL;
@@ -549,22 +550,8 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         if (err < 0)
             goto fail;
 
-        frames->initial_pool_size = 1;
-        // Add per-codec number of surfaces used for storing reference frames.
-        switch (avctx->codec_id) {
-        case AV_CODEC_ID_H264:
-        case AV_CODEC_ID_HEVC:
-            frames->initial_pool_size += 16;
-            break;
-        case AV_CODEC_ID_VP9:
-            frames->initial_pool_size += 8;
-            break;
-        case AV_CODEC_ID_VP8:
-            frames->initial_pool_size += 3;
-            break;
-        default:
-            frames->initial_pool_size += 2;
-        }
+        if (dpb_size > 0)
+            frames->initial_pool_size = dpb_size + 1;
     }
 
     av_hwframe_constraints_free(&constraints);
@@ -583,8 +570,9 @@ fail:
     return err;
 }
 
-int ff_vaapi_common_frame_params(AVCodecContext *avctx,
-                                 AVBufferRef *hw_frames_ctx)
+int ff_vaapi_frame_params_with_dpb_size(AVCodecContext *avctx,
+                                        AVBufferRef *hw_frames_ctx,
+                                        int dpb_size)
 {
     AVHWFramesContext *hw_frames = (AVHWFramesContext *)hw_frames_ctx->data;
     AVHWDeviceContext *device_ctx = hw_frames->device_ctx;
@@ -597,7 +585,7 @@ int ff_vaapi_common_frame_params(AVCodecContext *avctx,
     hwctx = device_ctx->hwctx;
 
     err = vaapi_decode_make_config(avctx, hw_frames->device_ref, &va_config,
-                                   hw_frames_ctx);
+                                   hw_frames_ctx, dpb_size);
     if (err)
         return err;
 
@@ -605,6 +593,13 @@ int ff_vaapi_common_frame_params(AVCodecContext *avctx,
         vaDestroyConfig(hwctx->display, va_config);
 
     return 0;
+}
+
+int ff_vaapi_common_frame_params(AVCodecContext *avctx,
+                                 AVBufferRef *hw_frames_ctx)
+{
+    // Set common dpb_size for vc1/mjpeg/mpeg2/mpeg4.
+    return ff_vaapi_frame_params_with_dpb_size(avctx, hw_frames_ctx, 2);
 }
 
 int ff_vaapi_decode_init(AVCodecContext *avctx)
@@ -666,7 +661,9 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     ctx->hwctx  = ctx->device->hwctx;
 
     err = vaapi_decode_make_config(avctx, ctx->frames->device_ref,
-                                   &ctx->va_config, avctx->hw_frames_ctx);
+                                   &ctx->va_config, avctx->hw_frames_ctx,
+                                   0);
+
     if (err)
         goto fail;
 
