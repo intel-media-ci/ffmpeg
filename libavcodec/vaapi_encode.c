@@ -1109,17 +1109,28 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
             return AVERROR(EAGAIN);
     }
 
+pick_next:
     pic = NULL;
     err = vaapi_encode_pick_next(avctx, &pic);
-    if (err < 0)
-        return err;
-    av_assert0(pic);
+    if (!err) {
+        av_assert0(pic);
 
-    pic->encode_order = ctx->encode_order++;
+        pic->encode_order = ctx->encode_order++;
 
-    err = vaapi_encode_issue(avctx, pic);
-    if (err < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Encode failed: %d.\n", err);
+        err = vaapi_encode_issue(avctx, pic);
+        if (err < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Encode failed: %d.\n", err);
+            return err;
+        }
+        goto pick_next;
+    } else if (err == AVERROR(EAGAIN)) {
+        for (pic = ctx->pic_start; pic; pic = pic->next)
+            if (pic->encode_issued && !pic->encode_complete &&
+                pic->encode_order == ctx->output_order)
+                break;
+        if (!pic)
+            return err;
+    } else {
         return err;
     }
 
@@ -1143,7 +1154,7 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
     av_log(avctx, AV_LOG_DEBUG, "Output packet: pts %"PRId64" dts %"PRId64".\n",
            pkt->pts, pkt->dts);
 
-    ctx->output_order = pic->encode_order;
+    ctx->output_order++;
     vaapi_encode_clear_old(avctx);
 
     return 0;
