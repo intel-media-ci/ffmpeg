@@ -630,9 +630,6 @@ int ff_qsv_process_data(AVCodecContext *avctx, QSVContext *q,
 
         q->orig_pix_fmt = avctx->pix_fmt = pix_fmt = ff_qsv_map_fourcc(param.mfx.FrameInfo.FourCC);
 
-        avctx->coded_width  = param.mfx.FrameInfo.Width;
-        avctx->coded_height = param.mfx.FrameInfo.Height;
-
         ret = qsv_decode_preinit(avctx, q, pix_fmt, &param);
         if (ret < 0)
             goto reinit_fail;
