@@ -401,7 +401,7 @@ static int ff_qsv_set_display_handle(AVCodecContext *avctx, QSVSession *qs)
         ret = MFXVideoCORE_SetHandle(qs->session,
                 (mfxHandleType)MFX_HANDLE_VA_DISPLAY, (mfxHDL)hwctx->display);
         if (ret < 0) {
-            return ff_qsv_print_error(avctx, ret, "Error during set display handle\n");
+            return ff_qsv_print_error(avctx, ret, "Error during set display handle");
         }
     }
 

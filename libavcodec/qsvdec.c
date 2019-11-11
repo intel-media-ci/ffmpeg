@@ -468,7 +468,7 @@ static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
         ret != MFX_ERR_MORE_SURFACE) {
         av_freep(&sync);
         return ff_qsv_print_error(avctx, ret,
-                                  "Error during QSV decoding.");
+                                  "Error during QSV decoding");
     }
 
     /* make sure we do not enter an infinite loop if the SDK
