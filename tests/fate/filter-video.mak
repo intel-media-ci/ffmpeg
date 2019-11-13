@@ -259,6 +259,9 @@ FATE_FILTER_SAMPLES-$(call ALLYES, PNG_DECODER APNG_DEMUXER FORMAT_FILTER COLOR_
 FATE_FILTER_VSYNTH-$(CONFIG_PHASE_FILTER) += fate-filter-phase
 fate-filter-phase: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf phase
 
+FATE_FILTER_VSYNTH-$(CONFIG_DNN_PROCESSING_FILTER) += fate-filter-dnn_processing-halve_first_channel
+fate-filter-dnn_processing-halve_first_channel: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf dnn_processing=model=$(TARGET_SAMPLES)/dnn_processing/halve_first_channel.model:input=dnn_in:output=dnn_out:fmt=rgb24:dnn_backend=native
+
 FATE_REMOVEGRAIN += fate-filter-removegrain-mode-00
 fate-filter-removegrain-mode-00: CMD = framecrc -c:v pgmyuv -i $(SRC) -frames:v 1 -vf removegrain=0:0:0
 
