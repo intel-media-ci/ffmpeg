@@ -226,6 +226,12 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
     pic->nb_param_buffers = 0;
 
     if (pic->type == PICTURE_TYPE_IDR && ctx->codec->init_sequence_params) {
+        err = ctx->codec->init_sequence_params(avctx);
+        if (err < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to reinit per-sequence "
+            "parameters: %d.\n", err);
+            goto fail;
+        }
         err = vaapi_encode_make_param_buffer(avctx, pic,
                                              VAEncSequenceParameterBufferType,
                                              ctx->codec_sequence_params,
