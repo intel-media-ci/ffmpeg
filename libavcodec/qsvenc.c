@@ -802,6 +802,23 @@ FF_ENABLE_DEPRECATION_WARNINGS
     }
 #endif
 
+#if QSV_HAVE_ROI_ENCODING
+    if (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 1, 32)) {
+        q->extroi.Header.BufferId = MFX_EXTBUFF_ENCODER_ROI;
+        q->extroi.Header.BufferSz = sizeof(q->extroi);
+        q->extroi.ROIMode = MFX_ROI_MODE_QP_DELTA;
+        // 256 to query the maximum supported value
+        q->extroi.NumROI = 256;
+        // due to the requirement of msdk, we must set non_empty rect for query
+        for (int i = 0; i < FF_ARRAY_ELEMS(q->extroi.ROI); ++i) {
+            q->extroi.ROI[i].Right  = 16;
+            q->extroi.ROI[i].Bottom = 16;
+        }
+        q->roi_index_in_internal_buffer = q->nb_extparam_internal;
+        q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extroi;
+    }
+#endif
+
     if (!check_enc_param(avctx,q)) {
         av_log(avctx, AV_LOG_ERROR,
                "some encoding parameters are not supported by the QSV "
@@ -1190,6 +1207,10 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
                                   "Error querying encoder params");
     }
 
+#if QSV_HAVE_ROI_ENCODING
+    q->roi_max_regions = q->extroi.NumROI;
+#endif
+
     ret = MFXVideoENCODE_QueryIOSurf(q->session, &q->param, &q->req);
     if (ret < 0)
         return ff_qsv_print_error(avctx, ret,
@@ -1387,6 +1408,97 @@ static void print_interlace_msg(AVCodecContext *avctx, QSVEncContext *q)
     }
 }
 
+static int qsv_encode_set_roi(AVCodecContext *avctx, QSVEncContext *q, const AVFrame *frame, mfxEncodeCtrl *enc_ctrl)
+{
+    // for hevc and h264, the min_delta_qp is -51, and the max_delta_qp is 51
+    av_unused int qp_range = 51;
+    av_unused int nb_roi;
+    av_unused const AVRegionOfInterest *roi;
+    av_unused uint32_t roi_size;
+
+    AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_REGIONS_OF_INTEREST);
+    if (sd && !q->roi_max_regions) {
+        if (!q->roi_warned) {
+            q->roi_warned = 1;
+            av_log(avctx, AV_LOG_WARNING, "ROI is not supported, please upgrade MediaSDK to version >= 20.1.0. "
+                                          "You may need to rebuild ffmpeg.\n");
+        }
+        return 0;
+    }
+
+#if QSV_HAVE_ROI_ENCODING
+    if (!sd) {
+        // need to reset for the case: with roi side data --> no roi side data
+        enc_ctrl->NumExtParam = 0;
+        return 0;
+    }
+
+#if QSV_HAVE_MF
+    if (avctx->codec_id == AV_CODEC_ID_H264) {
+        if (q->mfmode != MFX_MF_DISABLED) {
+            if (!q->roi_warned) {
+                q->roi_warned = 1;
+                av_log(avctx, AV_LOG_WARNING, "to enable ROI, "
+                       "please make sure Multi-Frame Mode is disabled (-mfmode 1).\n");
+            }
+            return 0;
+        }
+    }
+#endif
+
+    // msdk currently just supports roi encoding for h264 and h265
+    if (avctx->codec_id != AV_CODEC_ID_H264 && avctx->codec_id != AV_CODEC_ID_HEVC) {
+        if (!q->roi_warned) {
+            q->roi_warned = 1;
+            av_log(avctx, AV_LOG_WARNING, "ROI encoding is only enabled for h264_qsv and hevc_qsv.\n");
+        }
+        return 0;
+    }
+
+    roi = (const AVRegionOfInterest*)sd->data;
+    roi_size = roi->self_size;
+    if (!roi_size || sd->size % roi_size != 0) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid AVRegionOfInterest.self_size.\n");
+        return AVERROR(EINVAL);
+    }
+
+    nb_roi = sd->size / roi_size;
+    if (nb_roi > q->roi_max_regions) {
+        if (!q->roi_warned) {
+            av_log(avctx, AV_LOG_WARNING, "More ROIs set than supported (%d > %d).\n",
+                   nb_roi, q->roi_max_regions);
+            q->roi_warned = 1;
+        }
+        nb_roi = q->roi_max_regions;
+    }
+    q->extroi.NumROI = nb_roi;
+
+    // For overlapping regions, the first in the array takes priority.
+    for (int i = 0; i < nb_roi; i++) {
+        float qoffset;
+
+        roi = (const AVRegionOfInterest*)(sd->data + roi_size * i);
+        if (roi->qoffset.den == 0) {
+            av_log(avctx, AV_LOG_ERROR, "AVRegionOfInterest.qoffset.den must not be zero.\n");
+            return AVERROR(EINVAL);
+        }
+        qoffset = roi->qoffset.num * 1.0f / roi->qoffset.den;
+        qoffset = av_clipf(qoffset * qp_range, -qp_range, +qp_range);
+
+        q->extroi.ROI[i].Left = roi->left;
+        q->extroi.ROI[i].Right = roi->right;
+        q->extroi.ROI[i].Top = roi->top;
+        q->extroi.ROI[i].Bottom = roi->bottom;
+        q->extroi.ROI[i].DeltaQP = qoffset;
+    }
+
+    enc_ctrl->NumExtParam = 1;
+    enc_ctrl->ExtParam = &q->extparam_internal[q->roi_index_in_internal_buffer];
+#endif
+
+    return 0;
+}
+
 static int encode_frame(AVCodecContext *avctx, QSVEncContext *q,
                         const AVFrame *frame)
 {
@@ -1455,6 +1567,12 @@ static int encode_frame(AVCodecContext *avctx, QSVEncContext *q,
 
     if (q->set_encode_ctrl_cb) {
         q->set_encode_ctrl_cb(avctx, frame, &qsv_frame->enc_ctrl);
+    }
+
+    if (frame) {
+        ret = qsv_encode_set_roi(avctx, q, frame, &qsv_frame->enc_ctrl);
+        if (ret < 0)
+            return ret;
     }
 
     sync = av_mallocz(sizeof(*sync));

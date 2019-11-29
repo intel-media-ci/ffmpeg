@@ -40,6 +40,7 @@
 
 #define QSV_HAVE_EXT_HEVC_TILES QSV_VERSION_ATLEAST(1, 13)
 #define QSV_HAVE_EXT_VP9_PARAM QSV_VERSION_ATLEAST(1, 26)
+#define QSV_HAVE_ROI_ENCODING QSV_VERSION_ATLEAST(1, 32)
 
 #define QSV_HAVE_TRELLIS QSV_VERSION_ATLEAST(1, 8)
 #define QSV_HAVE_MAX_SLICE_SIZE QSV_VERSION_ATLEAST(1, 9)
@@ -132,11 +133,21 @@ typedef struct QSVEncContext {
     mfxExtVP9Param  extvp9param;
 #endif
 
+#if QSV_HAVE_ROI_ENCODING
+    mfxExtEncoderROI extroi;
+    int roi_index_in_internal_buffer;
+#endif
+    // Maximum number of regions supported
+    int roi_max_regions;
+    // If the driver does not support ROI then warn the first time we
+    // encounter a frame with ROI side data.
+    int roi_warned;
+
     mfxExtOpaqueSurfaceAlloc opaque_alloc;
     mfxFrameSurface1       **opaque_surfaces;
     AVBufferRef             *opaque_alloc_buf;
 
-    mfxExtBuffer  *extparam_internal[2 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + (QSV_HAVE_MF * 2)];
+    mfxExtBuffer  *extparam_internal[2 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + (QSV_HAVE_MF * 2) + QSV_HAVE_ROI_ENCODING];
     int         nb_extparam_internal;
 
     mfxExtBuffer **extparam;
