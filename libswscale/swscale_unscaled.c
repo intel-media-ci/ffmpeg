@@ -371,6 +371,41 @@ static int yuv422pToUyvyWrapper(SwsContext *c, const uint8_t *src[],
     return srcSliceH;
 }
 
+static void yuv444pTo0yuv(const uint8_t *src[], int srcStride[],
+                          uint8_t *dst, int dstStride, int srcSliceH, int width)
+{
+    int x, h, i;
+    for (h = 0; h < srcSliceH; h++) {
+        uint8_t *dest = dst + dstStride * h;
+
+        for (x = 0; x < width; x++) {
+            *dest++ = src[2][x];
+            *dest++ = src[1][x];
+            *dest++ = src[0][x];
+            *dest++ = 0xFF;
+        }
+
+        for (i = 0; i < 3; i++)
+            src[i] += srcStride[i];
+    }
+}
+
+
+static int yuv444pTo0yuvWrapper(SwsContext *c, const uint8_t *src[],
+                                int srcStride[], int srcSliceY, int srcSliceH,
+                                uint8_t *dstParam[], int dstStride[])
+{
+    uint8_t *dst = dstParam[0] + dstStride[0] * srcSliceY;
+
+    const uint8_t *source[] = { src[0], src[1], src[2] };
+    int stride[] = { srcStride[0], srcStride[1], srcStride[2] };
+
+    yuv444pTo0yuv(source, stride, dst + srcSliceY * dstStride[0], dstStride[0],
+                  srcSliceH, c->srcW);
+
+    return srcSliceH;
+}
+
 static int yuyvToYuv420Wrapper(SwsContext *c, const uint8_t *src[],
                                int srcStride[], int srcSliceY, int srcSliceH,
                                uint8_t *dstParam[], int dstStride[])
@@ -2085,6 +2120,11 @@ void ff_get_unscaled_swscale(SwsContext *c)
             c->swscale = yuv422pToYuy2Wrapper;
         else if (dstFormat == AV_PIX_FMT_UYVY422)
             c->swscale = yuv422pToUyvyWrapper;
+    }
+
+    if (srcFormat == AV_PIX_FMT_YUV444P) {
+        if (dstFormat == AV_PIX_FMT_0YUV)
+            c->swscale = yuv444pTo0yuvWrapper;
     }
 
     /* uint Y to float Y */
