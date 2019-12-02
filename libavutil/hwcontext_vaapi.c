@@ -507,10 +507,12 @@ static int vaapi_frames_init(AVHWFramesContext *hwfc)
             int need_memory_type = !(hwctx->driver_quirks & AV_VAAPI_DRIVER_QUIRK_ATTRIB_MEMTYPE);
             int need_pixel_format = 1;
             for (i = 0; i < avfc->nb_attributes; i++) {
-                if (avfc->attributes[i].type == VASurfaceAttribMemoryType)
-                    need_memory_type  = 0;
-                if (avfc->attributes[i].type == VASurfaceAttribPixelFormat)
-                    need_pixel_format = 0;
+                if (avfc->attributes[i].flags & VA_SURFACE_ATTRIB_SETTABLE) {
+                    if (avfc->attributes[i].type == VASurfaceAttribMemoryType)
+                        need_memory_type  = 0;
+                    if (avfc->attributes[i].type == VASurfaceAttribPixelFormat)
+                        need_pixel_format = 0;
+                }
             }
             ctx->nb_attributes =
                 avfc->nb_attributes + need_memory_type + need_pixel_format;
