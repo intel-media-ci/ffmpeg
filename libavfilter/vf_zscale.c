@@ -287,13 +287,6 @@ static int config_props(AVFilterLink *outlink)
     outlink->w = w;
     outlink->h = h;
 
-    if (inlink->w == outlink->w &&
-        inlink->h == outlink->h &&
-        inlink->format == outlink->format)
-        ;
-    else {
-    }
-
     if (inlink->sample_aspect_ratio.num){
         outlink->sample_aspect_ratio = av_mul_q((AVRational){outlink->h * inlink->w, outlink->w * inlink->h}, inlink->sample_aspect_ratio);
     } else
