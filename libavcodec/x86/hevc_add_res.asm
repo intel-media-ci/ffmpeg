@@ -28,23 +28,23 @@ cextern pw_1023
 
 ; the add_res macros and functions were largely inspired by h264_idct.asm from the x264 project
 %macro ADD_RES_MMX_4_8 0
+    pxor              m4, m4
+
     mova              m0, [r1]
     mova              m2, [r1+8]
-    pxor              m1, m1
-    pxor              m3, m3
-    psubw             m1, m0
-    psubw             m3, m2
-    packuswb          m0, m2
-    packuswb          m1, m3
 
-    movd              m2, [r0]
+    movd              m1, [r0]
     movd              m3, [r0+r2]
-    punpckldq         m2, m3
-    paddusb           m0, m2
-    psubusb           m0, m1
+    punpcklbw         m1, m4
+    punpcklbw         m3, m4
+
+    paddsw            m0, m1
+    paddsw            m2, m3
+    packuswb          m0, m4
+    packuswb          m2, m4
+
     movd            [r0], m0
-    psrlq             m0, 32
-    movd         [r0+r2], m0
+    movd         [r0+r2], m2
 %endmacro
 
 
