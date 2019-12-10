@@ -58,6 +58,7 @@ static void check_add_res(HEVCDSPContext h, int bit_depth)
 
         randomize_buffers(res0, size);
         randomize_buffers2(dst0, size);
+        res0[0] = 0x8000;// overflow test
         memcpy(res1, res0, sizeof(*res0) * size);
         memcpy(dst1, dst0, sizeof(int16_t) * size);
 
