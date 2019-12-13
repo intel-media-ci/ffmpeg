@@ -819,6 +819,13 @@ static int FUNC(loop_filter_params)(CodedBitstreamContext *ctx, RWContext *rw,
     CodedBitstreamAV1Context *priv = ctx->priv_data;
     int i, err;
 
+    memcpy(current->loop_filter_ref_deltas,
+            priv->pre_loop_filter_ref_deltas,
+            AV1_TOTAL_REFS_PER_FRAME * sizeof(int8_t));
+    memcpy(current->loop_filter_mode_deltas,
+            priv->pre_loop_filter_mode_deltas,
+            2 * sizeof(int8_t));
+
     if (priv->coded_lossless || current->allow_intrabc) {
         infer(loop_filter_level[0], 0);
         infer(loop_filter_level[1], 0);
@@ -832,7 +839,12 @@ static int FUNC(loop_filter_params)(CodedBitstreamContext *ctx, RWContext *rw,
         infer(loop_filter_ref_deltas[AV1_REF_FRAME_ALTREF2], -1);
         for (i = 0; i < 2; i++)
             infer(loop_filter_mode_deltas[i], 0);
-        return 0;
+
+        memcpy(priv->pre_loop_filter_ref_deltas,
+                current->loop_filter_ref_deltas,
+                AV1_TOTAL_REFS_PER_FRAME * sizeof(int8_t));
+
+	return 0;
     }
 
     fb(6, loop_filter_level[0]);
@@ -864,6 +876,13 @@ static int FUNC(loop_filter_params)(CodedBitstreamContext *ctx, RWContext *rw,
             }
         }
     }
+
+    memcpy(priv->pre_loop_filter_ref_deltas,
+            current->loop_filter_ref_deltas,
+            AV1_TOTAL_REFS_PER_FRAME * sizeof(int8_t));
+    memcpy(priv->pre_loop_filter_mode_deltas,
+            current->loop_filter_mode_deltas,
+            2 * sizeof(int8_t));
 
     return 0;
 }

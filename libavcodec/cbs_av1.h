@@ -444,6 +444,9 @@ typedef struct CodedBitstreamAV1Context {
     AV1ReferenceFrameState *ref;
     AV1ReferenceFrameState read_ref[AV1_NUM_REF_FRAMES];
     AV1ReferenceFrameState write_ref[AV1_NUM_REF_FRAMES];
+
+    int8_t pre_loop_filter_ref_deltas[AV1_TOTAL_REFS_PER_FRAME];
+    int8_t pre_loop_filter_mode_deltas[2];
 } CodedBitstreamAV1Context;
 
 
