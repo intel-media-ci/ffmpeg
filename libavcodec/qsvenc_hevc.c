@@ -234,6 +234,12 @@ static const AVOption options[] = {
 
     { "load_plugins", "A :-separate list of hexadecimal plugin UIDs to load in an internal session",
         OFFSET(qsv.load_plugins), AV_OPT_TYPE_STRING, { .str = "" }, 0, 0, VE },
+    { "int_ref_type", "Intra refresh type",                                      OFFSET(qsv.int_ref_type),            AV_OPT_TYPE_INT, { .i64 = -1 }, -1, UINT16_MAX, VE, "int_ref_type" },
+        { "none",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, .flags = VE, "int_ref_type" },
+        { "vertical", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 }, .flags = VE, "int_ref_type" },
+    { "int_ref_cycle_size", "Number of frames in the intra refresh cycle",       OFFSET(qsv.int_ref_cycle_size),      AV_OPT_TYPE_INT, { .i64 = -1 },               -1, UINT16_MAX, VE },
+    { "int_ref_qp_delta",   "QP difference for the refresh MBs",                 OFFSET(qsv.int_ref_qp_delta),        AV_OPT_TYPE_INT, { .i64 = INT16_MIN }, INT16_MIN,  INT16_MAX, VE },
+    { "recovery_point_sei", "Insert recovery point SEI messages",                OFFSET(qsv.recovery_point_sei),      AV_OPT_TYPE_INT, { .i64 = -1 },               -1,          1, VE },
 
     { "profile", NULL, OFFSET(qsv.profile), AV_OPT_TYPE_INT, { .i64 = MFX_PROFILE_UNKNOWN }, 0, INT_MAX, VE, "profile" },
     { "unknown", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_PROFILE_UNKNOWN      }, INT_MIN, INT_MAX,     VE, "profile" },
@@ -242,6 +248,8 @@ static const AVOption options[] = {
     { "mainsp",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_PROFILE_HEVC_MAINSP  }, INT_MIN, INT_MAX,     VE, "profile" },
 
     { "gpb", "1: GPB (generalized P/B frame); 0: regular P frame", OFFSET(qsv.gpb), AV_OPT_TYPE_BOOL, { .i64 = 1 }, 0, 1, VE},
+    { "aud", "Insert the Access Unit Delimiter NAL",               OFFSET(qsv.aud), AV_OPT_TYPE_INT,  { .i64 = 0 }, 0, 1, VE},
+    { "repeat_pps", "repeat pps for every frame",           OFFSET(qsv.repeat_pps), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE},
 
     { "tile_cols",  "Number of columns for tiled encoding",   OFFSET(qsv.tile_cols),    AV_OPT_TYPE_INT, { .i64 = 0 }, 0, UINT16_MAX, VE },
     { "tile_rows",  "Number of rows for tiled encoding",      OFFSET(qsv.tile_rows),    AV_OPT_TYPE_INT, { .i64 = 0 }, 0, UINT16_MAX, VE },
