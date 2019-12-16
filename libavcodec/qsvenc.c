@@ -684,7 +684,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
         q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco;
 
-        if (avctx->codec_id == AV_CODEC_ID_H264) {
+        if (avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_H265) {
 #if QSV_HAVE_CO2
             q->extco2.Header.BufferId     = MFX_EXTBUFF_CODING_OPTION2;
             q->extco2.Header.BufferSz     = sizeof(q->extco2);
@@ -696,7 +696,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
             if (q->int_ref_qp_delta != INT16_MIN)
                 q->extco2.IntRefQPDelta = q->int_ref_qp_delta;
 
-            if (q->bitrate_limit >= 0)
+            if (avctx->codec_id == AV_CODEC_ID_H264 && q->bitrate_limit >= 0)
                 q->extco2.BitrateLimit = q->bitrate_limit ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
             if (q->mbbrc >= 0)
                 q->extco2.MBBRC = q->mbbrc ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
@@ -706,12 +706,12 @@ FF_ENABLE_DEPRECATION_WARNINGS
             if (q->max_frame_size >= 0)
                 q->extco2.MaxFrameSize = q->max_frame_size;
 #if QSV_HAVE_MAX_SLICE_SIZE
-            if (q->max_slice_size >= 0)
+            if (q->max_slice_size >= 0 && (q->low_power || avctx->codec_id == AV_CODEC_ID_H264))
                 q->extco2.MaxSliceSize = q->max_slice_size;
 #endif
 
 #if QSV_HAVE_TRELLIS
-            if (avctx->trellis >= 0)
+            if (avctx->codec_id == AV_CODEC_ID_H264 && avctx->trellis >= 0)
                 q->extco2.Trellis = (avctx->trellis == 0) ? MFX_TRELLIS_OFF : (MFX_TRELLIS_I | MFX_TRELLIS_P | MFX_TRELLIS_B);
             else
                 q->extco2.Trellis = MFX_TRELLIS_UNKNOWN;
@@ -729,9 +729,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #endif
             if (q->b_strategy >= 0)
                 q->extco2.BRefType = q->b_strategy ? MFX_B_REF_PYRAMID : MFX_B_REF_OFF;
-            if (q->adaptive_i >= 0)
+            if (avctx->codec_id == AV_CODEC_ID_H264 && q->adaptive_i >= 0)
                 q->extco2.AdaptiveI = q->adaptive_i ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
-            if (q->adaptive_b >= 0)
+            if (avctx->codec_id == AV_CODEC_ID_H264 && q->adaptive_b >= 0)
                 q->extco2.AdaptiveB = q->adaptive_b ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
 #endif
 
@@ -753,7 +753,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
 #if QSV_HAVE_MF
-            if (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 1, 25)) {
+            if (avctx->codec_id == AV_CODEC_ID_H264 && QSV_RUNTIME_VERSION_ATLEAST(q->ver, 1, 25)) {
                 q->extmfp.Header.BufferId     = MFX_EXTBUFF_MULTI_FRAME_PARAM;
                 q->extmfp.Header.BufferSz     = sizeof(q->extmfp);
 
