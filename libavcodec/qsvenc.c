@@ -522,7 +522,6 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
                                       MFX_GOP_CLOSED : 0;
     q->param.mfx.IdrInterval        = q->idr_interval;
     q->param.mfx.NumSlice           = avctx->slices;
-    q->param.mfx.NumRefFrame        = FFMAX(0, avctx->refs);
     q->param.mfx.EncodedOrder       = 0;
     q->param.mfx.BufferSizeInKB     = 0;
 
@@ -763,10 +762,19 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #if QSV_HAVE_CO3
         q->extco3.Header.BufferId      = MFX_EXTBUFF_CODING_OPTION3;
         q->extco3.Header.BufferSz      = sizeof(q->extco3);
+
+        if (avctx->codec_id == AV_CODEC_ID_HEVC) {
 #if QSV_HAVE_GPB
-        if (avctx->codec_id == AV_CODEC_ID_HEVC)
             q->extco3.GPB              = q->gpb ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
 #endif
+#if QSV_HAVE_NUMREF
+            for (int i =0; i < 8; i++) {
+                q->extco3.NumRefActiveP[i]    = FFMAX(0, avctx->refs);
+                q->extco3.NumRefActiveBL0[i]  = FFMAX(0, avctx->refs);
+                q->extco3.NumRefActiveBL1[i]  = FFMAX(0, avctx->refs);
+            }
+#endif
+        }
         q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco3;
 #endif
     }
