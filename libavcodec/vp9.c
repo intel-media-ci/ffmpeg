@@ -34,6 +34,7 @@
 #include "vp9dec.h"
 #include "libavutil/avassert.h"
 #include "libavutil/pixdesc.h"
+#include "decode.h"
 
 #define VP9_SYNCCODE 0x498342
 
@@ -220,11 +221,20 @@ static int update_size(AVCodecContext *avctx, int w, int h)
         *fmtp++ = s->pix_fmt;
         *fmtp = AV_PIX_FMT_NONE;
 
-        ret = ff_thread_get_format(avctx, pix_fmts);
-        if (ret < 0)
-            return ret;
+        if (avctx->internal->hwaccel_priv_data && s->pix_fmt == s->gf_fmt && (s->w != w || s->h != h)) {
+            const AVHWDeviceContext *device_ctx =
+                (AVHWDeviceContext*)avctx->hw_device_ctx->data;
+            ret = ff_decode_get_hw_frames_ctx(avctx, device_ctx->type);
+            if (ret < 0)
+                return ret;
+        } else {
+            ret = ff_thread_get_format(avctx, pix_fmts);
+            if (ret < 0)
+                return ret;
 
-        avctx->pix_fmt = ret;
+            avctx->pix_fmt = ret;
+        }
+
         s->gf_fmt  = s->pix_fmt;
         s->w = w;
         s->h = h;
