@@ -1097,6 +1097,26 @@ static void hwaccel_uninit(AVCodecContext *avctx)
     av_buffer_unref(&avctx->hw_frames_ctx);
 }
 
+static const AVCodecHWConfigInternal *get_hw_config(AVCodecContext *avctx, enum AVPixelFormat fmt)
+{
+    const AVCodecHWConfigInternal *hw_config;
+    int i;
+
+    if (ffcodec(avctx->codec)->hw_configs) {
+        for (i = 0;; i++) {
+            hw_config = ffcodec(avctx->codec)->hw_configs[i];
+            if (!hw_config)
+                break;
+            if (hw_config->public.pix_fmt == fmt)
+                break;
+        }
+    } else {
+        hw_config = NULL;
+    }
+
+    return hw_config;
+}
+
 int ff_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt)
 {
     const AVPixFmtDescriptor *desc;
@@ -1154,18 +1174,7 @@ int ff_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt)
             break;
         }
 
-        if (ffcodec(avctx->codec)->hw_configs) {
-            for (i = 0;; i++) {
-                hw_config = ffcodec(avctx->codec)->hw_configs[i];
-                if (!hw_config)
-                    break;
-                if (hw_config->public.pix_fmt == user_choice)
-                    break;
-            }
-        } else {
-            hw_config = NULL;
-        }
-
+        hw_config = get_hw_config(avctx, user_choice);
         if (!hw_config) {
             // No config available, so no extra setup required.
             ret = user_choice;
