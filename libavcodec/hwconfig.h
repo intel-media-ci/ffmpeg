@@ -24,6 +24,7 @@
 
 
 #define HWACCEL_CAP_ASYNC_SAFE      (1 << 0)
+#define HWACCEL_CAP_INTERNAL_ALLOC  (1 << 1)
 
 
 typedef struct AVCodecHWConfigInternal {

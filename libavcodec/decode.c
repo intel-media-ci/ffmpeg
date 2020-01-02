@@ -1117,6 +1117,33 @@ static const AVCodecHWConfigInternal *get_hw_config(AVCodecContext *avctx, enum 
     return hw_config;
 }
 
+static int hwaccel_realloc_surface(AVCodecContext *avctx)
+{
+    const AVCodecHWConfigInternal *hw_config;
+    int ret;
+
+    if (avctx->hw_frames_ctx)
+        av_buffer_unref(&avctx->hw_frames_ctx);
+
+    hw_config = get_hw_config(avctx, avctx->pix_fmt);
+    if (!hw_config)
+        return AV_PIX_FMT_NONE;
+
+    if (avctx->hw_device_ctx &&
+        hw_config->public.methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+        const AVHWDeviceContext *device_ctx =
+                (AVHWDeviceContext*)avctx->hw_device_ctx->data;
+        ret = ff_decode_get_hw_frames_ctx(avctx, device_ctx->type);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_WARNING, "Failed to re-allocate hwaccel surface internally.\n");
+            return AV_PIX_FMT_NONE;
+        }
+    } else
+        return AV_PIX_FMT_NONE;
+
+    return hw_config->public.pix_fmt;
+}
+
 int ff_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt)
 {
     const AVPixFmtDescriptor *desc;
@@ -1143,6 +1170,15 @@ int ff_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt)
         return AV_PIX_FMT_NONE;
 
     for (;;) {
+        if (avctx->internal->hwaccel_priv_data &&
+            avctx->hwaccel->caps_internal & HWACCEL_CAP_INTERNAL_ALLOC) {
+            err = hwaccel_realloc_surface(avctx);
+            if (err < 0)
+                av_log(avctx, AV_LOG_WARNING, "Try to re-initialize all.\n");
+            else
+                return err;
+        }
+
         // Remove the previous hwaccel, if there was one.
         hwaccel_uninit(avctx);
 
