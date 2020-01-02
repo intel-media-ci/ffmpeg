@@ -181,5 +181,5 @@ const AVHWAccel ff_vp9_vaapi_hwaccel = {
     .uninit               = ff_vaapi_decode_uninit,
     .frame_params         = ff_vaapi_common_frame_params,
     .priv_data_size       = sizeof(VAAPIDecodeContext),
-    .caps_internal        = HWACCEL_CAP_ASYNC_SAFE,
+    .caps_internal        = HWACCEL_CAP_ASYNC_SAFE | HWACCEL_CAP_INTERNAL_ALLOC,
 };
