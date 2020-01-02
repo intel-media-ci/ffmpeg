@@ -25,6 +25,7 @@
 
 #include "dxva2_internal.h"
 #include "vp9shared.h"
+#include "hwaccel.h"
 
 struct vp9_dxva2_picture_context {
     DXVA_PicParams_VP9    pp;
@@ -318,6 +319,7 @@ const AVHWAccel ff_vp9_dxva2_hwaccel = {
     .frame_params   = ff_dxva2_common_frame_params,
     .frame_priv_data_size = sizeof(struct vp9_dxva2_picture_context),
     .priv_data_size = sizeof(FFDXVASharedContext),
+    .caps_internal  = HWACCEL_CAP_INTERNAL_ALLOC,
 };
 #endif
 
