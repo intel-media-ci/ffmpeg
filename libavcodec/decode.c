@@ -1392,22 +1392,35 @@ static int hwaccel_realloc_surface(AVCodecContext *avctx)
     const AVCodecHWConfigInternal *hw_config;
     int ret;
 
-    if (avctx->hw_frames_ctx)
-        av_buffer_unref(&avctx->hw_frames_ctx);
 
     hw_config = get_hw_config(avctx, avctx->pix_fmt);
     if (!hw_config)
         return AV_PIX_FMT_NONE;
 
-    if (avctx->hw_device_ctx &&
-        hw_config->public.methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+    if (avctx->hwaccel_context) {
+        // Old API used in VLC.
+        // context allocated externally
+        // FIX ME
+        // It seems we could use avctx->get_format() to re-allocate context/surface externally;
+        return AV_PIX_FMT_NONE;
+    } else if (avctx->hw_device_ctx &&
+               hw_config->public.methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
         const AVHWDeviceContext *device_ctx =
                 (AVHWDeviceContext*)avctx->hw_device_ctx->data;
+
+        if (avctx->hw_frames_ctx)
+            av_buffer_unref(&avctx->hw_frames_ctx);
+
         ret = ff_decode_get_hw_frames_ctx(avctx, device_ctx->type);
         if (ret < 0) {
             av_log(avctx, AV_LOG_WARNING, "Failed to re-allocate hwaccel surface internally.\n");
             return AV_PIX_FMT_NONE;
         }
+    } else if (avctx->hw_frames_ctx &&
+               hw_config->public.methods & AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX) {
+        // FIX ME.
+        // Externally
+        return AV_PIX_FMT_NONE;
     } else
         return AV_PIX_FMT_NONE;
 
