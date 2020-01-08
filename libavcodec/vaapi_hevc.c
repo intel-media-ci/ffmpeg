@@ -543,8 +543,12 @@ VAProfile ff_vaapi_parse_rext_profile(AVCodecContext *avctx)
     profile = ff_h265_get_profile(h265_raw_ptl);
     av_freep(&h265_raw_ptl);
 
-    if (!profile)
-        return VAProfileNone;
+    if (!profile) {
+        // Default to use Main profile.
+        av_log(avctx, AV_LOG_WARNING, "HEVC profile is not found, "
+               "default to use Main profile.\n");
+        return VAProfileHEVCMain;
+    }
 
 #if VA_CHECK_VERSION(1, 2, 0)
     if (!strcmp(profile->name, "Main 4:2:2 10") ||
