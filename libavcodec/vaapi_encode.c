@@ -1715,6 +1715,9 @@ rc_mode_found:
             .initial_qp         = 0,
             .min_qp             = (avctx->qmin > 0 ? avctx->qmin : 0),
             .basic_unit_size    = 0,
+#if VA_CHECK_VERSION(0, 40, 0)
+            .rc_flags.bits.mb_rate_control = 2,
+#endif
 #if VA_CHECK_VERSION(1, 1, 0)
             .ICQ_quality_factor = av_clip(rc_quality, 1, 51),
             .max_qp             = (avctx->qmax > 0 ? avctx->qmax : 0),

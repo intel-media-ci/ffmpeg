@@ -452,7 +452,8 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
     // AMP works.
     sps->amp_enabled_flag = 1;
     // SAO and temporal MVP do not work.
-    sps->sample_adaptive_offset_enabled_flag = 0;
+    //sps->sample_adaptive_offset_enabled_flag = 0;
+    sps->sample_adaptive_offset_enabled_flag = 1;
     sps->sps_temporal_mvp_enabled_flag       = 0;
 
     sps->pcm_enabled_flag = 0;
