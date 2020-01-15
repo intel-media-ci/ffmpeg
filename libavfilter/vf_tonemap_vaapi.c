@@ -296,6 +296,9 @@ static int tonemap_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
     if (err < 0)
         goto fail;
 
+    params.filters     = &vpp_ctx->filter_buffers[0];
+    params.num_filters = vpp_ctx->nb_filter_buffers;
+
     err = ff_vaapi_vpp_render_picture(avctx, &params, output_frame);
     if (err < 0)
         goto fail;
