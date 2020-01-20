@@ -797,9 +797,9 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
         break;
 
     case AV_PIX_FMT_Y210:
-        surface->Data.Y16 = frame->data[0];
-        surface->Data.U16 = frame->data[0] + 2;
-        surface->Data.V16 = frame->data[0] + 6;
+        surface->Data.Y16 = (mfxU16 *)frame->data[0];
+        surface->Data.U16 = (mfxU16 *)(frame->data[0] + 2);
+        surface->Data.V16 = (mfxU16 *)(frame->data[0] + 6);
         break;
 
     case AV_PIX_FMT_0YUV:

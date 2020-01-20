@@ -179,7 +179,7 @@ static int vaapi_get_image_format(AVHWDeviceContext *hwdev,
                                   VAImageFormat **image_format)
 {
     VAAPIDeviceContext *ctx = hwdev->internal->priv;
-    VAAPIFormatDescriptor *desc;
+    const VAAPIFormatDescriptor *desc;
     int i;
 
     desc = vaapi_format_from_pix_fmt(pix_fmt);
