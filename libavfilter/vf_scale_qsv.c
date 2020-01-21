@@ -205,6 +205,8 @@ static int init_out_pool(AVFilterContext *ctx,
     out_frames_ctx->height            = FFALIGN(out_height, 16);
     out_frames_ctx->sw_format         = out_format;
     out_frames_ctx->initial_pool_size = 4;
+    if (ctx->extra_hw_frames > 0)
+            out_frames_ctx->initial_pool_size += ctx->extra_hw_frames;
 
     out_frames_hwctx->frame_type = in_frames_hwctx->frame_type;
 
