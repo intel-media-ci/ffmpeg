@@ -1405,6 +1405,8 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
         ost->encoder_opts  = filter_codec_opts(o->g->codec_opts, ost->enc->id, oc, st, ost->enc);
 
         MATCH_PER_STREAM_OPT(presets, str, preset, oc, st);
+        ost->autoscale = 1;
+        MATCH_PER_STREAM_OPT(autoscale, i, ost->autoscale, oc, st);
         if (preset && (!(ret = get_preset_file_2(preset, ost->enc->name, &s)))) {
             do  {
                 buf = get_line(s);
@@ -3650,6 +3652,9 @@ const OptionDef options[] = {
     { "autorotate",       HAS_ARG | OPT_BOOL | OPT_SPEC |
                           OPT_EXPERT | OPT_INPUT,                                { .off = OFFSET(autorotate) },
         "automatically insert correct rotate filters" },
+    { "autoscale",        HAS_ARG | OPT_BOOL | OPT_SPEC |
+                          OPT_EXPERT | OPT_OUTPUT,                               { .off = OFFSET(autoscale) },
+        "automatically insert a scale filter at the end of the filter graph" },
 
     /* audio options */
     { "aframes",        OPT_AUDIO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_audio_frames },
