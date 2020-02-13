@@ -634,6 +634,14 @@ typedef struct AVFrame {
     AVBufferRef *hw_frames_ctx;
 
     /**
+     * It is set if the RegionOfInterest info is the same as last frame,
+     * so, we don't need to allocate/fill the same thing in side_data.
+     * If there is roi info in side_data and this variable is also set,
+     * use the info in side_data.
+     */
+    int8_t use_last_roi;
+
+    /**
      * AVBufferRef for free use by the API user. FFmpeg will never check the
      * contents of the buffer ref. FFmpeg calls av_buffer_unref() on it when
      * the frame is unreferenced. av_frame_copy_props() calls create a new

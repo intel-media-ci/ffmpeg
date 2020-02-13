@@ -15,6 +15,9 @@ libavutil:     2017-10-21
 
 API changes, most recent first:
 
+2020-02-13 - xxxxxxxxxx - lavu 57.0.100 - frame.h
+  Add use_last_roi in AVFrame.
+
 2020-02-12 - xxxxxxxxxx - lavu 56.40.100 - log.h
   Add av_log_once().
 
