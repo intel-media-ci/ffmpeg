@@ -476,6 +476,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
 
     if (vpp->qsv) {
         ret = ff_qsvvpp_filter_frame(vpp->qsv, inlink, picref);
+        /* ignore the EAGAIN caused by frame dropping in frc */
+        if (ret == AVERROR(EAGAIN))
+            ret = av_cmp_q(vpp->framerate, inlink->frame_rate) < 0 ? 0 : ret;
         av_frame_free(&picref);
     } else {
         if (picref->pts != AV_NOPTS_VALUE)
