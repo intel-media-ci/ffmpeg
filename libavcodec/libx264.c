@@ -107,6 +107,12 @@ typedef struct X264Context {
     X264Opaque *reordered_opaque;
 
     /**
+     * quant_offsets that will be passed to encoder
+     */
+    float *qoffsets;
+    int qsize;  //in byte
+
+    /**
      * If the encoder does not support ROI then warn the first time we
      * encounter a frame with ROI side data.
      */
@@ -299,9 +305,18 @@ static int x264_encode_set_roi(const AVFrame *frame, AVCodecContext *ctx, int bi
     int nb_rois;
     const AVRegionOfInterest *roi;
     uint32_t roi_size;
-    float *qoffsets;
+    int qsize = mbx * mby * sizeof(*x4->qoffsets);
 
     if (!sd) {
+        if (frame->use_last_roi) {
+            if (!x4->qoffsets) {
+                if (!x4->roi_warned) {
+                    x4->roi_warned = 1;
+                    av_log(ctx, AV_LOG_WARNING, "No previous data for ROI encoding, skipping ROI.\n");
+                }
+            }
+            x4->pic.prop.quant_offsets = x4->qoffsets;
+        }
         return 0;
     }
 
@@ -329,9 +344,17 @@ static int x264_encode_set_roi(const AVFrame *frame, AVCodecContext *ctx, int bi
     }
     nb_rois = sd->size / roi_size;
 
-    qoffsets = av_mallocz_array(mbx * mby, sizeof(*qoffsets));
-    if (!qoffsets)
+    // re-allocate x4->qoffsets if size changed
+    if (x4->qsize != qsize)
+        av_freep(&x4->qoffsets);
+
+    if (!x4->qoffsets)
+        x4->qoffsets = av_malloc(qsize);
+    if (!x4->qoffsets)
         return AVERROR(ENOMEM);
+
+    x4->qsize = qsize;
+    memset(x4->qoffsets, 0, x4->qsize);
 
     // This list must be iterated in reverse because the first
     // region in the list applies when regions overlap.
@@ -347,7 +370,7 @@ static int x264_encode_set_roi(const AVFrame *frame, AVCodecContext *ctx, int bi
         endx   = FFMIN(mbx, (roi->right + MB_SIZE - 1)/ MB_SIZE);
 
         if (roi->qoffset.den == 0) {
-            av_free(qoffsets);
+            av_freep(&x4->qoffsets);
             av_log(ctx, AV_LOG_ERROR, "AVRegionOfInterest.qoffset.den must not be zero.\n");
             return AVERROR(EINVAL);
         }
@@ -356,13 +379,12 @@ static int x264_encode_set_roi(const AVFrame *frame, AVCodecContext *ctx, int bi
 
         for (int y = starty; y < endy; y++) {
             for (int x = startx; x < endx; x++) {
-                qoffsets[x + y*mbx] = qoffset;
+                x4->qoffsets[x + y*mbx] = qoffset;
             }
         }
     }
 
-    x4->pic.prop.quant_offsets = qoffsets;
-    x4->pic.prop.quant_offsets_free = av_free;
+    x4->pic.prop.quant_offsets = x4->qoffsets;
     return 0;
 }
 
@@ -515,6 +537,7 @@ static av_cold int X264_close(AVCodecContext *avctx)
     av_freep(&avctx->extradata);
     av_freep(&x4->sei);
     av_freep(&x4->reordered_opaque);
+    av_freep(&x4->qoffsets);
 
     if (x4->enc) {
         x264_encoder_close(x4->enc);
