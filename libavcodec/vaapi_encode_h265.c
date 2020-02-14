@@ -558,7 +558,8 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
     // driver requires enablement of cu_qp_delta_enabled_flag for low power mode encoding
     pps->cu_qp_delta_enabled_flag = (ctx->va_rc_mode != VA_RC_CQP | ctx->low_power);
-    pps->diff_cu_qp_delta_depth   = 0;
+    pps->diff_cu_qp_delta_depth   = pps->cu_qp_delta_enabled_flag && ctx->low_power ?
+                                    sps->log2_diff_max_min_luma_coding_block_size : 0;
 
     pps->pps_loop_filter_across_slices_enabled_flag = 1;
 
