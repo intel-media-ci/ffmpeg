@@ -268,6 +268,7 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
     VAEncPictureParameterBufferHEVC  *vpic = ctx->codec_picture_params;
     const AVPixFmtDescriptor *desc;
     int chroma_format, bit_depth;
+    int SubWidthC, SubHeightC;
     int i;
 
     memset(vps, 0, sizeof(*vps));
@@ -405,15 +406,19 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
     sps->pic_width_in_luma_samples  = ctx->surface_width;
     sps->pic_height_in_luma_samples = ctx->surface_height;
 
+    // Table 6-1
+    SubWidthC  = chroma_format == 1 || chroma_format == 2 ? 2 : 1;
+    SubHeightC = chroma_format == 1 ? 2 : 1;
+
     if (avctx->width  != ctx->surface_width ||
         avctx->height != ctx->surface_height) {
         sps->conformance_window_flag = 1;
         sps->conf_win_left_offset   = 0;
         sps->conf_win_right_offset  =
-            (ctx->surface_width - avctx->width) / 2;
+            (ctx->surface_width - avctx->width) / SubWidthC;
         sps->conf_win_top_offset    = 0;
         sps->conf_win_bottom_offset =
-            (ctx->surface_height - avctx->height) / 2;
+            (ctx->surface_height - avctx->height) / SubHeightC;
     } else {
         sps->conformance_window_flag = 0;
     }
