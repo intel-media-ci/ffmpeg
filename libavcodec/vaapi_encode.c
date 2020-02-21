@@ -1193,6 +1193,7 @@ static const VAAPIEncodeRTFormat vaapi_encode_rt_formats[] = {
 #endif
     { "AYUV444",   VA_RT_FORMAT_YUV444,        8, 4, 0, 0 },
 #if VA_CHECK_VERSION(1, 2, 0)
+    { "YUV422_10", VA_RT_FORMAT_YUV422_10,    10, 3, 1, 0 },
     { "YUV444_10", VA_RT_FORMAT_YUV444_10,    10, 4, 0, 0 },
 #endif
 };
@@ -2189,6 +2190,9 @@ static av_cold int vaapi_encode_create_recon_frames(AVCodecContext *avctx)
     } else if (recon_format == AV_PIX_FMT_AYUV) {
         ctx->recon_frames->width     = FFALIGN(ctx->surface_width, 128);
         ctx->recon_frames->height    = FFALIGN(ctx->surface_height * 3 / 4, 64);
+    } else if (recon_format == AV_PIX_FMT_Y210) {
+        ctx->recon_frames->width     = ctx->surface_width / 2;
+        ctx->recon_frames->height    = ctx->surface_height * 2;
     } else {
         ctx->recon_frames->width     = ctx->surface_width;
         ctx->recon_frames->height    = ctx->surface_height;
