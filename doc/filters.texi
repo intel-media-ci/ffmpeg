@@ -9201,6 +9201,12 @@ Handle the Y channel with srcnn.pb (see vf_sr) for frame with yuv420p (planar YU
 ./ffmpeg -i 480p.jpg -vf format=yuv420p,scale=w=iw*2:h=ih*2,dnn_processing=dnn_backend=tensorflow:model=srcnn.pb:input=x:output=y -y srcnn.jpg
 @end example
 
+@item
+Handle the Y channel with espcn.pb (see vf_sr), which changes frame size, for format yuv420p (planar YUV formats supported):
+@example
+./ffmpeg -i 480p.jpg -vf format=yuv420p,dnn_processing=dnn_backend=tensorflow:model=espcn.pb:input=x:output=y -y tmp.espcn.jpg
+@end example
+
 @end itemize
 
 @section drawbox
