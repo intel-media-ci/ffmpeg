@@ -2183,8 +2183,16 @@ static av_cold int vaapi_encode_create_recon_frames(AVCodecContext *avctx)
 
     ctx->recon_frames->format    = AV_PIX_FMT_VAAPI;
     ctx->recon_frames->sw_format = recon_format;
-    ctx->recon_frames->width     = ctx->surface_width;
-    ctx->recon_frames->height    = ctx->surface_height;
+    if (recon_format == AV_PIX_FMT_Y410) {
+        ctx->recon_frames->width     = FFALIGN(ctx->surface_width, 64);
+        ctx->recon_frames->height    = FFALIGN(ctx->surface_height * 3 / 2, 64);
+    } else if (recon_format == AV_PIX_FMT_AYUV) {
+        ctx->recon_frames->width     = FFALIGN(ctx->surface_width, 128);
+        ctx->recon_frames->height    = FFALIGN(ctx->surface_height * 3 / 4, 64);
+    } else {
+        ctx->recon_frames->width     = ctx->surface_width;
+        ctx->recon_frames->height    = ctx->surface_height;
+    }
 
     err = av_hwframe_ctx_init(ctx->recon_frames_ref);
     if (err < 0) {
