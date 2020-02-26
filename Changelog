@@ -31,6 +31,7 @@ version <next>:
 - varblur video filter
 - huesaturation video filter
 - colorspectrum source video filter
+- overlay_vaapi filter
 
 
 version 4.4:
