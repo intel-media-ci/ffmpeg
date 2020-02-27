@@ -91,7 +91,9 @@
  *   - For decoding, call avcodec_send_packet() to give the decoder raw
  *     compressed data in an AVPacket.
  *   - For encoding, call avcodec_send_frame() to give the encoder an AVFrame
- *     containing uncompressed audio or video.
+ *     containing uncompressed audio or video. Video encoder requires input
+ *     frames to be in constant dimensions unless it declare the capability
+ *     of AV_CODEC_CAP_VARIABLE_DIMENSIONS.
  *
  *   In both cases, it is recommended that AVPackets and AVFrames are
  *   refcounted, or libavcodec might have to copy the input data. (libavformat
@@ -1116,6 +1118,11 @@ typedef struct RcOverride{
  * Export encoder Producer Reference Time through packet side data
  */
 #define AV_CODEC_EXPORT_DATA_PRFT        (1 << 1)
+/**
+ * Codec supports variable dimensions encoding. This indicates that input frames are
+ * allowed to be in variable dimensions/resolutions, otherwise they have to keep constant.
+ */
+#define AV_CODEC_CAP_VARIABLE_DIMENSIONS (1 << 21)
 
 /**
  * Pan Scan area.

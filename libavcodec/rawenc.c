@@ -92,4 +92,5 @@ AVCodec ff_rawvideo_encoder = {
     .id             = AV_CODEC_ID_RAWVIDEO,
     .init           = raw_encode_init,
     .encode2        = raw_encode,
+    .capabilities   = AV_CODEC_CAP_VARIABLE_DIMENSIONS,
 };

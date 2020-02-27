@@ -1431,6 +1431,8 @@ static void print_codec(const AVCodec *c)
         printf("hardware ");
     if (c->capabilities & AV_CODEC_CAP_HYBRID)
         printf("hybrid ");
+    if (c->capabilities & AV_CODEC_CAP_VARIABLE_DIMENSIONS)
+        printf("multidimension ");
     if (!c->capabilities)
         printf("none");
     printf("\n");
