@@ -439,6 +439,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #if CONFIG_HEVC_NVDEC_HWACCEL
         *fmt++ = AV_PIX_FMT_CUDA;
 #endif
+#if CONFIG_HEVC_VAAPI_HWACCEL
+	*fmt++ = AV_PIX_FMT_VAAPI;
+#endif
         break;
     }
 
