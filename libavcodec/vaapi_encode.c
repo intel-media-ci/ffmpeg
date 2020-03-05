@@ -1191,6 +1191,9 @@ static const VAAPIEncodeRTFormat vaapi_encode_rt_formats[] = {
 #if VA_CHECK_VERSION(0, 38, 1)
     { "YUV420_10", VA_RT_FORMAT_YUV420_10BPP, 10, 3, 1, 1 },
 #endif
+#if VA_CHECK_VERSION(1, 2, 0)
+    { "YUV422_10", VA_RT_FORMAT_YUV422_10,    10, 3, 1, 0 },
+#endif
 };
 
 static const VAEntrypoint vaapi_encode_entrypoints_normal[] = {
@@ -2185,8 +2188,13 @@ static av_cold int vaapi_encode_create_recon_frames(AVCodecContext *avctx)
 
     ctx->recon_frames->format    = AV_PIX_FMT_VAAPI;
     ctx->recon_frames->sw_format = recon_format;
-    ctx->recon_frames->width     = ctx->surface_width;
-    ctx->recon_frames->height    = ctx->surface_height;
+    if (recon_format == AV_PIX_FMT_Y210) {
+        ctx->recon_frames->width     = ctx->surface_width / 2;
+        ctx->recon_frames->height    = ctx->surface_height * 2;
+    } else {
+        ctx->recon_frames->width     = ctx->surface_width;
+        ctx->recon_frames->height    = ctx->surface_height;
+    }
 
     err = av_hwframe_ctx_init(ctx->recon_frames_ref);
     if (err < 0) {
