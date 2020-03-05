@@ -376,6 +376,12 @@ typedef struct VAAPIEncodeType {
     // factor depending on RC mode.
     int default_quality;
 
+    // Determine block sizes for surface alignment and slices.  This may
+    // need to query the profile and entrypoint, which will be available
+    // when this function is called.  If not set, assume that all blocks
+    // are 16x16 and that surfaces should be aligned to match this.
+    void (*block_size)(AVCodecContext *avctx);
+
     // Perform any extra codec-specific configuration after the
     // codec context is initialised (set up the private data and
     // add any necessary global parameters).

@@ -2047,6 +2047,8 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
         return 0;
     }
 
+    av_assert0(ctx->slice_block_height > 0 && ctx->slice_block_width > 0);
+
     ctx->slice_block_rows = (avctx->height + ctx->slice_block_height - 1) /
                              ctx->slice_block_height;
     ctx->slice_block_cols = (avctx->width  + ctx->slice_block_width  - 1) /
@@ -2433,6 +2435,18 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
     err = vaapi_encode_profile_entrypoint(avctx);
     if (err < 0)
         goto fail;
+
+    if (ctx->codec->block_size) {
+        ctx->codec->block_size(avctx);
+    } else {
+        // Assume 16x16 blocks.
+        ctx->surface_width  = FFALIGN(avctx->width,  16);
+        ctx->surface_height = FFALIGN(avctx->height, 16);
+        if (ctx->codec->flags & FLAG_SLICE_CONTROL) {
+            ctx->slice_block_width  = 16;
+            ctx->slice_block_height = 16;
+        }
+    }
 
     err = vaapi_encode_init_rate_control(avctx);
     if (err < 0)
