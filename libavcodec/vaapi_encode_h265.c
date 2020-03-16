@@ -1222,6 +1222,13 @@ static av_cold int vaapi_encode_h265_init(AVCodecContext *avctx)
     if (priv->qp > 0)
         ctx->explicit_qp = priv->qp;
 
+    if (priv->trows && priv->tcols) {
+        ctx->tile_rows = priv->trows;
+        ctx->tile_cols = priv->tcols;
+        if (avctx->slices < ctx->tile_rows * ctx->tile_cols)
+            avctx->slices = ctx->tile_rows * ctx->tile_cols;
+    }
+
     return ff_vaapi_encode_init(avctx);
 }
 
@@ -1298,9 +1305,9 @@ static const AVOption vaapi_encode_h265_options[] = {
       { .i64 = SEI_MASTERING_DISPLAY | SEI_CONTENT_LIGHT_LEVEL },
       INT_MIN, INT_MAX, FLAGS, "sei" },
 
-    { "trows", "Number of rows for tiled encoding",
+    { "tile_rows", "Number of rows for tiled encoding",
       OFFSET(trows), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
-    { "tcols", "Number of cols for tiled encoding",
+    { "tile_cols", "Number of cols for tiled encoding",
       OFFSET(tcols), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
 
     { NULL },

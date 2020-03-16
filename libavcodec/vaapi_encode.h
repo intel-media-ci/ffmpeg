@@ -299,6 +299,10 @@ typedef struct VAAPIEncodeContext {
     int nb_slices;
     int slice_size;
 
+    // Tile
+    int tile_rows;
+    int tile_cols;
+
     // Frame type decision.
     int gop_size;
     int closed_gop;
