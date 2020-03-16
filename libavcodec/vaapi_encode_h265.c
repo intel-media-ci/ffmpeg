@@ -1163,7 +1163,8 @@ static const VAAPIEncodeType vaapi_encode_type_h265 = {
     .flags                 = FLAG_SLICE_CONTROL |
                              FLAG_B_PICTURES |
                              FLAG_B_PICTURE_REFERENCES |
-                             FLAG_NON_IDR_KEY_PICTURES,
+                             FLAG_NON_IDR_KEY_PICTURES |
+                             FLAG_TILE_CONTROL,
 
     .default_quality       = 25,
 
