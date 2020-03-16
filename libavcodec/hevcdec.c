@@ -569,7 +569,7 @@ static int hls_slice_header(HEVCContext *s)
     }
 
     if ((IS_IDR(s) || IS_BLA(s)) && sh->first_slice_in_pic_flag) {
-        s->seq_decode = (s->seq_decode + 1) & 0xff;
+        s->seq_decode = (s->seq_decode + 1) & HEVC_DECODE_SEQUENCE_MASK;
         s->max_ra     = INT_MAX;
         if (IS_IDR(s))
             ff_hevc_clear_refs(s);
@@ -614,7 +614,7 @@ static int hls_slice_header(HEVCContext *s)
             return pix_fmt;
         s->avctx->pix_fmt = pix_fmt;
 
-        s->seq_decode = (s->seq_decode + 1) & 0xff;
+        s->seq_decode = (s->seq_decode + 1) & HEVC_DECODE_SEQUENCE_MASK;
         s->max_ra     = INT_MAX;
     }
 
