@@ -1891,6 +1891,33 @@ static av_cold int vaapi_encode_init_row_slice_structure(AVCodecContext *avctx,
 static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
                                                           uint32_t slice_structure)
 {
+    VAAPIEncodeContext *ctx = avctx->priv_data;
+    int req_slices, req_tiles;
+
+    req_tiles = ctx->tile_rows * ctx->tile_cols;
+
+    // Slice is not allowed to cross the boundary of a Tile due to
+    // the constraints of the driver, so one tile must contain
+    // at leaset one slice
+    if (avctx->slices < req_tiles) {
+        av_log(avctx, AV_LOG_WARNING, "Not enough slices to use "
+               "configured number of tile (%d < %d); using "
+               "maximum.\n", avctx->slices, req_tiles);
+        req_slices = req_tiles;
+    } else {
+        req_slices = avctx->slices;
+    }
+
+    // FIXME should also support Nx1 Tile for arbitrary rows or pow_of_two structure,
+    // however NX1 seems not valuable as tile, slice is enough.
+    if (!(slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS)) {
+        av_log(avctx, AV_LOG_ERROR, "Driver does not support arbitrary macroblocks "
+               "slice structure for Tile (%#x).\n", slice_structure);
+        return AVERROR(EINVAL);
+    }
+
+
+
     return 0;
 }
 
