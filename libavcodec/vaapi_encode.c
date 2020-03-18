@@ -1843,6 +1843,57 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
     return 0;
 }
 
+static av_cold int vaapi_encode_init_row_slice_structure(AVCodecContext *avctx,
+                                                         uint32_t slice_structure)
+{
+    VAAPIEncodeContext *ctx = avctx->priv_data;
+    int req_slices;
+
+    // For fixed-size slices currently we only support whole rows, making
+    // rectangular slices.  This could be extended to arbitrary runs of
+    // blocks, but since slices tend to be a conformance requirement and
+    // most cases (such as broadcast or bluray) want rectangular slices
+    // only it would need to be gated behind another option.
+    if (avctx->slices > ctx->slice_block_rows) {
+        av_log(avctx, AV_LOG_WARNING, "Not enough rows to use "
+               "configured number of slices (%d < %d); using "
+               "maximum.\n", ctx->slice_block_rows, avctx->slices);
+        req_slices = ctx->slice_block_rows;
+    } else {
+        req_slices = avctx->slices;
+    }
+    if (slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_ROWS ||
+        slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS) {
+        ctx->nb_slices  = req_slices;
+        ctx->slice_size = ctx->slice_block_rows / ctx->nb_slices;
+    } else if (slice_structure & VA_ENC_SLICE_STRUCTURE_POWER_OF_TWO_ROWS) {
+        int k;
+        for (k = 1;; k *= 2) {
+            if (2 * k * (req_slices - 1) + 1 >= ctx->slice_block_rows)
+                break;
+        }
+        ctx->nb_slices  = (ctx->slice_block_rows + k - 1) / k;
+        ctx->slice_size = k;
+#if VA_CHECK_VERSION(1, 0, 0)
+    } else if (slice_structure & VA_ENC_SLICE_STRUCTURE_EQUAL_ROWS) {
+        ctx->nb_slices  = ctx->slice_block_rows;
+        ctx->slice_size = 1;
+#endif
+    } else {
+        av_log(avctx, AV_LOG_ERROR, "Driver does not support any usable "
+               "slice structure modes (%#x).\n", slice_structure);
+        return AVERROR(EINVAL);
+    }
+
+    return 0;
+}
+
+static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
+                                                          uint32_t slice_structure)
+{
+    return 0;
+}
+
 static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
@@ -1850,7 +1901,7 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
                                { VAConfigAttribEncSliceStructure } };
     VAStatus vas;
     uint32_t max_slices, slice_structure;
-    int req_slices;
+    int ret;
 
     if (!(ctx->codec->flags & FLAG_SLICE_CONTROL)) {
         if (avctx->slices > 0) {
@@ -1889,41 +1940,13 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    // For fixed-size slices currently we only support whole rows, making
-    // rectangular slices.  This could be extended to arbitrary runs of
-    // blocks, but since slices tend to be a conformance requirement and
-    // most cases (such as broadcast or bluray) want rectangular slices
-    // only it would need to be gated behind another option.
-    if (avctx->slices > ctx->slice_block_rows) {
-        av_log(avctx, AV_LOG_WARNING, "Not enough rows to use "
-               "configured number of slices (%d < %d); using "
-               "maximum.\n", ctx->slice_block_rows, avctx->slices);
-        req_slices = ctx->slice_block_rows;
-    } else {
-        req_slices = avctx->slices;
-    }
-    if (slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_ROWS ||
-        slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS) {
-        ctx->nb_slices  = req_slices;
-        ctx->slice_size = ctx->slice_block_rows / ctx->nb_slices;
-    } else if (slice_structure & VA_ENC_SLICE_STRUCTURE_POWER_OF_TWO_ROWS) {
-        int k;
-        for (k = 1;; k *= 2) {
-            if (2 * k * (req_slices - 1) + 1 >= ctx->slice_block_rows)
-                break;
-        }
-        ctx->nb_slices  = (ctx->slice_block_rows + k - 1) / k;
-        ctx->slice_size = k;
-#if VA_CHECK_VERSION(1, 0, 0)
-    } else if (slice_structure & VA_ENC_SLICE_STRUCTURE_EQUAL_ROWS) {
-        ctx->nb_slices  = ctx->slice_block_rows;
-        ctx->slice_size = 1;
-#endif
-    } else {
-        av_log(avctx, AV_LOG_ERROR, "Driver does not support any usable "
-               "slice structure modes (%#x).\n", slice_structure);
-        return AVERROR(EINVAL);
-    }
+    if (ctx->tile_rows && ctx->tile_cols)
+        ret = vaapi_encode_init_tile_slice_structure(avctx, slice_structure);
+    else
+        ret = vaapi_encode_init_row_slice_structure(avctx, slice_structure);
+
+    if (ret < 0)
+        return ret;
 
     if (ctx->nb_slices > avctx->slices) {
         av_log(avctx, AV_LOG_WARNING, "Slice count rounded up to "
