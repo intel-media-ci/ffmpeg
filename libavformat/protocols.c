@@ -95,9 +95,9 @@ const AVClass *ff_urlcontext_child_class_next(const AVClass *prev)
 
 const char *avio_enum_protocols(void **opaque, int output)
 {
-    const URLProtocol **p = *opaque;
+    URLProtocol **p = *opaque;
 
-    p = p ? p + 1 : url_protocols;
+    p = p ? p + 1 : (URLProtocol **)url_protocols;
     *opaque = p;
     if (!*p) {
         *opaque = NULL;
