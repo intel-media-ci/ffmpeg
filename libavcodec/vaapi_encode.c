@@ -157,6 +157,50 @@ static int vaapi_encode_wait(AVCodecContext *avctx,
     return 0;
 }
 
+static int vaapi_encode_make_row_slice(AVCodecContext *avctx,
+                                       VAAPIEncodePicture *pic)
+{
+    VAAPIEncodeContext *ctx = avctx->priv_data;
+    int i, rounding;
+
+    pic->slices = av_mallocz_array(pic->nb_slices, sizeof(*pic->slices));
+    if (!pic->slices)
+        return AVERROR(ENOMEM);
+
+    for (i = 0; i < pic->nb_slices; i++)
+        pic->slices[i].row_size = ctx->slice_size;
+
+    rounding = ctx->slice_block_rows - ctx->nb_slices * ctx->slice_size;
+    if (rounding > 0) {
+        // Place rounding error at top and bottom of frame.
+        av_assert0(rounding < pic->nb_slices);
+        // Some Intel drivers contain a bug where the encoder will fail
+        // if the last slice is smaller than the one before it.  Since
+        // that's straightforward to avoid here, just do so.
+        if (rounding <= 2) {
+            for (i = 0; i < rounding; i++)
+                ++pic->slices[i].row_size;
+        } else {
+            for (i = 0; i < (rounding + 1) / 2; i++)
+                ++pic->slices[pic->nb_slices - i - 1].row_size;
+            for (i = 0; i < rounding / 2; i++)
+                ++pic->slices[i].row_size;
+        }
+    } else if (rounding < 0) {
+        // Remove rounding error from last slice only.
+        av_assert0(rounding < ctx->slice_size);
+        pic->slices[pic->nb_slices - 1].row_size += rounding;
+    }
+
+    return 0;
+}
+
+static int vaapi_encode_make_tile_slice(AVCodecContext *avctx,
+                                        VAAPIEncodePicture *pic)
+{
+    return 0;
+}
+
 static int vaapi_encode_issue(AVCodecContext *avctx,
                               VAAPIEncodePicture *pic)
 {
@@ -340,39 +384,15 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
     if (pic->nb_slices == 0)
         pic->nb_slices = ctx->nb_slices;
     if (pic->nb_slices > 0) {
-        int rounding;
+        if (ctx->tile_rows && ctx->tile_cols)
+            err = vaapi_encode_make_tile_slice(avctx, pic);
+        else
+            err = vaapi_encode_make_row_slice(avctx, pic);
 
-        pic->slices = av_mallocz_array(pic->nb_slices, sizeof(*pic->slices));
-        if (!pic->slices) {
-            err = AVERROR(ENOMEM);
+        if (err < 0)
             goto fail;
-        }
-
-        for (i = 0; i < pic->nb_slices; i++)
-            pic->slices[i].row_size = ctx->slice_size;
-
-        rounding = ctx->slice_block_rows - ctx->nb_slices * ctx->slice_size;
-        if (rounding > 0) {
-            // Place rounding error at top and bottom of frame.
-            av_assert0(rounding < pic->nb_slices);
-            // Some Intel drivers contain a bug where the encoder will fail
-            // if the last slice is smaller than the one before it.  Since
-            // that's straightforward to avoid here, just do so.
-            if (rounding <= 2) {
-                for (i = 0; i < rounding; i++)
-                    ++pic->slices[i].row_size;
-            } else {
-                for (i = 0; i < (rounding + 1) / 2; i++)
-                    ++pic->slices[pic->nb_slices - i - 1].row_size;
-                for (i = 0; i < rounding / 2; i++)
-                    ++pic->slices[i].row_size;
-            }
-        } else if (rounding < 0) {
-            // Remove rounding error from last slice only.
-            av_assert0(rounding < ctx->slice_size);
-            pic->slices[pic->nb_slices - 1].row_size += rounding;
-        }
     }
+
     for (i = 0; i < pic->nb_slices; i++) {
         slice = &pic->slices[i];
         slice->index = i;
