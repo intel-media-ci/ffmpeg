@@ -42,6 +42,10 @@ enum {
     MAX_PICTURE_REFERENCES = 2,
     MAX_REORDER_DELAY      = 16,
     MAX_PARAM_BUFFER_SIZE  = 1024,
+    // A.4.1: table A.6 allows at most 22 tile rows for any level.
+    MAX_TILE_ROWS     = 22,
+    // A.4.1: table A.6 allows at most 20 tile columns for any level.
+    MAX_TILE_COLS     = 20,
 };
 
 enum {
@@ -302,6 +306,12 @@ typedef struct VAAPIEncodeContext {
     // Tile
     int tile_rows;
     int tile_cols;
+    int col_width[MAX_TILE_COLS];
+    int row_height[MAX_TILE_ROWS];
+    // location of the i-th tile column boundary
+    int col_bd[MAX_TILE_COLS + 1];
+    // location of the i-th tile row boundary
+    int row_bd[MAX_TILE_ROWS + 1];
 
     // Frame type decision.
     int gop_size;

@@ -563,6 +563,7 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
     if (priv->trows && priv->tcols) {
         pps->tiles_enabled_flag         = 1;
+        pps->uniform_spacing_flag       = 1;
 
         pps->num_tile_rows_minus1       = priv->trows - 1;
         pps->num_tile_columns_minus1    = priv->tcols - 1;
@@ -570,26 +571,9 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
         pps->loop_filter_across_tiles_enabled_flag = 1;
 
         for (i = 0; i <= pps->num_tile_rows_minus1; i++)
-            pps->row_height_minus1[i]   = ctx->slice_size - 1;
+            pps->row_height_minus1[i]   = ctx->row_height[i] - 1;
         for (i = 0; i <= pps->num_tile_columns_minus1; i++)
-            pps->column_width_minus1[i] = ctx->slice_block_cols - 1;
-
-        int rounding = ctx->slice_block_rows - ctx->nb_slices * ctx->slice_size;
-        if (rounding > 0) {
-            if (rounding <= 2) {
-                for (i = 0; i < rounding; i++)
-                    ++pps->row_height_minus1[i];
-            } else {
-                for (i = 0; i < (rounding + 1) / 2; i++)
-                    ++pps->row_height_minus1[ctx->nb_slices - i - 1];
-                for (i = 0; i < rounding / 2; i++)
-                    ++pps->row_height_minus1[i];
-            }
-        } else if (rounding < 0) {
-            // Remove rounding error from last slice only.
-            av_assert0(rounding < ctx->slice_size);
-            //pic->slices[pic->nb_slices - 1].row_size += rounding;
-        }
+            pps->column_width_minus1[i] = ctx->col_width[i] - 1;
     }
 
     // Fill VAAPI parameter buffers.
@@ -1225,8 +1209,6 @@ static av_cold int vaapi_encode_h265_init(AVCodecContext *avctx)
     if (priv->trows && priv->tcols) {
         ctx->tile_rows = priv->trows;
         ctx->tile_cols = priv->tcols;
-        if (avctx->slices < ctx->tile_rows * ctx->tile_cols)
-            avctx->slices = ctx->tile_rows * ctx->tile_cols;
     }
 
     return ff_vaapi_encode_init(avctx);

@@ -161,6 +161,7 @@ static int vaapi_encode_make_row_slice(AVCodecContext *avctx,
                                        VAAPIEncodePicture *pic)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
+    VAAPIEncodeSlice *slice;
     int i, rounding;
 
     pic->slices = av_mallocz_array(pic->nb_slices, sizeof(*pic->slices));
@@ -192,12 +193,51 @@ static int vaapi_encode_make_row_slice(AVCodecContext *avctx,
         pic->slices[pic->nb_slices - 1].row_size += rounding;
     }
 
+    for (i = 0; i < pic->nb_slices; i++) {
+        slice = &pic->slices[i];
+        slice->index = i;
+        if (i == 0) {
+            slice->row_start   = 0;
+            slice->block_start = 0;
+        } else {
+            const VAAPIEncodeSlice *prev = &pic->slices[i - 1];
+            slice->row_start   = prev->row_start   + prev->row_size;
+            slice->block_start = prev->block_start + prev->block_size;
+        }
+        slice->block_size  = slice->row_size * ctx->slice_block_cols;
+
+        av_log(avctx, AV_LOG_DEBUG, "Slice %d: %d-%d (%d rows), "
+               "%d-%d (%d blocks).\n", i, slice->row_start,
+               slice->row_start + slice->row_size - 1, slice->row_size,
+               slice->block_start, slice->block_start + slice->block_size - 1,
+               slice->block_size);
+    }
+
     return 0;
 }
 
 static int vaapi_encode_make_tile_slice(AVCodecContext *avctx,
                                         VAAPIEncodePicture *pic)
 {
+    VAAPIEncodeContext *ctx = avctx->priv_data;
+    VAAPIEncodeSlice *slice;
+    int i, j, index;
+
+    pic->slices = av_mallocz_array(pic->nb_slices, sizeof(*pic->slices));
+    if (!pic->slices)
+        return AVERROR(ENOMEM);
+
+    for (i = 0; i < ctx->tile_cols; i++) {
+        for (j = 0; j < ctx->tile_rows; j++) {
+            index = j * ctx->tile_cols + i;
+            slice = &pic->slices[index];
+            slice->index = index;
+            pic->slices[index].block_start = ctx->col_bd[i] +
+                                             ctx->row_bd[j] * ctx->slice_block_cols;
+            pic->slices[index].block_size  = ctx->row_height[j] * ctx->col_width[i];
+        }
+    }
+
     return 0;
 }
 
@@ -395,22 +435,6 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
 
     for (i = 0; i < pic->nb_slices; i++) {
         slice = &pic->slices[i];
-        slice->index = i;
-        if (i == 0) {
-            slice->row_start   = 0;
-            slice->block_start = 0;
-        } else {
-            const VAAPIEncodeSlice *prev = &pic->slices[i - 1];
-            slice->row_start   = prev->row_start   + prev->row_size;
-            slice->block_start = prev->block_start + prev->block_size;
-        }
-        slice->block_size  = slice->row_size * ctx->slice_block_cols;
-
-        av_log(avctx, AV_LOG_DEBUG, "Slice %d: %d-%d (%d rows), "
-               "%d-%d (%d blocks).\n", i, slice->row_start,
-               slice->row_start + slice->row_size - 1, slice->row_size,
-               slice->block_start, slice->block_start + slice->block_size - 1,
-               slice->block_size);
 
         if (ctx->codec->slice_params_size > 0) {
             slice->codec_slice_params = av_mallocz(ctx->codec->slice_params_size);
@@ -1893,6 +1917,7 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
     int req_slices, req_tiles;
+    int i;
 
     req_tiles = ctx->tile_rows * ctx->tile_cols;
 
@@ -1910,13 +1935,27 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
 
     // FIXME should also support Nx1 Tile for arbitrary rows or pow_of_two structure,
     // however NX1 seems not valuable as tile, slice is enough.
-    if (!(slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS)) {
+    if (!(slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS ||
+         (slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_ROWS && ctx->tile_cols == 1))) {
         av_log(avctx, AV_LOG_ERROR, "Driver does not support arbitrary macroblocks "
                "slice structure for Tile (%#x).\n", slice_structure);
         return AVERROR(EINVAL);
     }
 
+    ctx->nb_slices = req_slices;
 
+    // default in uniform spacing
+    for (i = 0; i < ctx->tile_cols; i++) {
+        ctx->col_width[i] = ( i + 1 ) * ctx->slice_block_cols / ctx->tile_cols -
+                                     i * ctx->slice_block_cols / ctx->tile_cols;
+        ctx->col_bd[i + 1]  = ctx->col_bd[i] + ctx->col_width[i];
+    }
+
+    for (i = 0; i < ctx->tile_rows; i++) {
+        ctx->row_height[i] = ( i + 1 ) * ctx->slice_block_rows / ctx->tile_rows -
+                                     i * ctx->slice_block_rows / ctx->tile_rows;
+        ctx->row_bd[i + 1] = ctx->row_bd[i] + ctx->row_height[i];
+    }
 
     return 0;
 }
