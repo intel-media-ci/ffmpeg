@@ -1919,15 +1919,26 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
     int req_slices, req_tiles;
     int i;
 
+    if (ctx->tile_rows > ctx->slice_block_rows ||
+        ctx->tile_cols > ctx->slice_block_cols) {
+        av_log(avctx, AV_LOG_WARNING, "Not enough block rows/cols "
+               "for configured number of tile (%dx%d < %dx%d); using "
+               "maximum.\n", ctx->slice_block_cols, ctx->slice_block_rows,
+                             ctx->tile_cols, ctx->tile_rows);
+        ctx->tile_rows = ctx->tile_rows > ctx->slice_block_rows ?
+                                          ctx->slice_block_rows : ctx->tile_rows;
+        ctx->tile_cols = ctx->tile_cols > ctx->slice_block_cols ?
+                                          ctx->slice_block_cols : ctx->tile_rows;
+    }
+
     req_tiles = ctx->tile_rows * ctx->tile_cols;
 
     // Slice is not allowed to cross the boundary of a Tile due to
-    // the constraints of the driver, so one tile must contain
-    // at leaset one slice
+    // the constraints of the driver, slice number should be no less than tile
     if (avctx->slices < req_tiles) {
-        av_log(avctx, AV_LOG_WARNING, "Not enough slices to use "
+        av_log(avctx, AV_LOG_WARNING, "Not enough slices for "
                "configured number of tile (%d < %d); using "
-               "maximum.\n", avctx->slices, req_tiles);
+               "tile number for slice.\n", avctx->slices, req_tiles);
         req_slices = req_tiles;
     } else {
         req_slices = avctx->slices;
