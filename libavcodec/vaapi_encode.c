@@ -164,10 +164,6 @@ static int vaapi_encode_make_row_slice(AVCodecContext *avctx,
     VAAPIEncodeSlice *slice;
     int i, rounding;
 
-    pic->slices = av_mallocz_array(pic->nb_slices, sizeof(*pic->slices));
-    if (!pic->slices)
-        return AVERROR(ENOMEM);
-
     for (i = 0; i < pic->nb_slices; i++)
         pic->slices[i].row_size = ctx->slice_size;
 
@@ -222,10 +218,6 @@ static int vaapi_encode_make_tile_slice(AVCodecContext *avctx,
     VAAPIEncodeContext *ctx = avctx->priv_data;
     VAAPIEncodeSlice *slice;
     int i, j, index;
-
-    pic->slices = av_mallocz_array(pic->nb_slices, sizeof(*pic->slices));
-    if (!pic->slices)
-        return AVERROR(ENOMEM);
 
     for (i = 0; i < ctx->tile_cols; i++) {
         for (j = 0; j < ctx->tile_rows; j++) {
@@ -424,6 +416,10 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
     if (pic->nb_slices == 0)
         pic->nb_slices = ctx->nb_slices;
     if (pic->nb_slices > 0) {
+        pic->slices = av_mallocz_array(pic->nb_slices, sizeof(*pic->slices));
+        if (!pic->slices)
+            return AVERROR(ENOMEM);
+
         if (ctx->tile_rows && ctx->tile_cols)
             err = vaapi_encode_make_tile_slice(avctx, pic);
         else
