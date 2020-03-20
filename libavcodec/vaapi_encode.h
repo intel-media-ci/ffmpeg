@@ -355,8 +355,6 @@ enum {
     // Codec supports non-IDR key pictures (that is, key pictures do
     // not necessarily empty the DPB).
     FLAG_NON_IDR_KEY_PICTURES  = 1 << 5,
-    // Codec supports controlling the subdivision of pictures into tiles
-    FLAG_TILE_CONTROL          = 1 << 6,
 };
 
 typedef struct VAAPIEncodeType {
