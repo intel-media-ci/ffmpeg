@@ -1915,12 +1915,19 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
     int req_slices, req_tiles;
     int i;
 
+    if (!(slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS ||
+         (slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_ROWS && ctx->tile_cols == 1))) {
+        av_log(avctx, AV_LOG_ERROR, "Supported slice structure (%#x) doesn't work for "
+               "current tile requirement.\n", slice_structure);
+        return AVERROR(EINVAL);
+    }
+
     if (ctx->tile_rows > ctx->slice_block_rows ||
         ctx->tile_cols > ctx->slice_block_cols) {
-        av_log(avctx, AV_LOG_WARNING, "Not enough block rows/cols "
-               "for configured number of tile (%dx%d < %dx%d); using "
-               "maximum.\n", ctx->slice_block_cols, ctx->slice_block_rows,
-                             ctx->tile_cols, ctx->tile_rows);
+        av_log(avctx, AV_LOG_WARNING, "Not enough block rows/cols (%dx%d) "
+               "for configured number of tile (%dx%d); using "
+               "allowed maximum.\n", ctx->slice_block_rows, ctx->slice_block_cols,
+                             ctx->tile_rows, ctx->tile_cols);
         ctx->tile_rows = ctx->tile_rows > ctx->slice_block_rows ?
                                           ctx->slice_block_rows : ctx->tile_rows;
         ctx->tile_cols = ctx->tile_cols > ctx->slice_block_cols ?
@@ -1930,7 +1937,7 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
     req_tiles = ctx->tile_rows * ctx->tile_cols;
 
     // Slice is not allowed to cross the boundary of a Tile due to
-    // the constraints of the driver, slice number should be no less than tile
+    // the constraints, req_slices >= req_tiles
     if (avctx->slices < req_tiles) {
         av_log(avctx, AV_LOG_WARNING, "Not enough slices for "
                "configured number of tile (%d < %d); using "
@@ -1940,18 +1947,9 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
         req_slices = avctx->slices;
     }
 
-    // FIXME should also support Nx1 Tile for arbitrary rows or pow_of_two structure,
-    // however NX1 seems not valuable as tile, slice is enough.
-    if (!(slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS ||
-         (slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_ROWS && ctx->tile_cols == 1))) {
-        av_log(avctx, AV_LOG_ERROR, "Driver does not support arbitrary macroblocks "
-               "slice structure for Tile (%#x).\n", slice_structure);
-        return AVERROR(EINVAL);
-    }
-
     ctx->nb_slices = req_slices;
 
-    // default in uniform spacing
+    // Default in uniform spacing
     for (i = 0; i < ctx->tile_cols; i++) {
         ctx->col_width[i] = ( i + 1 ) * ctx->slice_block_cols / ctx->tile_cols -
                                      i * ctx->slice_block_cols / ctx->tile_cols;
