@@ -1990,7 +1990,7 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
     ctx->slice_block_cols = (avctx->width  + ctx->slice_block_width  - 1) /
                              ctx->slice_block_width;
 
-    if (avctx->slices <= 1) {
+    if (avctx->slices <= 1 && !ctx->tile_rows && !ctx->tile_cols) {
         ctx->nb_slices  = 1;
         ctx->slice_size = ctx->slice_block_rows;
         return 0;
