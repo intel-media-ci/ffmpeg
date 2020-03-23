@@ -1912,7 +1912,7 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
                                                           uint32_t slice_structure)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
-    int req_slices, req_tiles;
+    int req_tiles;
     int i;
 
     if (!(slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS ||
@@ -1936,18 +1936,16 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
 
     req_tiles = ctx->tile_rows * ctx->tile_cols;
 
-    // Slice is not allowed to cross the boundary of a Tile due to
-    // the constraints, req_slices >= req_tiles
-    if (avctx->slices < req_tiles) {
-        av_log(avctx, AV_LOG_WARNING, "Not enough slices for "
-               "configured number of tile (%d < %d); using "
-               "tile number for slice.\n", avctx->slices, req_tiles);
-        req_slices = req_tiles;
-    } else {
-        req_slices = avctx->slices;
-    }
+    // Tile slice is not allowed to cross the boundary of a tile due to
+    // the constraints of media-driver. Currently we support one slice
+    // per tile. This could be extended to multiple slices per tile.
+    if (avctx->slices != req_tiles)
+        av_log(avctx, AV_LOG_WARNING, "The number of requested slices "
+               "mismatches with configured number of tile (%d != %d); "
+               "using requested tile number for slice.\n",
+               avctx->slices, req_tiles);
 
-    ctx->nb_slices = req_slices;
+    ctx->nb_slices = req_tiles;
 
     // Default in uniform spacing
     for (i = 0; i < ctx->tile_cols; i++) {
@@ -1961,6 +1959,9 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
                                      i * ctx->slice_block_rows / ctx->tile_rows;
         ctx->row_bd[i + 1] = ctx->row_bd[i] + ctx->row_height[i];
     }
+
+    av_log(avctx, AV_LOG_VERBOSE, "Encoding pictures with %d x %d tile.\n",
+           ctx->tile_rows, ctx->tile_cols);
 
     return 0;
 }
@@ -2040,9 +2041,8 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    av_log(avctx, AV_LOG_VERBOSE, "Encoding pictures with %d slices "
-           "(default size %d block rows).\n",
-           ctx->nb_slices, ctx->slice_size);
+    av_log(avctx, AV_LOG_VERBOSE, "Encoding pictures with %d slices.\n",
+           ctx->nb_slices);
     return 0;
 }
 
