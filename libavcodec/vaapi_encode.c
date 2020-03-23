@@ -1977,9 +1977,12 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
     VAAPIEncodeContext *ctx = avctx->priv_data;
     VAConfigAttrib attr[3] = { { VAConfigAttribEncMaxSlices },
                                { VAConfigAttribEncSliceStructure },
-                               { VAConfigAttribEncTileSupport } };
+#if VA_CHECK_VERSION(1, 1, 0)
+                               { VAConfigAttribEncTileSupport },
+#endif
+                             };
     VAStatus vas;
-    uint32_t max_slices, slice_structure, tile_support;
+    uint32_t max_slices, slice_structure;
     int ret;
 
     if (!(ctx->codec->flags & FLAG_SLICE_CONTROL)) {
@@ -2012,7 +2015,6 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
     }
     max_slices      = attr[0].value;
     slice_structure = attr[1].value;
-    tile_support    = attr[2].value;
     if (max_slices      == VA_ATTRIB_NOT_SUPPORTED ||
         slice_structure == VA_ATTRIB_NOT_SUPPORTED) {
         av_log(avctx, AV_LOG_ERROR, "Driver does not support encoding "
@@ -2020,11 +2022,19 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    if (ctx->tile_rows && ctx->tile_cols &&
-        tile_support == VA_ATTRIB_NOT_SUPPORTED) {
-        av_log(avctx, AV_LOG_ERROR, "Driver does not support encoding "
-               "pictures as multiple tiles.\n.");
+    if (ctx->tile_rows && ctx->tile_cols) {
+#if VA_CHECK_VERSION(1, 1, 0)
+        uint32_t tile_support = attr[2].value;
+        if (tile_support == VA_ATTRIB_NOT_SUPPORTED) {
+            av_log(avctx, AV_LOG_ERROR, "Driver does not support encoding "
+                   "pictures as multiple tiles.\n.");
+            return AVERROR(EINVAL);
+        }
+#else
+        av_log(avctx, AV_LOG_ERROR, "Tile encoding option is "
+           "not supported with this VAAPI version.\n");
         return AVERROR(EINVAL);
+#endif
     }
 
     if (ctx->tile_rows && ctx->tile_cols)
