@@ -1917,8 +1917,7 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
                                                           uint32_t slice_structure)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
-    int req_tiles;
-    int i;
+    int i, req_tiles;
 
     if (!(slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS ||
          (slice_structure & VA_ENC_SLICE_STRUCTURE_ARBITRARY_ROWS && ctx->tile_cols == 1))) {
