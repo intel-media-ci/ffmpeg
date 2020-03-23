@@ -228,6 +228,11 @@ static int vaapi_encode_make_tile_slice(AVCodecContext *avctx,
             pic->slices[index].block_start = ctx->col_bd[i] +
                                              ctx->row_bd[j] * ctx->slice_block_cols;
             pic->slices[index].block_size  = ctx->row_height[j] * ctx->col_width[i];
+
+            av_log(avctx, AV_LOG_DEBUG, "Slice %2d: (%2d, %2d) start at: %4d "
+               "width:%2d height:%2d (%d blocks).\n", index, ctx->col_bd[i],
+               ctx->row_bd[j], slice->block_start, ctx->col_width[i],
+               ctx->row_height[j], slice->block_size);
         }
     }
 
