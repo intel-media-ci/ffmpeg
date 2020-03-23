@@ -43,9 +43,9 @@ enum {
     MAX_REORDER_DELAY      = 16,
     MAX_PARAM_BUFFER_SIZE  = 1024,
     // A.4.1: table A.6 allows at most 22 tile rows for any level.
-    MAX_TILE_ROWS     = 22,
+    MAX_TILE_ROWS          = 22,
     // A.4.1: table A.6 allows at most 20 tile columns for any level.
-    MAX_TILE_COLS     = 20,
+    MAX_TILE_COLS          = 20,
 };
 
 enum {
