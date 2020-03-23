@@ -348,7 +348,7 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
         level = ff_h265_guess_level(ptl, avctx->bit_rate,
                                     ctx->surface_width, ctx->surface_height,
-                                    ctx->nb_slices, priv->trows, priv->tcols,
+                                    ctx->nb_slices, ctx->tile_rows, ctx->tile_cols,
                                     (ctx->b_per_p > 0) + 1);
         if (level) {
             av_log(avctx, AV_LOG_VERBOSE, "Using level %s.\n", level->name);
@@ -561,12 +561,12 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
     pps->pps_loop_filter_across_slices_enabled_flag = 1;
 
-    if (priv->trows && priv->tcols) {
+    if (ctx->tile_rows && ctx->tile_cols) {
         pps->tiles_enabled_flag         = 1;
         pps->uniform_spacing_flag       = 1;
 
-        pps->num_tile_rows_minus1       = priv->trows - 1;
-        pps->num_tile_columns_minus1    = priv->tcols - 1;
+        pps->num_tile_rows_minus1       = ctx->tile_rows - 1;
+        pps->num_tile_columns_minus1    = ctx->tile_cols - 1;
 
         pps->loop_filter_across_tiles_enabled_flag = 1;
 
