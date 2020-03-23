@@ -1929,14 +1929,16 @@ static av_cold int vaapi_encode_init_tile_slice_structure(AVCodecContext *avctx,
 
     if (ctx->tile_rows > ctx->slice_block_rows ||
         ctx->tile_cols > ctx->slice_block_cols) {
-        av_log(avctx, AV_LOG_WARNING, "Not enough block rows/cols (%dx%d) "
-               "for configured number of tile (%dx%d); using "
-               "allowed maximum.\n", ctx->slice_block_rows, ctx->slice_block_cols,
-                             ctx->tile_rows, ctx->tile_cols);
+        av_log(avctx, AV_LOG_WARNING, "Not enough block rows/cols (%d x %d) "
+               "for configured number of tile (%d x %d); ",
+               ctx->slice_block_rows, ctx->slice_block_cols,
+               ctx->tile_rows, ctx->tile_cols);
         ctx->tile_rows = ctx->tile_rows > ctx->slice_block_rows ?
                                           ctx->slice_block_rows : ctx->tile_rows;
         ctx->tile_cols = ctx->tile_cols > ctx->slice_block_cols ?
-                                          ctx->slice_block_cols : ctx->tile_rows;
+                                          ctx->slice_block_cols : ctx->tile_cols;
+        av_log(avctx, AV_LOG_WARNING, "using allowed maximum (%d x %d).\n",
+               ctx->tile_rows, ctx->tile_cols);
     }
 
     req_tiles = ctx->tile_rows * ctx->tile_cols;
