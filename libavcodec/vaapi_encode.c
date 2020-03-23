@@ -417,16 +417,15 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
         pic->nb_slices = ctx->nb_slices;
     if (pic->nb_slices > 0) {
         pic->slices = av_mallocz_array(pic->nb_slices, sizeof(*pic->slices));
-        if (!pic->slices)
-            return AVERROR(ENOMEM);
+        if (!pic->slices) {
+            err = AVERROR(ENOMEM);
+            goto fail;
+        }
 
         if (ctx->tile_rows && ctx->tile_cols)
-            err = vaapi_encode_make_tile_slice(avctx, pic);
+            vaapi_encode_make_tile_slice(avctx, pic);
         else
-            err = vaapi_encode_make_row_slice(avctx, pic);
-
-        if (err < 0)
-            goto fail;
+            vaapi_encode_make_row_slice(avctx, pic);
     }
 
     for (i = 0; i < pic->nb_slices; i++) {
