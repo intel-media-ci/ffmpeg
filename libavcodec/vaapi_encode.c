@@ -221,9 +221,10 @@ static int vaapi_encode_make_tile_slice(AVCodecContext *avctx,
 
     for (i = 0; i < ctx->tile_cols; i++) {
         for (j = 0; j < ctx->tile_rows; j++) {
-            index = j * ctx->tile_cols + i;
-            slice = &pic->slices[index];
+            index        = j * ctx->tile_cols + i;
+            slice        = &pic->slices[index];
             slice->index = index;
+
             pic->slices[index].block_start = ctx->col_bd[i] +
                                              ctx->row_bd[j] * ctx->slice_block_cols;
             pic->slices[index].block_size  = ctx->row_height[j] * ctx->col_width[i];
