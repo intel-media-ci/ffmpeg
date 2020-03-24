@@ -62,6 +62,7 @@ typedef struct VAAPIEncodeH265Context {
     int tier;
     int level;
     int sei;
+    int forced_bframe;
 
     // Derived settings.
     int fixed_qp_idr;
@@ -1059,6 +1060,14 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         vslice->ref_pic_list1[0] = vpic->reference_frames[1];
     }
 
+    if (pic->type == PICTURE_TYPE_P && priv->forced_bframe) {
+        vslice->slice_type = HEVC_SLICE_B;
+        for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
+            vslice->ref_pic_list1[i].picture_id = vslice->ref_pic_list0[i].picture_id;
+            vslice->ref_pic_list1[i].flags      = vslice->ref_pic_list0[i].flags;
+        }
+    }
+
     return 0;
 }
 
@@ -1256,6 +1265,9 @@ static const AVOption vaapi_encode_h265_options[] = {
       0, AV_OPT_TYPE_CONST,
       { .i64 = SEI_MASTERING_DISPLAY | SEI_CONTENT_LIGHT_LEVEL },
       INT_MIN, INT_MAX, FLAGS, "sei" },
+
+    { "forced_bframe", "Set low delay B frames to replace p frame",
+      OFFSET(forced_bframe), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, FLAGS },
 
     { NULL },
 };
