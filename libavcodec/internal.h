@@ -132,6 +132,10 @@ typedef struct DecodeFilterContext {
     int         nb_bsfs;
 } DecodeFilterContext;
 
+typedef struct EncodeSimpleContext {
+    AVFrame *in_frame;
+} EncodeSimpleContext;
+
 typedef struct AVCodecInternal {
     /**
      * Whether the parent AVCodecContext is a copy of the context which had
@@ -171,6 +175,8 @@ typedef struct AVCodecInternal {
     DecodeSimpleContext ds;
     DecodeFilterContext filter;
 
+    EncodeSimpleContext es;
+
     /**
      * Properties (timestamps+side data) extracted from the last packet passed
      * for decoding.
@@ -204,7 +210,6 @@ typedef struct AVCodecInternal {
      * buffers for using new encode/decode API through legacy API
      */
     AVPacket *buffer_pkt;
-    int buffer_pkt_valid; // encoding: packet without data can be valid
     AVFrame *buffer_frame;
     int draining_done;
     /* set to 1 when the caller is using the old decoding API */

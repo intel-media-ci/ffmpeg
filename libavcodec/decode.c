@@ -2039,7 +2039,6 @@ void avcodec_flush_buffers(AVCodecContext *avctx)
     av_frame_unref(avci->buffer_frame);
     av_frame_unref(avci->compat_decode_frame);
     av_packet_unref(avci->buffer_pkt);
-    avci->buffer_pkt_valid = 0;
 
     av_packet_unref(avci->ds.in_pkt);
 
