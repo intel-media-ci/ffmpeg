@@ -47,6 +47,9 @@ typedef struct SVCContext {
     int skip_frames;
     int skipped;
     int cabac;
+
+    // rate control mode
+    int rc_mode;
 } SVCContext;
 
 #define OFFSET(x) offsetof(SVCContext, x)
@@ -71,6 +74,13 @@ static const AVOption options[] = {
     { "max_nal_size", "set maximum NAL size in bytes", OFFSET(max_nal_size), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },
     { "allow_skip_frames", "allow skipping frames to hit the target bitrate", OFFSET(skip_frames), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "cabac", "Enable cabac", OFFSET(cabac), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+
+    { "rc_mode", "Select rate control mode", OFFSET(rc_mode), AV_OPT_TYPE_INT, { .i64 = RC_QUALITY_MODE }, RC_OFF_MODE, RC_TIMESTAMP_MODE, VE, "rc_mode" },
+        { "off",       "bit rate control off",                                                 0, AV_OPT_TYPE_CONST, { .i64 = RC_OFF_MODE },         0, 0, VE, "rc_mode" },
+        { "quality",   "quality mode",                                                         0, AV_OPT_TYPE_CONST, { .i64 = RC_QUALITY_MODE },     0, 0, VE, "rc_mode" },
+        { "bitrate",   "bitrate mode",                                                         0, AV_OPT_TYPE_CONST, { .i64 = RC_BITRATE_MODE },     0, 0, VE, "rc_mode" },
+        { "buffer",    "using buffer status to adjust the video quality (no bitrate control)", 0, AV_OPT_TYPE_CONST, { .i64 = RC_BUFFERBASED_MODE }, 0, 0, VE, "rc_mode" },
+        { "timestamp", "bit rate control based on timestamp",                                  0, AV_OPT_TYPE_CONST, { .i64 = RC_TIMESTAMP_MODE },   0, 0, VE, "rc_mode" },
     { NULL }
 };
 
@@ -134,7 +144,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     param.iPicHeight                 = avctx->height;
     param.iTargetBitrate             = avctx->bit_rate > 0 ? avctx->bit_rate : 2*1000*1000;
     param.iMaxBitrate                = FFMAX(avctx->rc_max_rate, avctx->bit_rate);
-    param.iRCMode                    = RC_QUALITY_MODE;
+    param.iRCMode                    = s->rc_mode;
     // QP = 0 is not well supported, so default to (1, 51)
     param.iMaxQp                     = avctx->qmax >= 0 ? av_clip(avctx->qmax, 1, 51) : 51;
     param.iMinQp                     = avctx->qmin >= 0 ? av_clip(avctx->qmin, 1, param.iMaxQp) : 1;
