@@ -132,7 +132,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     param.fMaxFrameRate              = 1/av_q2d(avctx->time_base);
     param.iPicWidth                  = avctx->width;
     param.iPicHeight                 = avctx->height;
-    param.iTargetBitrate             = avctx->bit_rate;
+    param.iTargetBitrate             = avctx->bit_rate > 0 ? avctx->bit_rate : 2*1000*1000;
     param.iMaxBitrate                = FFMAX(avctx->rc_max_rate, avctx->bit_rate);
     param.iRCMode                    = RC_QUALITY_MODE;
     // QP = 0 is not well supported, so default to (1, 51)
@@ -335,6 +335,8 @@ static int svc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 }
 
 static const AVCodecDefault svc_enc_defaults[] = {
+    { "b",         "0"     },
+    { "g",         "120"   },
     { "qmin",      "-1"    },
     { "qmax",      "-1"    },
     { NULL },
