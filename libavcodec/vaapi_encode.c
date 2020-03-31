@@ -2361,7 +2361,6 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
     return 0;
 
 fail:
-    ff_vaapi_encode_close(avctx);
     return err;
 }
 
