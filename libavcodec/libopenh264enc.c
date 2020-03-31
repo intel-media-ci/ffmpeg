@@ -105,6 +105,184 @@ static av_cold int svc_encode_close(AVCodecContext *avctx)
     return 0;
 }
 
+static av_cold int svc_encode_init_profile(AVCodecContext *avctx, SEncParamExt *param)
+{
+    SVCContext *s = avctx->priv_data;
+
+    if (s->profile && !strcmp(s->profile, "main"))
+        param->iEntropyCodingModeFlag = 1; //< 0:CAVLC  1:CABAC
+    else if (!s->profile && s->cabac)
+        param->iEntropyCodingModeFlag = 1;
+    else
+        param->iEntropyCodingModeFlag = 0;
+
+    return 0;
+}
+
+static av_cold int svc_encode_init_rate_control(AVCodecContext *avctx, SEncParamExt *param)
+{
+    SVCContext *s = avctx->priv_data;
+
+    /* Rate Control */
+    param->iRCMode                    = s->rc_mode;
+
+    param->iTargetBitrate             = avctx->bit_rate > 0 ? avctx->bit_rate : 2*1000*1000;
+    param->iMaxBitrate                = FFMAX(avctx->rc_max_rate, avctx->bit_rate);
+    param->bEnableFrameSkip           = s->skip_frames;
+
+    // QP = 0 is not well supported, so default to (1, 51)
+    param->iMaxQp                     = avctx->qmax >= 0 ? av_clip(avctx->qmax, 1, 51) : 51;
+    param->iMinQp                     = avctx->qmin >= 0 ? av_clip(avctx->qmin, 1, param->iMaxQp) : 1;
+    param->bEnableAdaptiveQuant       = 1;
+
+    param->iSpatialLayerNum           = 1;  // Number of dependency(Spatial/CGS) layers used to be encoded
+    param->iTemporalLayerNum          = 1;  // Number of temporal layer specified
+
+    param->bEnableDenoise             = 0;  // Denoise control
+    param->bEnableBackgroundDetection = 1;  // Background detection control
+
+    param->bEnableLongTermReference   = 0;  // Long term reference control
+    param->iLtrMarkPeriod             = 30; // the min distance of two int32_t references
+
+    return 0;
+}
+
+static av_cold int svc_encode_init_slice(AVCodecContext *avctx, SEncParamExt *param, int iLayer)
+{
+    SVCContext *s = avctx->priv_data;
+
+    if ((avctx->slices > 1) && (s->max_nal_size)) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Invalid combination -slices %d and -max_nal_size %d.\n",
+               avctx->slices, s->max_nal_size);
+        return AVERROR(EINVAL);
+    }
+
+    if (avctx->slices > 1)
+        s->slice_mode = SM_FIXEDSLCNUM_SLICE;
+
+    if (s->max_nal_size)
+        s->slice_mode = SM_SIZELIMITED_SLICE;
+
+#if OPENH264_VER_AT_LEAST(1, 6)
+    param->sSpatialLayers[iLayer].sSliceArgument.uiSliceMode = s->slice_mode;
+    param->sSpatialLayers[iLayer].sSliceArgument.uiSliceNum  = avctx->slices;
+#else
+    param->sSpatialLayers[iLayer].sSliceCfg.uiSliceMode               = s->slice_mode;
+    param->sSpatialLayers[iLayer].sSliceCfg.sSliceArgument.uiSliceNum = avctx->slices;
+#endif
+    if (avctx->slices == 0 && s->slice_mode == SM_FIXEDSLCNUM_SLICE)
+        av_log(avctx, AV_LOG_WARNING, "Slice count will be set automatically\n");
+
+    if (s->slice_mode == SM_SIZELIMITED_SLICE) {
+        if (s->max_nal_size) {
+            param->uiMaxNalSize = s->max_nal_size;
+#if OPENH264_VER_AT_LEAST(1, 6)
+            param->sSpatialLayers[iLayer].sSliceArgument.uiSliceSizeConstraint = s->max_nal_size;
+#else
+            param->sSpatialLayers[iLayer].sSliceCfg.sSliceArgument.uiSliceSizeConstraint = s->max_nal_size;
+#endif
+        } else {
+            av_log(avctx, AV_LOG_ERROR, "Invalid -max_nal_size, "
+                   "specify a valid max_nal_size to use -slice_mode dyn\n");
+            return AVERROR(EINVAL);
+        }
+    }
+
+    return 0;
+}
+
+static av_cold int svc_encode_init_spatial_layer(AVCodecContext *avctx, SEncParamExt *param)
+{
+    int iLayer, err;
+
+    // Default iSpatialLayerNum = 1, should be extended to support MAX_SPATIAL_LAYER_NUM = 4
+    for (iLayer = 0; iLayer < param->iSpatialLayerNum; iLayer++) {
+        param->sSpatialLayers[iLayer].iVideoWidth         = param->iPicWidth;
+        param->sSpatialLayers[iLayer].iVideoHeight        = param->iPicHeight;
+        param->sSpatialLayers[iLayer].fFrameRate          = param->fMaxFrameRate;
+        param->sSpatialLayers[iLayer].iSpatialBitrate     = param->iTargetBitrate;
+        param->sSpatialLayers[iLayer].iMaxSpatialBitrate  = param->iMaxBitrate;
+
+        if (err = svc_encode_init_slice(avctx, param, iLayer) < 0)
+            return err;
+
+#if OPENH264_VER_AT_LEAST(1, 7)
+        if (avctx->sample_aspect_ratio.num && avctx->sample_aspect_ratio.den) {
+            // Table E-1.
+            static const AVRational sar_idc[] = {
+                {   0,  0 }, // Unspecified (never written here).
+                {   1,  1 }, {  12, 11 }, {  10, 11 }, {  16, 11 },
+                {  40, 33 }, {  24, 11 }, {  20, 11 }, {  32, 11 },
+                {  80, 33 }, {  18, 11 }, {  15, 11 }, {  64, 33 },
+                { 160, 99 }, // Last 3 are unknown to openh264: {   4,  3 }, {   3,  2 }, {   2,  1 },
+            };
+            static const ESampleAspectRatio asp_idc[] = {
+                ASP_UNSPECIFIED,
+                ASP_1x1,      ASP_12x11,   ASP_10x11,   ASP_16x11,
+                ASP_40x33,    ASP_24x11,   ASP_20x11,   ASP_32x11,
+                ASP_80x33,    ASP_18x11,   ASP_15x11,   ASP_64x33,
+                ASP_160x99,
+            };
+            int num, den, i;
+
+            av_reduce(&num, &den, avctx->sample_aspect_ratio.num,
+                      avctx->sample_aspect_ratio.den, 65535);
+
+            for (i = 1; i < FF_ARRAY_ELEMS(sar_idc); i++) {
+                if (num == sar_idc[i].num &&
+                    den == sar_idc[i].den)
+                    break;
+            }
+            if (i == FF_ARRAY_ELEMS(sar_idc)) {
+                param->sSpatialLayers[iLayer].eAspectRatio = ASP_EXT_SAR;
+                param->sSpatialLayers[iLayer].sAspectRatioExtWidth = num;
+                param->sSpatialLayers[iLayer].sAspectRatioExtHeight = den;
+            } else {
+                param->sSpatialLayers[iLayer].eAspectRatio = asp_idc[i];
+            }
+            param->sSpatialLayers[iLayer].bAspectRatioPresent = true;
+        } else {
+            param->sSpatialLayers[iLayer].bAspectRatioPresent = false;
+        }
+#endif
+    }
+
+    return 0;
+}
+
+static av_cold int svc_encode_init_params(AVCodecContext *avctx, SEncParamExt *param)
+{
+    SVCContext *s = avctx->priv_data;
+    int err;
+
+    // The default parameters would be got by FillDefault() in codec/encoder/core/inc/param_svc.h
+    param->iPicWidth                  = avctx->width;
+    param->iPicHeight                 = avctx->height;
+    param->uiIntraPeriod              = avctx->gop_size;
+    param->fMaxFrameRate              = 1/av_q2d(avctx->time_base);
+    param->iMultipleThreadIdc         = avctx->thread_count;
+    param->iLoopFilterDisableIdc      = !s->loopfilter;
+    // Nal unit control
+#if OPENH264_VER_AT_LEAST(1, 4)
+    param->eSpsPpsIdStrategy          = CONSTANT_ID;
+#else
+    param->bEnableSpsPpsIdAddition    = 0;
+#endif
+    param->bPrefixNalAddingCtrl       = 0;
+
+    if (err = svc_encode_init_profile(avctx, param) < 0)
+        return err;
+
+    if (err = svc_encode_init_rate_control(avctx, param) < 0)
+        return err;
+
+    if (err = svc_encode_init_spatial_layer(avctx, param) < 0)
+        return err;
+
+    return 0;
+}
+
 static av_cold int svc_encode_init(AVCodecContext *avctx)
 {
     SVCContext *s = avctx->priv_data;
@@ -142,121 +320,8 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
-    param.fMaxFrameRate              = 1/av_q2d(avctx->time_base);
-    param.iPicWidth                  = avctx->width;
-    param.iPicHeight                 = avctx->height;
-    param.iTargetBitrate             = avctx->bit_rate > 0 ? avctx->bit_rate : 2*1000*1000;
-    param.iMaxBitrate                = FFMAX(avctx->rc_max_rate, avctx->bit_rate);
-    param.iRCMode                    = s->rc_mode;
-    // QP = 0 is not well supported, so default to (1, 51)
-    param.iMaxQp                     = avctx->qmax >= 0 ? av_clip(avctx->qmax, 1, 51) : 51;
-    param.iMinQp                     = avctx->qmin >= 0 ? av_clip(avctx->qmin, 1, param.iMaxQp) : 1;
-    param.iTemporalLayerNum          = 1;
-    param.iSpatialLayerNum           = 1;
-    param.bEnableDenoise             = 0;
-    param.bEnableBackgroundDetection = 1;
-    param.bEnableAdaptiveQuant       = 1;
-    param.bEnableFrameSkip           = s->skip_frames;
-    param.bEnableLongTermReference   = 0;
-    param.iLtrMarkPeriod             = 30;
-    param.uiIntraPeriod              = avctx->gop_size;
-#if OPENH264_VER_AT_LEAST(1, 4)
-    param.eSpsPpsIdStrategy          = CONSTANT_ID;
-#else
-    param.bEnableSpsPpsIdAddition    = 0;
-#endif
-    param.bPrefixNalAddingCtrl       = 0;
-    param.iLoopFilterDisableIdc      = !s->loopfilter;
-    param.iEntropyCodingModeFlag     = 0;
-    param.iMultipleThreadIdc         = avctx->thread_count;
-    if (s->profile && !strcmp(s->profile, "main"))
-        param.iEntropyCodingModeFlag = 1;
-    else if (!s->profile && s->cabac)
-        param.iEntropyCodingModeFlag = 1;
-
-    param.sSpatialLayers[0].iVideoWidth         = param.iPicWidth;
-    param.sSpatialLayers[0].iVideoHeight        = param.iPicHeight;
-    param.sSpatialLayers[0].fFrameRate          = param.fMaxFrameRate;
-    param.sSpatialLayers[0].iSpatialBitrate     = param.iTargetBitrate;
-    param.sSpatialLayers[0].iMaxSpatialBitrate  = param.iMaxBitrate;
-
-#if OPENH264_VER_AT_LEAST(1, 7)
-    if (avctx->sample_aspect_ratio.num && avctx->sample_aspect_ratio.den) {
-        // Table E-1.
-        static const AVRational sar_idc[] = {
-            {   0,  0 }, // Unspecified (never written here).
-            {   1,  1 }, {  12, 11 }, {  10, 11 }, {  16, 11 },
-            {  40, 33 }, {  24, 11 }, {  20, 11 }, {  32, 11 },
-            {  80, 33 }, {  18, 11 }, {  15, 11 }, {  64, 33 },
-            { 160, 99 }, // Last 3 are unknown to openh264: {   4,  3 }, {   3,  2 }, {   2,  1 },
-        };
-        static const ESampleAspectRatio asp_idc[] = {
-            ASP_UNSPECIFIED,
-            ASP_1x1,      ASP_12x11,   ASP_10x11,   ASP_16x11,
-            ASP_40x33,    ASP_24x11,   ASP_20x11,   ASP_32x11,
-            ASP_80x33,    ASP_18x11,   ASP_15x11,   ASP_64x33,
-            ASP_160x99,
-        };
-        int num, den, i;
-
-        av_reduce(&num, &den, avctx->sample_aspect_ratio.num,
-                  avctx->sample_aspect_ratio.den, 65535);
-
-        for (i = 1; i < FF_ARRAY_ELEMS(sar_idc); i++) {
-            if (num == sar_idc[i].num &&
-                den == sar_idc[i].den)
-                break;
-        }
-        if (i == FF_ARRAY_ELEMS(sar_idc)) {
-            param.sSpatialLayers[0].eAspectRatio = ASP_EXT_SAR;
-            param.sSpatialLayers[0].sAspectRatioExtWidth = num;
-            param.sSpatialLayers[0].sAspectRatioExtHeight = den;
-        } else {
-            param.sSpatialLayers[0].eAspectRatio = asp_idc[i];
-        }
-        param.sSpatialLayers[0].bAspectRatioPresent = true;
-    } else {
-        param.sSpatialLayers[0].bAspectRatioPresent = false;
-    }
-#endif
-
-    if ((avctx->slices > 1) && (s->max_nal_size)) {
-        av_log(avctx, AV_LOG_ERROR,
-               "Invalid combination -slices %d and -max_nal_size %d.\n",
-               avctx->slices, s->max_nal_size);
-        return AVERROR(EINVAL);
-    }
-
-    if (avctx->slices > 1)
-        s->slice_mode = SM_FIXEDSLCNUM_SLICE;
-
-    if (s->max_nal_size)
-        s->slice_mode = SM_SIZELIMITED_SLICE;
-
-#if OPENH264_VER_AT_LEAST(1, 6)
-    param.sSpatialLayers[0].sSliceArgument.uiSliceMode = s->slice_mode;
-    param.sSpatialLayers[0].sSliceArgument.uiSliceNum  = avctx->slices;
-#else
-    param.sSpatialLayers[0].sSliceCfg.uiSliceMode               = s->slice_mode;
-    param.sSpatialLayers[0].sSliceCfg.sSliceArgument.uiSliceNum = avctx->slices;
-#endif
-    if (avctx->slices == 0 && s->slice_mode == SM_FIXEDSLCNUM_SLICE)
-        av_log(avctx, AV_LOG_WARNING, "Slice count will be set automatically\n");
-
-    if (s->slice_mode == SM_SIZELIMITED_SLICE) {
-        if (s->max_nal_size) {
-            param.uiMaxNalSize = s->max_nal_size;
-#if OPENH264_VER_AT_LEAST(1, 6)
-            param.sSpatialLayers[0].sSliceArgument.uiSliceSizeConstraint = s->max_nal_size;
-#else
-            param.sSpatialLayers[0].sSliceCfg.sSliceArgument.uiSliceSizeConstraint = s->max_nal_size;
-#endif
-        } else {
-            av_log(avctx, AV_LOG_ERROR, "Invalid -max_nal_size, "
-                   "specify a valid max_nal_size to use -slice_mode dyn\n");
-            return AVERROR(EINVAL);
-        }
-    }
+    if (err = svc_encode_init_params(avctx, &param) < 0)
+        return err;
 
     if ((*s->encoder)->InitializeExt(s->encoder, &param) != cmResultSuccess) {
         av_log(avctx, AV_LOG_ERROR, "Initialize failed\n");
