@@ -46,7 +46,10 @@ typedef struct SVCContext {
     int max_nal_size;
     int skip_frames;
     int skipped;
-    int cabac;
+#if FF_API_OPENH264_CABAC
+    int cabac;                      // deprecated
+#endif
+    int coder;
 
     // rate control mode
     int rc_mode;
@@ -80,7 +83,15 @@ static const AVOption options[] = {
 #undef PROFILE
     { "max_nal_size", "set maximum NAL size in bytes", OFFSET(max_nal_size), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },
     { "allow_skip_frames", "allow skipping frames to hit the target bitrate", OFFSET(skip_frames), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
-    { "cabac", "Enable cabac", OFFSET(cabac), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+#if FF_API_OPENH264_CABAC
+    { "cabac", "Enable cabac(deprecated, use coder)", OFFSET(cabac), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE|DEPRECATED },
+#endif
+    { "coder", "Coder type",  OFFSET(coder), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 1, VE, "coder" },
+        { "default",          NULL, 0, AV_OPT_TYPE_CONST, { .i64 = -1 }, INT_MIN, INT_MAX, VE, "coder" },
+        { "cavlc",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "coder" },
+        { "cabac",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "coder" },
+        { "vlc",              NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "coder" },
+        { "ac",               NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "coder" },
 
     { "rc_mode", "Select rate control mode", OFFSET(rc_mode), AV_OPT_TYPE_INT, { .i64 = RC_QUALITY_MODE }, RC_OFF_MODE, RC_TIMESTAMP_MODE, VE, "rc_mode" },
         { "off",       "bit rate control off",                                                 0, AV_OPT_TYPE_CONST, { .i64 = RC_OFF_MODE },         0, 0, VE, "rc_mode" },
@@ -129,8 +140,17 @@ static av_cold int svc_encode_init_profile(AVCodecContext *avctx, SEncParamExt *
             break;
         }
 
-    if (s->profile == FF_PROFILE_UNKNOWN)
-        s->profile = s->cabac ? FF_PROFILE_H264_HIGH :
+#if FF_API_CODER_TYPE && FF_API_OPENH264_CABAC
+FF_DISABLE_DEPRECATION_WARNINGS
+    if (s->coder < 0 && avctx->coder_type == FF_CODER_TYPE_AC)
+        s->coder = 1;
+    else
+        s->coder = s->cabac;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+
+    if (s->profile == FF_PROFILE_UNKNOWN && s->coder >= 0)
+        s->profile = s->coder ? FF_PROFILE_H264_HIGH :
                                 FF_PROFILE_H264_CONSTRAINED_BASELINE;
 
     switch (s->profile) {
@@ -348,13 +368,6 @@ static av_cold int svc_encode_init(AVCodecContext *avctx)
     (*s->encoder)->SetOption(s->encoder, ENCODER_OPTION_TRACE_CALLBACK_CONTEXT, &avctx);
 
     (*s->encoder)->GetDefaultParams(s->encoder, &param);
-
-#if FF_API_CODER_TYPE
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (!s->cabac)
-        s->cabac = avctx->coder_type == FF_CODER_TYPE_AC;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     if (err = svc_encode_init_params(avctx, &param) < 0)
         return err;
