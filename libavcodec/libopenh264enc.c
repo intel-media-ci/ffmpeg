@@ -113,6 +113,22 @@ static av_cold int svc_encode_init_profile(AVCodecContext *avctx, SEncParamExt *
 {
     SVCContext *s = avctx->priv_data;
 
+    /* Allow specifying the libopenh264 profile through AVCodecContext. */
+    if (FF_PROFILE_UNKNOWN == s->profile &&
+        FF_PROFILE_UNKNOWN != avctx->profile)
+        switch (avctx->profile) {
+        case FF_PROFILE_H264_CONSTRAINED_BASELINE:
+            s->profile = FF_PROFILE_H264_CONSTRAINED_BASELINE;
+            break;
+        case FF_PROFILE_H264_HIGH:
+            s->profile = FF_PROFILE_H264_HIGH;
+            break;
+        default:
+            av_log(avctx, AV_LOG_WARNING,
+                   "Unsupported avctx->profile: %d.\n", avctx->profile);
+            break;
+        }
+
     if (s->profile == FF_PROFILE_UNKNOWN)
         s->profile = s->cabac ? FF_PROFILE_H264_HIGH :
                                 FF_PROFILE_H264_CONSTRAINED_BASELINE;
