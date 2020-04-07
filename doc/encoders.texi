@@ -3371,6 +3371,22 @@ Some combination of the following values:
 Include HDR metadata if the input frames have it
 (@emph{mastering_display_colour_volume} and @emph{content_light_level}
 messages).
+
+@item b_strategy
+Allow user to choose between I/P/B frames and specify the type of B-frames.
+@table @samp
+@item normal
+Normal IBBPBB strategy.
+
+@item low_delay_b
+Convert P-frames to B-frames, only forward-predict is allowed for all B frames,
+ref_list0 equals to ref_list1, required by VDENC(low_power).
+
+@item ref_b
+Convert P-frames to low delay B-frames as references, while normal B frames
+still have 2 different ref_lists and allow bi-prediction.
+@end table
+
 @end table
 
 @item tiles

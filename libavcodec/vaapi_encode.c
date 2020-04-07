@@ -1854,15 +1854,26 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
                "reference frames.\n");
         return AVERROR(EINVAL);
     } else if (!(ctx->codec->flags & FLAG_B_PICTURES) ||
-               ref_l1 < 1 || avctx->max_b_frames < 1) {
-        av_log(avctx, AV_LOG_VERBOSE, "Using intra and P-frames "
-               "(supported references: %d / %d).\n", ref_l0, ref_l1);
+               ref_l1 < 1 || avctx->max_b_frames < 1 ||
+               ctx->b_frame_strategy == 1) {
+        if (ctx->b_frame_strategy == 1)
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra and low delay "
+                   "B-frames (supported references: %d / %d).\n",
+                   ref_l0, ref_l1);
+        else
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra and P-frames "
+                   "(supported references: %d / %d).\n", ref_l0, ref_l1);
         ctx->gop_size = avctx->gop_size;
         ctx->p_per_i  = INT_MAX;
         ctx->b_per_p  = 0;
     } else {
-        av_log(avctx, AV_LOG_VERBOSE, "Using intra, P- and B-frames "
-               "(supported references: %d / %d).\n", ref_l0, ref_l1);
+        if (ctx->b_frame_strategy == 2)
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra, reference B- and "
+                   "B-frames (supported references: %d / %d).\n",
+                   ref_l0, ref_l1);
+        else
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra, P- and B-frames "
+                   "(supported references: %d / %d).\n", ref_l0, ref_l1);
         ctx->gop_size = avctx->gop_size;
         ctx->p_per_i  = INT_MAX;
         ctx->b_per_p  = avctx->max_b_frames;
