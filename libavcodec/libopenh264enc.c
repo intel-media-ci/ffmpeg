@@ -192,7 +192,7 @@ static av_cold int svc_encode_init_rate_control(AVCodecContext *avctx, SEncParam
     param->bEnableAdaptiveQuant       = 1;
 
     param->iSpatialLayerNum           = 1;  // Number of dependency(Spatial/CGS) layers used to be encoded
-    param->iTemporalLayerNum          = 1;  // Number of temporal layer specified
+    param->iTemporalLayerNum          = FFMIN((1 << (param->iNumRefFrame - 1)) + 1, MAX_TEMPORAL_LAYER_NUM); // Number of temporal layer specified
 
     param->bEnableDenoise             = 0;  // Denoise control
     param->bEnableBackgroundDetection = 1;  // Background detection control
@@ -319,6 +319,7 @@ static av_cold int svc_encode_init_params(AVCodecContext *avctx, SEncParamExt *p
     param->fMaxFrameRate              = 1/av_q2d(avctx->time_base);
     param->iMultipleThreadIdc         = avctx->thread_count;
     param->iLoopFilterDisableIdc      = !s->loopfilter;
+    param->iNumRefFrame               = avctx->refs > 0 ? FFMIN(avctx->refs, 4) : 1;
     // Nal unit control
 #if OPENH264_VER_AT_LEAST(1, 4)
     param->eSpsPpsIdStrategy          = CONSTANT_ID;
@@ -468,6 +469,7 @@ static const AVCodecDefault svc_enc_defaults[] = {
     { "g",         "120"   },
     { "qmin",      "-1"    },
     { "qmax",      "-1"    },
+    { "refs",      "-1"    },
     { NULL },
 };
 
