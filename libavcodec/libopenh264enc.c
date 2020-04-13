@@ -53,6 +53,7 @@ typedef struct SVCContext {
 
     // rate control mode
     int rc_mode;
+    int qp;
 } SVCContext;
 
 #define OFFSET(x) offsetof(SVCContext, x)
@@ -99,6 +100,8 @@ static const AVOption options[] = {
         { "bitrate",   "bitrate mode",                                                         0, AV_OPT_TYPE_CONST, { .i64 = RC_BITRATE_MODE },     0, 0, VE, "rc_mode" },
         { "buffer",    "using buffer status to adjust the video quality (no bitrate control)", 0, AV_OPT_TYPE_CONST, { .i64 = RC_BUFFERBASED_MODE }, 0, 0, VE, "rc_mode" },
         { "timestamp", "bit rate control based on timestamp",                                  0, AV_OPT_TYPE_CONST, { .i64 = RC_TIMESTAMP_MODE },   0, 0, VE, "rc_mode" },
+
+    { "qp", "Set the initial/global QP", OFFSET(qp), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 51, VE },
     { NULL }
 };
 
@@ -185,8 +188,19 @@ static av_cold int svc_encode_init_rate_control(AVCodecContext *avctx, SEncParam
     param->iTargetBitrate             = avctx->bit_rate > 0 ? avctx->bit_rate : 2*1000*1000;
     param->iMaxBitrate                = FFMAX(avctx->rc_max_rate, avctx->bit_rate);
     param->bEnableFrameSkip           = s->skip_frames;
-
-    // QP = 0 is not well supported, so default to (1, 51)
+/*
+    if (s->qp) {
+        // libopenh264 doesn't provide an API for initial/global QP,
+        // it maintains a dInitialQPArray[4][4] in RcCalculateIdrQp()
+        // and determines the initial/global QP by bitrate per pixel(bpp).
+        // Hence we may set it by max/min qp;
+        param->iMaxQp = param->iMinQp = s->qp;
+    } else {
+        // QP = 0 is not well supported, so default to (1, 51)
+        param->iMaxQp                 = avctx->qmax >= 0 ? av_clip(avctx->qmax, 1, 51) : 51;
+        param->iMinQp                 = avctx->qmin >= 0 ? av_clip(avctx->qmin, 1, param->iMaxQp) : 1;
+    }
+*/
     param->iMaxQp                     = avctx->qmax >= 0 ? av_clip(avctx->qmax, 1, 51) : 51;
     param->iMinQp                     = avctx->qmin >= 0 ? av_clip(avctx->qmin, 1, param->iMaxQp) : 1;
     param->bEnableAdaptiveQuant       = 1;
@@ -250,6 +264,7 @@ static av_cold int svc_encode_init_slice(AVCodecContext *avctx, SEncParamExt *pa
 
 static av_cold int svc_encode_init_spatial_layer(AVCodecContext *avctx, SEncParamExt *param)
 {
+    SVCContext *s = avctx->priv_data;
     int iLayer, err;
 
     // Default iSpatialLayerNum = 1, should be extended to support MAX_SPATIAL_LAYER_NUM = 4
@@ -259,6 +274,7 @@ static av_cold int svc_encode_init_spatial_layer(AVCodecContext *avctx, SEncPara
         param->sSpatialLayers[iLayer].fFrameRate          = param->fMaxFrameRate;
         param->sSpatialLayers[iLayer].iSpatialBitrate     = param->iTargetBitrate;
         param->sSpatialLayers[iLayer].iMaxSpatialBitrate  = param->iMaxBitrate;
+        param->sSpatialLayers[iLayer].iDLayerQp           = s->qp ? s->qp : SVC_QUALITY_BASE_QP;
 
         if (err = svc_encode_init_slice(avctx, param, iLayer) < 0)
             return err;
