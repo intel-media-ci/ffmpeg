@@ -804,18 +804,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
 #if QSV_HAVE_ROI_ENCODING
     if (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 1, 32)) {
-        q->extroi.Header.BufferId = MFX_EXTBUFF_ENCODER_ROI;
-        q->extroi.Header.BufferSz = sizeof(q->extroi);
-        q->extroi.ROIMode = MFX_ROI_MODE_QP_DELTA;
-        // 256 to query the maximum supported value
-        q->extroi.NumROI = 256;
-        // due to the requirement of msdk, we must set non_empty rect for query
-        for (int i = 0; i < FF_ARRAY_ELEMS(q->extroi.ROI); ++i) {
-            q->extroi.ROI[i].Right  = 16;
-            q->extroi.ROI[i].Bottom = 16;
-        }
-        q->roi_index_in_internal_buffer = q->nb_extparam_internal;
-        q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extroi;
+        q->extroi.NumROI = 4;
     }
 #endif
 
