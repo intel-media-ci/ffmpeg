@@ -278,10 +278,14 @@ static void vaapi_vpp_fill_colour_standard(VAAPIColourProperties *props,
     // use them and avoid doing any mapping.  (The driver may not support
     // some particular code point, but it still has enough information to
     // make a better fallback choice than we do in that case.)
-    for (i = 0; i < nb_vacs; i++) {
-        if (vacs[i] == VAProcColorStandardExplicit) {
-            props->va_color_standard = VAProcColorStandardExplicit;
-            return;
+    if ((props->colorspace != AVCOL_SPC_UNSPECIFIED) &&
+        (props->color_trc != AVCOL_TRC_UNSPECIFIED) &&
+        (props->color_primaries != AVCOL_PRI_UNSPECIFIED)) {
+        for (i = 0; i < nb_vacs; i++) {
+            if (vacs[i] == VAProcColorStandardExplicit) {
+                props->va_color_standard = VAProcColorStandardExplicit;
+                return;
+            }
         }
     }
 #endif
