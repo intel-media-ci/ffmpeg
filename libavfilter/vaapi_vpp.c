@@ -493,18 +493,18 @@ static int vaapi_vpp_colour_properties(AVFilterContext *avctx,
         .chroma_sample_location   = input_props.va_chroma_sample_location,
         .color_range              = input_props.va_color_range,
 #if VA_CHECK_VERSION(1, 3, 0)
-        .colour_primaries         = input_props.color_primaries,
-        .transfer_characteristics = input_props.color_trc,
-        .matrix_coefficients      = input_props.colorspace,
+        .colour_primaries         = (input_props.color_primaries == AVCOL_PRI_UNSPECIFIED ? 0 : input_props.color_primaries),
+        .transfer_characteristics = (input_props.color_trc == AVCOL_TRC_UNSPECIFIED ? 0 : input_props.color_trc),
+        .matrix_coefficients      = (input_props.colorspace == AVCOL_SPC_UNSPECIFIED ? 0 : input_props.colorspace),
 #endif
     };
     params->output_color_properties = (VAProcColorProperties) {
         .chroma_sample_location   = output_props.va_chroma_sample_location,
         .color_range              = output_props.va_color_range,
 #if VA_CHECK_VERSION(1, 3, 0)
-        .colour_primaries         = output_props.color_primaries,
-        .transfer_characteristics = output_props.color_trc,
-        .matrix_coefficients      = output_props.colorspace,
+        .colour_primaries         = (input_props.color_primaries == AVCOL_PRI_UNSPECIFIED ? 0 : input_props.color_primaries),
+        .transfer_characteristics = (input_props.color_trc == AVCOL_TRC_UNSPECIFIED ? 0 : input_props.color_trc),
+        .matrix_coefficients      = (input_props.colorspace == AVCOL_SPC_UNSPECIFIED ? 0 : input_props.colorspace),
 #endif
     };
 #endif
