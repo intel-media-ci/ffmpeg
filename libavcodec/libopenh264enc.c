@@ -166,7 +166,9 @@ static av_cold int svc_encode_init(AVCodecContext *avctx)
         param.iMaxQp                 = av_clip(avctx->qmax, 1, 51);
     if (avctx->qmin >= 0)
         param.iMinQp                 = av_clip(avctx->qmin, 1, param.iMaxQp);
-    param.iTemporalLayerNum          = 1;
+    if (avctx->refs > 0)
+        param.iNumRefFrame           = FFMIN(avctx->refs, 4);
+    param.iTemporalLayerNum          = avctx->refs > 0 ? FFMIN((1 << (param.iNumRefFrame - 1)) + 1, MAX_TEMPORAL_LAYER_NUM) : 1;
     param.iSpatialLayerNum           = 1;
     param.bEnableDenoise             = 0;
     param.bEnableBackgroundDetection = 1;
@@ -426,6 +428,7 @@ static const AVCodecDefault svc_enc_defaults[] = {
     { "g",         "-1"    },
     { "qmin",      "-1"    },
     { "qmax",      "-1"    },
+    { "refs",      "-1"    },
     { NULL },
 };
 
