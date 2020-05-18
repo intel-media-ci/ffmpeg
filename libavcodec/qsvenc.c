@@ -556,7 +556,7 @@ static int init_video_param_jpeg(AVCodecContext *avctx, QSVEncContext *q)
                                             !desc->log2_chroma_w + !desc->log2_chroma_h;
     q->param.mfx.FrameInfo.BitDepthLuma   = desc->comp[0].depth;
     q->param.mfx.FrameInfo.BitDepthChroma = desc->comp[0].depth;
-    q->param.mfx.FrameInfo.Shift          = desc->comp[0].depth > 8;
+    q->param.mfx.FrameInfo.Shift          = desc->comp[0].shift > 0;
 
     q->param.mfx.FrameInfo.Width  = FFALIGN(avctx->width, 16);
     q->param.mfx.FrameInfo.Height = FFALIGN(avctx->height, 16);
@@ -655,7 +655,7 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
                                             !desc->log2_chroma_w + !desc->log2_chroma_h;
     q->param.mfx.FrameInfo.BitDepthLuma   = desc->comp[0].depth;
     q->param.mfx.FrameInfo.BitDepthChroma = desc->comp[0].depth;
-    q->param.mfx.FrameInfo.Shift          = desc->comp[0].depth > 8;
+    q->param.mfx.FrameInfo.Shift          = desc->comp[0].shift > 0;
 
     // If the minor version is greater than or equal to 19,
     // then can use the same alignment settings as H.264 for HEVC
