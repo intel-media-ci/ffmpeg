@@ -2692,14 +2692,10 @@ typedef struct AVCodec {
     int (*decode)(AVCodecContext *, void *outdata, int *outdata_size, AVPacket *avpkt);
     int (*close)(AVCodecContext *);
     /**
-     * Encode API with decoupled packet/frame dataflow. The API is the
-     * same as the avcodec_ prefixed APIs (avcodec_send_frame() etc.), except
-     * that:
-     * - never called if the codec is closed or the wrong type,
-     * - if AV_CODEC_CAP_DELAY is not set, drain frames are never sent,
-     * - only one drain frame is ever passed down,
+     * Encode API with decoupled frame/packet dataflow. This function is called
+     * to get one output packet. It should call ff_encode_get_frame() to obtain
+     * input data.
      */
-    int (*send_frame)(AVCodecContext *avctx, const AVFrame *frame);
     int (*receive_packet)(AVCodecContext *avctx, AVPacket *avpkt);
 
     /**
