@@ -1067,13 +1067,14 @@ static int vaapi_encode_send_frame(AVCodecContext *avctx, AVFrame *frame)
             err = AVERROR(ENOMEM);
             goto fail;
         }
-        av_frame_move_ref(pic->input_image, frame);
 
         if (ctx->input_order == 0 || frame->pict_type == AV_PICTURE_TYPE_I)
             pic->force_idr = 1;
 
         pic->input_surface = (VASurfaceID)(uintptr_t)frame->data[3];
         pic->pts = frame->pts;
+
+        av_frame_move_ref(pic->input_image, frame);
 
         if (ctx->input_order == 0)
             ctx->first_pts = pic->pts;
