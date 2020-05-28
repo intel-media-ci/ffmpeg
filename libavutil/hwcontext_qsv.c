@@ -112,6 +112,14 @@ static const struct {
                        MFX_FOURCC_Y210 },
     { AV_PIX_FMT_Y410,
                        MFX_FOURCC_Y410 },
+#if QSV_VERSION_ATLEAST(1, 31)
+    { AV_PIX_FMT_P012,
+                       MFX_FOURCC_P016 },
+    { AV_PIX_FMT_Y212,
+                       MFX_FOURCC_Y216 },
+    { AV_PIX_FMT_Y412,
+                       MFX_FOURCC_Y416 },
+#endif
 #endif
 };
 
@@ -998,6 +1006,7 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
     switch (frame->format) {
     case AV_PIX_FMT_NV12:
     case AV_PIX_FMT_P010:
+    case AV_PIX_FMT_P012:
         surface->Data.Y  = frame->data[0];
         surface->Data.UV = frame->data[1];
         break;
@@ -1022,6 +1031,7 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
         break;
 
     case AV_PIX_FMT_Y210:
+    case AV_PIX_FMT_Y212:
         surface->Data.Y16 = (mfxU16 *)frame->data[0];
         surface->Data.U16 = (mfxU16 *)frame->data[0] + 1;
         surface->Data.V16 = (mfxU16 *)frame->data[0] + 3;
@@ -1034,6 +1044,12 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
         break;
     case AV_PIX_FMT_Y410:
         surface->Data.U = frame->data[0];
+        break;
+    case AV_PIX_FMT_Y412:
+        surface->Data.U = frame->data[0];
+        surface->Data.Y = frame->data[0] + 1;
+        surface->Data.V = frame->data[0] + 2;
+        surface->Data.A = frame->data[0] + 3;
         break;
 #endif
     default:
