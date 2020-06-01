@@ -62,7 +62,6 @@ typedef struct VAAPIEncodeH265Context {
     int tier;
     int level;
     int sei;
-    int b_frame_strategy;
 
     // Derived settings.
     int fixed_qp_idr;
@@ -896,7 +895,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
     sh->slice_type = hpic->slice_type;
 
-    if (sh->slice_type == HEVC_SLICE_P && ctx->b_frame_strategy)
+    if (sh->slice_type == HEVC_SLICE_P && ctx->p_to_b)
         sh->slice_type = HEVC_SLICE_B;
 
     sh->slice_pic_order_cnt_lsb = hpic->pic_order_cnt &
@@ -1057,7 +1056,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         av_assert0(pic->type == PICTURE_TYPE_P ||
                    pic->type == PICTURE_TYPE_B);
         vslice->ref_pic_list0[0] = vpic->reference_frames[0];
-        if (ctx->b_frame_strategy && pic->type == PICTURE_TYPE_P)
+        if (ctx->p_to_b && pic->type == PICTURE_TYPE_P)
             // Reference for low delay B-frame, L0 == L1
             vslice->ref_pic_list1[0] = vpic->reference_frames[0];
     }
@@ -1189,15 +1188,6 @@ static av_cold int vaapi_encode_h265_init(AVCodecContext *avctx)
     if (priv->qp > 0)
         ctx->explicit_qp = priv->qp;
 
-    ctx->b_frame_strategy = priv->b_frame_strategy;
-
-    // Low delay B-frames is required for low power encoding.
-    if (ctx->low_power && ctx->b_frame_strategy != 1) {
-        ctx->b_frame_strategy = 1;
-        av_log(avctx, AV_LOG_WARNING, "Changed into low delay "
-               "B-frames required for low power encoding.\n");
-    }
-
     return ff_vaapi_encode_init(avctx);
 }
 
@@ -1273,14 +1263,6 @@ static const AVOption vaapi_encode_h265_options[] = {
       0, AV_OPT_TYPE_CONST,
       { .i64 = SEI_MASTERING_DISPLAY | SEI_CONTENT_LIGHT_LEVEL },
       INT_MIN, INT_MAX, FLAGS, "sei" },
-    { "b_strategy", "Strategy to choose between I/P/B-frames",
-      OFFSET(b_frame_strategy), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 2, FLAGS, "b_strategy" },
-        { "normal",      "Normal IB..BPB..B strategy",
-                          0, AV_OPT_TYPE_CONST, { .i64 = 0 }, INT_MIN, INT_MAX, FLAGS, "b_strategy" },
-        { "low_delay_b", "Use low delay B-frames with forward-prediction only",
-                          0, AV_OPT_TYPE_CONST, { .i64 = 1 }, INT_MIN, INT_MAX, FLAGS, "b_strategy" },
-        { "ref_b",       "Only convert P-frames to low delay B-frames as references",
-                          0, AV_OPT_TYPE_CONST, { .i64 = 2 }, INT_MIN, INT_MAX, FLAGS, "b_strategy" },
 
     { NULL },
 };

@@ -1800,13 +1800,23 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
     } else
         b_predict_direction =  attr[1].value;
 
-    if (!ctx->b_frame_strategy &&
-        b_predict_direction & VA_PREDICTION_DIRECTION_BI_NOT_EMPTY) {
+    if (b_predict_direction & VA_PREDICTION_DIRECTION_BI_NOT_EMPTY) {
         av_log(avctx, AV_LOG_WARNING, "Driver does not support P "
-               "reference frames, change b_strategy to "
-               "low_delay_b frames.\n");
-        ctx->b_frame_strategy = 1;
+               "reference frames.\n");
+        if (!ref_l0 || !ref_l1) {
+            av_log(avctx, AV_LOG_ERROR, "Query result conflicts.\n");
+            return AVERROR_EXTERNAL;
+        }
+        ctx->p_to_b = 1;
+        av_log(avctx, AV_LOG_WARNING, "Convert P-frames to low delay "
+               "B frames.\n");
     }
+#else
+    av_log(avctx, AV_LOG_WARNING, "B prediction direction query is "
+           "not supported with this VAAPI version.\n");
+    // Low delay B-frames is required for low power encoding
+    if (ctx->low_power)
+        ctx->p_to_b = 1;
 #endif
     if (ctx->codec->flags & FLAG_INTRA_ONLY ||
         avctx->gop_size <= 1) {
@@ -1817,9 +1827,8 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
                "reference frames.\n");
         return AVERROR(EINVAL);
     } else if (!(ctx->codec->flags & FLAG_B_PICTURES) ||
-               ref_l1 < 1 || avctx->max_b_frames < 1 ||
-               ctx->b_frame_strategy == 1) {
-        if (ctx->b_frame_strategy == 1)
+               ref_l1 < 1 || avctx->max_b_frames < 1) {
+        if (ctx->p_to_b)
             av_log(avctx, AV_LOG_VERBOSE, "Using intra and low delay "
                    "B-frames (supported references: %d / %d).\n",
                    ref_l0, ref_l1);
@@ -1830,8 +1839,8 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
         ctx->p_per_i  = INT_MAX;
         ctx->b_per_p  = 0;
     } else {
-        if (ctx->b_frame_strategy == 2)
-            av_log(avctx, AV_LOG_VERBOSE, "Using intra, reference B- and "
+        if (ctx->p_to_b)
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra, low delay B- and "
                    "B-frames (supported references: %d / %d).\n",
                    ref_l0, ref_l1);
         else
