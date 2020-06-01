@@ -1828,26 +1828,54 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
     VAStatus vas;
-    VAConfigAttrib attr = { VAConfigAttribEncMaxRefFrames };
+    VAConfigAttrib attr[2] = { { VAConfigAttribEncMaxRefFrames },
+#if VA_CHECK_VERSION(1, 8, 0)
+                               { VAConfigAttribPredictionDirection }
+#else
+                               { VAConfigAttribTypeMax }
+#endif
+                             };
     uint32_t ref_l0, ref_l1;
 
     vas = vaGetConfigAttributes(ctx->hwctx->display,
                                 ctx->va_profile,
                                 ctx->va_entrypoint,
-                                &attr, 1);
+                                attr, FF_ARRAY_ELEMS(attr));
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to query reference frames "
                "attribute: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR_EXTERNAL;
     }
 
-    if (attr.value == VA_ATTRIB_NOT_SUPPORTED) {
+    if (attr[0].value == VA_ATTRIB_NOT_SUPPORTED) {
         ref_l0 = ref_l1 = 0;
     } else {
-        ref_l0 = attr.value       & 0xffff;
-        ref_l1 = attr.value >> 16 & 0xffff;
+        ref_l0 = attr[0].value       & 0xffff;
+        ref_l1 = attr[0].value >> 16 & 0xffff;
     }
 
+#if VA_CHECK_VERSION(1, 8, 0)
+    if (attr[1].value != VA_ATTRIB_NOT_SUPPORTED &&
+        attr[1].value & VA_PREDICTION_DIRECTION_BI_NOT_EMPTY) {
+        av_log(avctx, AV_LOG_WARNING, "Driver does not support P "
+               "reference frames.\n");
+        if (!ref_l0 || !ref_l1) {
+            av_log(avctx, AV_LOG_ERROR, "Query result conflicts.\n");
+            return AVERROR_EXTERNAL;
+        }
+        ctx->p_to_b = 1;
+        av_log(avctx, AV_LOG_WARNING, "Convert P-frames to low delay "
+               "B-frames.\n");
+    }
+#else
+    av_log(avctx, AV_LOG_WARNING, "B-frame prediction direction query "
+           "is not supported with this VAAPI version.\n");
+    // P frames is not supported in low power encoding for HEVC, hence
+    // we convert P-frames to low delay B-frames if query is not
+    // available with this VAAPI version.
+    if (ctx->low_power)
+        ctx->p_to_b = 1;
+#endif
     if (ctx->codec->flags & FLAG_INTRA_ONLY ||
         avctx->gop_size <= 1) {
         av_log(avctx, AV_LOG_VERBOSE, "Using intra frames only.\n");
@@ -1858,14 +1886,24 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     } else if (!(ctx->codec->flags & FLAG_B_PICTURES) ||
                ref_l1 < 1 || avctx->max_b_frames < 1) {
-        av_log(avctx, AV_LOG_VERBOSE, "Using intra and P-frames "
-               "(supported references: %d / %d).\n", ref_l0, ref_l1);
+        if (ctx->p_to_b)
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra and low delay "
+                   "B-frames (supported references: %d / %d).\n",
+                   ref_l0, ref_l1);
+        else
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra and P-frames "
+                   "(supported references: %d / %d).\n", ref_l0, ref_l1);
         ctx->gop_size = avctx->gop_size;
         ctx->p_per_i  = INT_MAX;
         ctx->b_per_p  = 0;
     } else {
-        av_log(avctx, AV_LOG_VERBOSE, "Using intra, P- and B-frames "
-               "(supported references: %d / %d).\n", ref_l0, ref_l1);
+        if (ctx->p_to_b)
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra, low delay B- and "
+                   "B-frames (supported references: %d / %d).\n",
+                   ref_l0, ref_l1);
+        else
+            av_log(avctx, AV_LOG_VERBOSE, "Using intra, P- and B-frames "
+                   "(supported references: %d / %d).\n", ref_l0, ref_l1);
         ctx->gop_size = avctx->gop_size;
         ctx->p_per_i  = INT_MAX;
         ctx->b_per_p  = avctx->max_b_frames;
