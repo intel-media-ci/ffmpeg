@@ -1768,26 +1768,46 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
     VAStatus vas;
-    VAConfigAttrib attr = { VAConfigAttribEncMaxRefFrames };
-    uint32_t ref_l0, ref_l1;
+    VAConfigAttrib attr[2] = { { VAConfigAttribEncMaxRefFrames },
+#if VA_CHECK_VERSION(1, 8, 0)
+                               { VAConfigAttribPredictionDirection }
+#else
+                               { VAConfigAttribEncMaxRefFrames }
+#endif
+                             };
+    uint32_t ref_l0, ref_l1, b_predict_direction;
 
     vas = vaGetConfigAttributes(ctx->hwctx->display,
                                 ctx->va_profile,
                                 ctx->va_entrypoint,
-                                &attr, 1);
+                                attr, FF_ARRAY_ELEMS(attr));
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to query reference frames "
                "attribute: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR_EXTERNAL;
     }
 
-    if (attr.value == VA_ATTRIB_NOT_SUPPORTED) {
+    if (attr[0].value == VA_ATTRIB_NOT_SUPPORTED) {
         ref_l0 = ref_l1 = 0;
     } else {
-        ref_l0 = attr.value       & 0xffff;
-        ref_l1 = attr.value >> 16 & 0xffff;
+        ref_l0 = attr[0].value       & 0xffff;
+        ref_l1 = attr[0].value >> 16 & 0xffff;
     }
+#if VA_CHECK_VERSION(1, 8, 0)
+    if (attr[1].value == VA_ATTRIB_NOT_SUPPORTED) {
+        b_predict_direction = VA_PREDICTION_DIRECTION_PREVIOUS |
+                              VA_PREDICTION_DIRECTION_FUTURE;
+    } else
+        b_predict_direction =  attr[1].value;
 
+    if (!ctx->b_frame_strategy &&
+        b_predict_direction & VA_PREDICTION_DIRECTION_BI_NOT_EMPTY) {
+        av_log(avctx, AV_LOG_WARNING, "Driver does not support P "
+               "reference frames, change b_strategy to "
+               "low_delay_b frames.\n");
+        ctx->b_frame_strategy = 1;
+    }
+#endif
     if (ctx->codec->flags & FLAG_INTRA_ONLY ||
         avctx->gop_size <= 1) {
         av_log(avctx, AV_LOG_VERBOSE, "Using intra frames only.\n");
