@@ -553,6 +553,14 @@ VAProfile ff_vaapi_parse_hevc_rext_profile(AVCodecContext *avctx)
     else if (!strcmp(profile->name, "Main 4:4:4 10") ||
              !strcmp(profile->name, "Main 4:4:4 10 Intra"))
         return VAProfileHEVCMain444_10;
+    else if (!strcmp(profile->name, "Screen-Extended Main"))
+        return VAProfileHEVCSccMain;
+    else if (!strcmp(profile->name, "Screen-Extended Main 10"))
+        return VAProfileHEVCSccMain10;
+    else if (!strcmp(profile->name, "Screen-Extended Main 4:4:4"))
+        return VAProfileHEVCSccMain444;
+    else if (!strcmp(profile->name, "Screen-Extended Main 4:4:4 10"))
+        return VAProfileHEVCSccMain444_10;
 #else
     av_log(avctx, AV_LOG_WARNING, "HEVC profile %s is "
            "not supported with this VA version.\n", profile->name);
