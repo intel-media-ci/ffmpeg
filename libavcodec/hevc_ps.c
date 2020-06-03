@@ -909,7 +909,7 @@ int ff_hevc_parse_sps(HEVCSPS *sps, GetBitContext *gb, unsigned int *sps_id,
     HEVCWindow *ow;
     int ret = 0;
     int log2_diff_max_min_transform_block_size;
-    int bit_depth_chroma, start, vui_present, sublayer_ordering_info;
+    int bit_depth_chroma, start, vui_present, sublayer_ordering_info, num_comps;
     int i;
 
     // Coded parameters
@@ -1130,8 +1130,11 @@ int ff_hevc_parse_sps(HEVCSPS *sps, GetBitContext *gb, unsigned int *sps_id,
         decode_vui(gb, avctx, apply_defdispwin, sps);
 
     if (get_bits1(gb)) { // sps_extension_flag
-        sps->sps_range_extension_flag = get_bits1(gb);
-        skip_bits(gb, 7); //sps_extension_7bits = get_bits(gb, 7);
+        sps->sps_range_extension_flag      = get_bits1(gb);
+        sps->sps_multilayer_extension_flag = get_bits1(gb);
+        sps->sps_3d_extension_flag         = get_bits1(gb);
+        sps->sps_scc_extension_flag        = get_bits1(gb);
+        skip_bits(gb, 4); //sps_extension_4bits = get_bits(gb, 4);
         if (sps->sps_range_extension_flag) {
             sps->transform_skip_rotation_enabled_flag = get_bits1(gb);
             sps->transform_skip_context_enabled_flag  = get_bits1(gb);
@@ -1156,6 +1159,29 @@ int ff_hevc_parse_sps(HEVCSPS *sps, GetBitContext *gb, unsigned int *sps_id,
             if (sps->cabac_bypass_alignment_enabled_flag)
                 av_log(avctx, AV_LOG_WARNING,
                    "cabac_bypass_alignment_enabled_flag not yet implemented\n");
+        }
+        if (sps->sps_multilayer_extension_flag || sps->sps_3d_extension_flag)
+            av_log(avctx, AV_LOG_WARNING,
+                   "multilayer_extension or 3d_extension not yet implemented\n");
+
+        if (sps->sps_scc_extension_flag) {
+            sps->sps_curr_pic_ref_enabled_flag = get_bits1(gb);
+            sps->palette_mode_enabled_flag     = get_bits1(gb);
+            if (sps->palette_mode_enabled_flag) {
+                sps->palette_max_size = get_ue_golomb_long(gb);
+                sps->delta_palette_max_predictor_size = get_ue_golomb_long(gb);
+                sps->sps_palette_predictor_initializers_present_flag = get_bits1(gb);
+
+                if (sps->sps_palette_predictor_initializers_present_flag) {
+                    sps->sps_num_palette_predictor_initializers_minus1 = get_ue_golomb_long(gb);
+                    num_comps = sps->chroma_format_idc == 0 ? 1 : 3;
+                    for (int comp = 0; comp < num_comps; comp++)
+                        for (i = 0; i <= sps->sps_num_palette_predictor_initializers_minus1; i++)
+                            sps->sps_palette_predictor_initializer[comp][i] = get_ue_golomb_long(gb);
+                }
+            }
+            sps->motion_vector_resolution_control_idc   = get_bits(gb, 2);
+            sps->intra_boundary_filtering_disabled_flag = get_bits1(gb);
         }
     }
     if (apply_defdispwin) {
