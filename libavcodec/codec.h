@@ -169,6 +169,11 @@
  * remain pending.
  */
 #define AV_CODEC_CAP_ENCODER_FLUSH   (1 << 21)
+/**
+ * Codec supports variable dimensions encoding. This indicates that input frames are
+ * allowed to be in variable dimensions/resolutions, otherwise they have to keep constant.
+ */
+#define AV_CODEC_CAP_VARIABLE_DIMENSIONS (1 << 22)
 
 /**
  * AVProfile.

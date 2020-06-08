@@ -97,7 +97,9 @@
  *   - For decoding, call avcodec_send_packet() to give the decoder raw
  *     compressed data in an AVPacket.
  *   - For encoding, call avcodec_send_frame() to give the encoder an AVFrame
- *     containing uncompressed audio or video.
+ *     containing uncompressed audio or video. Video encoder requires input
+ *     frames to be in constant dimensions unless it declare the capability
+ *     of AV_CODEC_CAP_VARIABLE_DIMENSIONS.
  *
  *   In both cases, it is recommended that AVPackets and AVFrames are
  *   refcounted, or libavcodec might have to copy the input data. (libavformat
