@@ -57,6 +57,8 @@ isNBPS:
   nv20le
   p010be
   p010le
+  p012be
+  p012le
   x2rgb10be
   x2rgb10le
   xyz12be
@@ -137,6 +139,7 @@ isBE:
   grayf32be
   nv20be
   p010be
+  p012be
   p016be
   rgb444be
   rgb48be
@@ -188,6 +191,8 @@ isYUV:
   nv42
   p010be
   p010le
+  p012be
+  p012le
   p016be
   p016le
   uyvy422
@@ -282,6 +287,8 @@ isPlanarYUV:
   nv42
   p010be
   p010le
+  p012be
+  p012le
   p016be
   p016le
   yuv410p
@@ -365,6 +372,8 @@ isSemiPlanarYUV:
   nv42
   p010be
   p010le
+  p012be
+  p012le
   p016be
   p016le
 
@@ -740,6 +749,8 @@ Planar:
   nv42
   p010be
   p010le
+  p012be
+  p012le
   p016be
   p016le
   yuv410p
