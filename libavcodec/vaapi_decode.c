@@ -269,6 +269,9 @@ static const struct {
 #ifdef VA_FOURCC_P010
     MAP(P010, P010),
 #endif
+#ifdef VA_FOURCC_P012
+    MAP(P012, P012),
+#endif
 #ifdef VA_FOURCC_I010
     MAP(I010, YUV420P10),
 #endif
