@@ -66,6 +66,22 @@ int main(void)
             ++pass;                                             \
     } while (0)
 
+#define TEST_SPECIFIC(src, dst1, dst2, expected) do {           \
+        output = av_find_best_pix_fmt_of_2(dst1, dst2,          \
+                                           src, 0, NULL);       \
+        if (output != expected) {                               \
+            printf("Matching %s with %s and %s: got %s, expected %s\n", \
+                   av_get_pix_fmt_name(src),                    \
+                   av_get_pix_fmt_name(dst1),                   \
+                   av_get_pix_fmt_name(dst2),                   \
+                   av_get_pix_fmt_name(output),                 \
+                   av_get_pix_fmt_name(expected));              \
+            ++fail;                                             \
+        } else                                                  \
+            ++pass;                                             \
+    } while (0)
+
+
     // Same formats.
     for (i = 0; i < FF_ARRAY_ELEMS(pixfmt_list); i++)
         TEST(pixfmt_list[i], pixfmt_list[i]);
@@ -134,6 +150,9 @@ int main(void)
 
     // Opaque formats are least unlike each other.
     TEST(AV_PIX_FMT_DXVA2_VLD, AV_PIX_FMT_VAAPI);
+
+    // Specific test list
+    TEST_SPECIFIC(AV_PIX_FMT_YUV420P10LE, AV_PIX_FMT_P012LE, AV_PIX_FMT_P010LE, AV_PIX_FMT_P010LE);
 
     printf("%d tests passed, %d tests failed.\n", pass, fail);
     return !!fail;
