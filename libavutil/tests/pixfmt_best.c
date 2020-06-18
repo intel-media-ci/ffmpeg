@@ -133,7 +133,7 @@ int main(void)
     TEST(AV_PIX_FMT_RGB48LE,     AV_PIX_FMT_RGB48);
 
     // Opaque formats are least unlike each other.
-    TEST(AV_PIX_FMT_DXVA2_VLD, AV_PIX_FMT_VDPAU);
+    TEST(AV_PIX_FMT_DXVA2_VLD, AV_PIX_FMT_VAAPI);
 
     printf("%d tests passed, %d tests failed.\n", pass, fail);
     return !!fail;
