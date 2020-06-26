@@ -610,6 +610,9 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     switch (q->param.mfx.RateControlMethod) {
     case MFX_RATECONTROL_CBR:
     case MFX_RATECONTROL_VBR:
+        if (q->extbrc) {
+            q->extco2.LookAheadDepth = q->look_ahead_depth;
+        }
 #if QSV_HAVE_VCM
     case MFX_RATECONTROL_VCM:
 #endif
