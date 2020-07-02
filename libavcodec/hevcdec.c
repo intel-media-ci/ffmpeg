@@ -681,8 +681,14 @@ static int hls_slice_header(HEVCContext *s)
             else
                 sh->slice_temporal_mvp_enabled_flag = 0;
         } else {
-            s->sh.short_term_rps = NULL;
             s->poc               = 0;
+            if (s->ps.pps->pps_curr_pic_ref_enabled_flag) {
+                sh->long_term_rps.nb_refs = NB_RPS_TYPE;
+                sh->long_term_rps.used[LT_CURR]++;
+                s->sh.short_term_rps = NULL;
+                s->rps[LT_CURR].nb_refs = 1;
+            } else
+                s->sh.short_term_rps = NULL;
         }
 
         /* 8.3.1 */
