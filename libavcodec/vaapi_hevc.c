@@ -588,7 +588,8 @@ VAProfile ff_vaapi_parse_hevc_rext_profile(AVCodecContext *avctx)
     else if (!strcmp(profile->name, "Screen-Extended Main 10"))
         return VAProfileHEVCSccMain10;
     else if (!strcmp(profile->name, "Screen-Extended Main 4:4:4"))
-        return VAProfileHEVCSccMain444;
+        //return VAProfileHEVCSccMain444;
+        return VAProfileHEVCSccMain;
     else if (!strcmp(profile->name, "Screen-Extended Main 4:4:4 10"))
         return VAProfileHEVCSccMain444_10;
 #else
