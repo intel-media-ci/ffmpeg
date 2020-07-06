@@ -164,6 +164,7 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
             .tiles_enabled_flag                         = pps->tiles_enabled_flag,
             .separate_colour_plane_flag                 = sps->separate_colour_plane_flag,
             .pcm_enabled_flag                           = sps->pcm_enabled_flag,
+	    .NoPicReorderingFlag                        = 1,
             .scaling_list_enabled_flag                  = sps->scaling_list_enable_flag,
             .transform_skip_enabled_flag                = pps->transform_skip_enabled_flag,
             .amp_enabled_flag                           = sps->amp_enabled_flag,
@@ -193,7 +194,8 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
             .slice_segment_header_extension_present_flag = pps->slice_header_extension_present_flag,
             .RapPicFlag                                  = IS_IRAP(h),
             .IdrPicFlag                                  = IS_IDR(h),
-            .IntraPicFlag                                = IS_IRAP(h),
+//            .IntraPicFlag                                = IS_IRAP(h),
+            .IntraPicFlag                                = 0,
         },
     };
 
@@ -218,7 +220,8 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
     }
 
 #if VA_CHECK_VERSION(1, 2, 0)
-    if (avctx->profile == FF_PROFILE_HEVC_REXT) {
+    if (avctx->profile == FF_PROFILE_HEVC_REXT ||
+        avctx->profile == FF_PROFILE_HEVC_SCC) {
         pic->pic_param.rext = (VAPictureParameterBufferHEVCRext) {
             .range_extension_pic_fields.bits  = {
                 .transform_skip_rotation_enabled_flag       = sps->transform_skip_rotation_enabled_flag,
@@ -367,9 +370,7 @@ static void fill_pred_weight_table(const HEVCContext *h,
     slice_param->delta_chroma_log2_weight_denom = 0;
     slice_param->luma_log2_weight_denom         = 0;
 
-    if (sh->slice_type == HEVC_SLICE_I ||
-        (sh->slice_type == HEVC_SLICE_P && !h->ps.pps->weighted_pred_flag) ||
-        (sh->slice_type == HEVC_SLICE_B && !h->ps.pps->weighted_bipred_flag))
+    if (sh->slice_type == HEVC_SLICE_I)
         return;
 
     slice_param->luma_log2_weight_denom = sh->luma_log2_weight_denom;
