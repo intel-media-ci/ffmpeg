@@ -662,7 +662,7 @@ static int hls_slice_header(HEVCContext *s)
                 }
 
                 numbits = av_ceil_log2(s->ps.sps->nb_st_rps);
-		rps_idx = numbits > 0 ? get_bits(gb, numbits) : 0;
+		 rps_idx = numbits > 0 ? get_bits(gb, numbits) : 0;
                 sh->short_term_rps = &s->ps.sps->st_rps[rps_idx];
             }
             sh->short_term_ref_pic_set_size = pos - get_bits_left(gb);
@@ -681,8 +681,8 @@ static int hls_slice_header(HEVCContext *s)
             else
                 sh->slice_temporal_mvp_enabled_flag = 0;
         } else {
+	     sh->short_term_rps   = NULL;
             s->poc               = 0;
-	    sh->short_term_rps = &sh->slice_rps;
         }
 
         /* 8.3.1 */

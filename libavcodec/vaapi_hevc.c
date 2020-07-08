@@ -100,7 +100,6 @@ static void fill_vaapi_reference_frames(const HEVCContext *h, VAPictureParameter
         const HEVCFrame *frame = NULL;
 
         while (!frame && j < FF_ARRAY_ELEMS(h->DPB)) {
-            //if (&h->DPB[j] != current_picture && (h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
             if ((h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
                 frame = &h->DPB[j];
             j++;
@@ -165,7 +164,6 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
             .tiles_enabled_flag                         = pps->tiles_enabled_flag,
             .separate_colour_plane_flag                 = sps->separate_colour_plane_flag,
             .pcm_enabled_flag                           = sps->pcm_enabled_flag,
-	    .NoPicReorderingFlag                        = 1,
             .scaling_list_enabled_flag                  = sps->scaling_list_enable_flag,
             .transform_skip_enabled_flag                = pps->transform_skip_enabled_flag,
             .amp_enabled_flag                           = sps->amp_enabled_flag,
@@ -195,8 +193,7 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
             .slice_segment_header_extension_present_flag = pps->slice_header_extension_present_flag,
             .RapPicFlag                                  = IS_IRAP(h),
             .IdrPicFlag                                  = IS_IDR(h),
-//            .IntraPicFlag                                = IS_IRAP(h),
-            .IntraPicFlag                                = 0,
+            .IntraPicFlag                                = IS_IRAP(h),
         },
     };
 

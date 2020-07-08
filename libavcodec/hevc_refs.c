@@ -429,7 +429,6 @@ static int add_candidate_ref(HEVCContext *s, RefPicList *list,
 {
     HEVCFrame *ref = find_ref_idx(s, poc, use_msb);
 
-    //if (ref == s->ref || list->nb_refs >= HEVC_MAX_REFS)
     if (list->nb_refs >= HEVC_MAX_REFS)
         return AVERROR_INVALIDDATA;
 
@@ -490,7 +489,7 @@ int ff_hevc_frame_rps(HEVCContext *s)
     }
 
     if (s->ps.pps->pps_curr_pic_ref_enabled_flag) {
-	ret = add_candidate_ref(s, &rps[ST_FOLL], s->poc, HEVC_FRAME_FLAG_SHORT_REF, 1);
+	 ret = add_candidate_ref(s, &rps[ST_FOLL], s->poc, HEVC_FRAME_FLAG_SHORT_REF, 1);
         if (ret < 0)
             goto fail;
     }
@@ -533,7 +532,7 @@ int ff_hevc_frame_nb_refs(const HEVCContext *s)
     }
 
     if (s->ps.pps->pps_curr_pic_ref_enabled_flag)
-	ret++;
+	 ret++;
 
     return ret;
 }
