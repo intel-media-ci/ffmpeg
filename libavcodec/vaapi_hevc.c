@@ -103,7 +103,8 @@ static void fill_vaapi_reference_frames(const HEVCContext *h, VAPictureParameter
         const HEVCFrame *frame = NULL;
 
         while (!frame && j < FF_ARRAY_ELEMS(h->DPB)) {
-            if (&h->DPB[j] != current_picture && (h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
+            if ((&h->DPB[j] != current_picture || h->ps.pps->pps_curr_pic_ref_enabled_flag) &&
+                (h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
                 frame = &h->DPB[j];
             j++;
         }
@@ -221,7 +222,8 @@ static int vaapi_hevc_start_frame(AVCodecContext          *avctx,
     }
 
 #if VA_CHECK_VERSION(1, 2, 0)
-    if (avctx->profile == FF_PROFILE_HEVC_REXT) {
+    if (avctx->profile == FF_PROFILE_HEVC_REXT ||
+        avctx->profile == FF_PROFILE_HEVC_SCC) {
         pic->pic_param.rext = (VAPictureParameterBufferHEVCRext) {
             .range_extension_pic_fields.bits  = {
                 .transform_skip_rotation_enabled_flag       = sps->transform_skip_rotation_enabled_flag,
@@ -377,9 +379,7 @@ static void fill_pred_weight_table(const AVCodecContext *avctx,
     slice_param->delta_chroma_log2_weight_denom = 0;
     slice_param->luma_log2_weight_denom         = 0;
 
-    if (sh->slice_type == HEVC_SLICE_I ||
-        (sh->slice_type == HEVC_SLICE_P && !h->ps.pps->weighted_pred_flag) ||
-        (sh->slice_type == HEVC_SLICE_B && !h->ps.pps->weighted_bipred_flag))
+    if (sh->slice_type == HEVC_SLICE_I)
         return;
 
     slice_param->luma_log2_weight_denom = sh->luma_log2_weight_denom;
