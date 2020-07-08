@@ -100,7 +100,8 @@ static void fill_vaapi_reference_frames(const HEVCContext *h, VAPictureParameter
         const HEVCFrame *frame = NULL;
 
         while (!frame && j < FF_ARRAY_ELEMS(h->DPB)) {
-            if (&h->DPB[j] != current_picture && (h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
+            //if (&h->DPB[j] != current_picture && (h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
+            if ((h->DPB[j].flags & (HEVC_FRAME_FLAG_LONG_REF | HEVC_FRAME_FLAG_SHORT_REF)))
                 frame = &h->DPB[j];
             j++;
         }

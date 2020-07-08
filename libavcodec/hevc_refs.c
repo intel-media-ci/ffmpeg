@@ -301,7 +301,7 @@ int ff_hevc_slice_rpl(HEVCContext *s)
         return ret;
 
     if (!(s->rps[ST_CURR_BEF].nb_refs + s->rps[ST_CURR_AFT].nb_refs +
-          s->rps[LT_CURR].nb_refs)) {
+          s->rps[LT_CURR].nb_refs) && !s->ps.pps->pps_curr_pic_ref_enabled_flag) {
         av_log(s->avctx, AV_LOG_ERROR, "Zero refs in the frame RPS.\n");
         return AVERROR_INVALIDDATA;
     }
@@ -328,6 +328,12 @@ int ff_hevc_slice_rpl(HEVCContext *s)
                     rpl_tmp.nb_refs++;
                 }
             }
+
+	    if (s->ps.pps->pps_curr_pic_ref_enabled_flag) {
+                rpl_tmp.ref[rpl_tmp.nb_refs]            = s->ref;
+	        rpl_tmp.isLongTerm[rpl_tmp.nb_refs]     = 0;
+		rpl_tmp.nb_refs++;
+	    }
         }
 
         /* reorder the references if necessary */
@@ -423,7 +429,8 @@ static int add_candidate_ref(HEVCContext *s, RefPicList *list,
 {
     HEVCFrame *ref = find_ref_idx(s, poc, use_msb);
 
-    if (ref == s->ref || list->nb_refs >= HEVC_MAX_REFS)
+    //if (ref == s->ref || list->nb_refs >= HEVC_MAX_REFS)
+    if (list->nb_refs >= HEVC_MAX_REFS)
         return AVERROR_INVALIDDATA;
 
     if (!ref) {
@@ -442,10 +449,15 @@ static int add_candidate_ref(HEVCContext *s, RefPicList *list,
 
 int ff_hevc_frame_rps(HEVCContext *s)
 {
-    const ShortTermRPS *short_rps = s->sh.short_term_rps;
+    const ShortTermRPS *short_rps;
     const LongTermRPS  *long_rps  = &s->sh.long_term_rps;
     RefPicList               *rps = s->rps;
     int i, ret = 0;
+
+    if (s->sh.short_term_ref_pic_set_sps_flag)
+        short_rps = &s->ps.sps->st_rps[s->sh.short_term_rps_index];
+    else
+        short_rps = s->sh.short_term_rps;
 
     if (!short_rps) {
         rps[0].nb_refs = rps[1].nb_refs = 0;
@@ -482,6 +494,12 @@ int ff_hevc_frame_rps(HEVCContext *s)
             goto fail;
     }
 
+    if (s->ps.pps->pps_curr_pic_ref_enabled_flag) {
+	ret = add_candidate_ref(s, &rps[ST_FOLL], s->poc, HEVC_FRAME_FLAG_SHORT_REF, 1);
+        if (ret < 0)
+            goto fail;
+    }
+
     /* add the long refs */
     for (i = 0; i < long_rps->nb_refs; i++) {
         int poc  = long_rps->poc[i];
@@ -504,8 +522,14 @@ int ff_hevc_frame_nb_refs(const HEVCContext *s)
 {
     int ret = 0;
     int i;
-    const ShortTermRPS *rps = s->sh.short_term_rps;
+    const ShortTermRPS *rps;
     const LongTermRPS *long_rps = &s->sh.long_term_rps;
+    const SliceHeader *sh   = &s->sh;
+
+     if (sh->short_term_ref_pic_set_sps_flag)
+        rps = &s->ps.sps->st_rps[sh->short_term_rps_index];
+    else
+        rps = s->sh.short_term_rps;
 
     if (rps) {
         for (i = 0; i < rps->num_negative_pics; i++)
@@ -518,5 +542,9 @@ int ff_hevc_frame_nb_refs(const HEVCContext *s)
         for (i = 0; i < long_rps->nb_refs; i++)
             ret += !!long_rps->used[i];
     }
+
+    if (s->ps.pps->pps_curr_pic_ref_enabled_flag)
+	ret++;
+
     return ret;
 }
