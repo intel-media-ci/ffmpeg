@@ -654,7 +654,7 @@ static int hls_slice_header(HEVCContext *s)
 
                 sh->short_term_rps = &sh->slice_rps;
             } else {
-                int numbits;
+                int numbits, rps_idx;
 
                 if (!s->ps.sps->nb_st_rps) {
                     av_log(s->avctx, AV_LOG_ERROR, "No ref lists in the SPS.\n");
@@ -662,8 +662,8 @@ static int hls_slice_header(HEVCContext *s)
                 }
 
                 numbits = av_ceil_log2(s->ps.sps->nb_st_rps);
-		sh->short_term_rps_index = numbits > 0 ? get_bits(gb, numbits) : 0;
-                sh->short_term_rps = &s->ps.sps->st_rps[sh->short_term_rps_index];
+		rps_idx = numbits > 0 ? get_bits(gb, numbits) : 0;
+                sh->short_term_rps = &s->ps.sps->st_rps[rps_idx];
             }
             sh->short_term_ref_pic_set_size = pos - get_bits_left(gb);
 
@@ -683,30 +683,6 @@ static int hls_slice_header(HEVCContext *s)
         } else {
             s->poc               = 0;
 	    sh->short_term_rps = &sh->slice_rps;
-/*
-	    if (s->ps.pps->pps_curr_pic_ref_enabled_flag) {
-                if (!sh->short_term_ref_pic_set_sps_flag) {
-                    ret = ff_hevc_decode_short_term_rps(gb, s->avctx, &sh->slice_rps, s->ps.sps, 1);
-                    if (ret < 0)
-                        return ret;
-
-                    sh->short_term_rps = &sh->slice_rps;
-                } else {
-                    int numbits;
-
-                    if (!s->ps.sps->nb_st_rps) {
-                        av_log(s->avctx, AV_LOG_ERROR, "No ref lists in the SPS.\n");
-                        return AVERROR_INVALIDDATA;
-                    }
-
-                    numbits = av_ceil_log2(s->ps.sps->nb_st_rps);
-		    sh->short_term_rps_index = numbits > 0 ? get_bits(gb, numbits) : 0;
-                    sh->short_term_rps = &s->ps.sps->st_rps[sh->short_term_rps_index];
-                }
-
-	    } else
-	        s->sh.short_term_rps = NULL;
-*/
         }
 
         /* 8.3.1 */

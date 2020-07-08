@@ -449,15 +449,10 @@ static int add_candidate_ref(HEVCContext *s, RefPicList *list,
 
 int ff_hevc_frame_rps(HEVCContext *s)
 {
-    const ShortTermRPS *short_rps;
+    const ShortTermRPS *short_rps = s->sh.short_term_rps;
     const LongTermRPS  *long_rps  = &s->sh.long_term_rps;
     RefPicList               *rps = s->rps;
     int i, ret = 0;
-
-    if (s->sh.short_term_ref_pic_set_sps_flag)
-        short_rps = &s->ps.sps->st_rps[s->sh.short_term_rps_index];
-    else
-        short_rps = s->sh.short_term_rps;
 
     if (!short_rps) {
         rps[0].nb_refs = rps[1].nb_refs = 0;
@@ -522,14 +517,8 @@ int ff_hevc_frame_nb_refs(const HEVCContext *s)
 {
     int ret = 0;
     int i;
-    const ShortTermRPS *rps;
+    const ShortTermRPS *rps = s->sh.short_term_rps;
     const LongTermRPS *long_rps = &s->sh.long_term_rps;
-    const SliceHeader *sh   = &s->sh;
-
-     if (sh->short_term_ref_pic_set_sps_flag)
-        rps = &s->ps.sps->st_rps[sh->short_term_rps_index];
-    else
-        rps = s->sh.short_term_rps;
 
     if (rps) {
         for (i = 0; i < rps->num_negative_pics; i++)
