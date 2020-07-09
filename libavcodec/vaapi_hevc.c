@@ -360,7 +360,7 @@ static void fill_pred_weight_table(const AVCodecContext *avctx,
                                    VASliceParameterBufferHEVC *slice_param)
 {
 #if VA_CHECK_VERSION(1, 2, 0)
-    int is_rext = avctx->profile == FF_PROFILE_HEVC_REXT;
+    int is_rext = avctx->profile >= FF_PROFILE_HEVC_REXT;
 #else
     int is_rext = 0;
 #endif
@@ -390,7 +390,6 @@ static void fill_pred_weight_table(const AVCodecContext *avctx,
 
     for (i = 0; i < 15 && i < sh->nb_refs[L0]; i++) {
         slice_param->delta_luma_weight_l0[i] = sh->luma_weight_l0[i] - (1 << sh->luma_log2_weight_denom);
-
         slice_param->delta_chroma_weight_l0[i][0] = sh->chroma_weight_l0[i][0] - (1 << sh->chroma_log2_weight_denom);
         slice_param->delta_chroma_weight_l0[i][1] = sh->chroma_weight_l0[i][1] - (1 << sh->chroma_log2_weight_denom);
         if (!is_rext) {
@@ -516,6 +515,12 @@ static int vaapi_hevc_decode_slice(AVCodecContext *avctx,
             .slice_act_cb_qp_offset = sh->slice_act_cb_qp_offset,
             .slice_act_cr_qp_offset = sh->slice_act_cr_qp_offset,
         };
+        for (i = 0; i < 15 && i < sh->nb_refs[L0]; i++) {
+            pic->last_slice_param.rext.luma_offset_l0[i] = sh->luma_offset_l0[i];
+            pic->last_slice_param.rext.ChromaOffsetL0[i][0] = sh->chroma_offset_l0[i][0];
+            pic->last_slice_param.rext.ChromaOffsetL0[i][1] = sh->chroma_offset_l0[i][1];
+        }
+
         for (i = 0; i < 15 && i < sh->nb_refs[L0]; i++) {
             pic->last_slice_param.rext.luma_offset_l0[i] = sh->luma_offset_l0[i];
             pic->last_slice_param.rext.ChromaOffsetL0[i][0] = sh->chroma_offset_l0[i][0];
