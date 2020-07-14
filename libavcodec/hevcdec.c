@@ -586,8 +586,11 @@ static int hls_slice_header(HEVCContext *s)
             ff_hevc_clear_refs(s);
     }
     sh->no_output_of_prior_pics_flag = 0;
-    if (IS_IRAP(s))
+    if (IS_IRAP(s)) {
         sh->no_output_of_prior_pics_flag = get_bits1(gb);
+        if (s->avctx->skip_frame == AVDISCARD_INVALID)
+            s->avctx->skip_frame = AVDISCARD_DEFAULT;
+    }
 
     sh->pps_id = get_ue_golomb_long(gb);
     if (sh->pps_id >= HEVC_MAX_PPS_COUNT || !s->ps.pps_list[sh->pps_id]) {
@@ -3191,6 +3194,7 @@ static int decode_nal_unit(HEVCContext *s, const H2645NAL *nal)
         if (
             (s->avctx->skip_frame >= AVDISCARD_BIDIR && s->sh.slice_type == HEVC_SLICE_B) ||
             (s->avctx->skip_frame >= AVDISCARD_NONINTRA && s->sh.slice_type != HEVC_SLICE_I) ||
+            (s->avctx->skip_frame >= AVDISCARD_INVALID && !IS_IRAP(s)) ||
             (s->avctx->skip_frame >= AVDISCARD_NONKEY && !IS_IRAP(s))) {
             break;
         }

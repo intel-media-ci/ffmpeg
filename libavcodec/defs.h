@@ -47,6 +47,7 @@ enum AVDiscard{
      * keyframes for intra-only or drop just some bidir frames). */
     AVDISCARD_NONE    =-16, ///< discard nothing
     AVDISCARD_DEFAULT =  0, ///< discard useless packets like 0 size packets in avi
+    AVDISCARD_INVALID =  1, ///< discard invalid packets like NALs before IRAP
     AVDISCARD_NONREF  =  8, ///< discard all non reference
     AVDISCARD_BIDIR   = 16, ///< discard all bidirectional frames
     AVDISCARD_NONINTRA= 24, ///< discard all non intra frames
