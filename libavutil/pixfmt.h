@@ -289,6 +289,8 @@ enum AVPixelFormat {
     AV_PIX_FMT_GRAY10BE,   ///<        Y        , 10bpp, big-endian
     AV_PIX_FMT_GRAY10LE,   ///<        Y        , 10bpp, little-endian
 
+    AV_PIX_FMT_P012LE, ///< like NV12, with 12bpp per component, little-endian
+    AV_PIX_FMT_P012BE, ///< like NV12, with 12bpp per component, big-endian
     AV_PIX_FMT_P016LE, ///< like NV12, with 16bpp per component, little-endian
     AV_PIX_FMT_P016BE, ///< like NV12, with 16bpp per component, big-endian
 
@@ -350,9 +352,15 @@ enum AVPixelFormat {
     AV_PIX_FMT_Y210BE,    ///< packed YUV 4:2:2 like YUYV422, 20bpp, data in the high bits, big-endian
     AV_PIX_FMT_Y210LE,    ///< packed YUV 4:2:2 like YUYV422, 20bpp, data in the high bits, little-endian
 
+    AV_PIX_FMT_Y212BE,    ///< packed YUV 4:2:2 like YUYV422, 24bpp, data in the high bits, big-endian
+    AV_PIX_FMT_Y212LE,    ///< packed YUV 4:2:2 like YUYV422, 24bpp, data in the high bits, little-endian
+
     AV_PIX_FMT_0YUV,      ///< packed YUV 4:4:4, 32bpp,  X  Y Cb Cr, X=unused/undefined
     AV_PIX_FMT_Y410LE,    ///< packed YUV 4:4:4, 32bpp, Cr  Y Cb  A, little-endian
     AV_PIX_FMT_Y410BE,    ///< packed YUV 4:4:4, 32bpp, Cr  Y Cb  A, big-endian
+
+    AV_PIX_FMT_Y412LE,    ///< packed YUV 4:4:4, 36bpp, Cr  Y Cb  A, little-endian
+    AV_PIX_FMT_Y412BE,    ///< packed YUV 4:4:4, 36bpp, Cr  Y Cb  A, big-endian
 
     AV_PIX_FMT_X2RGB10LE, ///< packed RGB 10:10:10, 30bpp, (msb)2X 10R 10G 10B(lsb), little-endian, X=unused/undefined
     AV_PIX_FMT_X2RGB10BE, ///< packed RGB 10:10:10, 30bpp, (msb)2X 10R 10G 10B(lsb), big-endian, X=unused/undefined
@@ -457,10 +465,13 @@ enum AVPixelFormat {
 #define AV_PIX_FMT_NV20       AV_PIX_FMT_NE(NV20BE,  NV20LE)
 #define AV_PIX_FMT_AYUV64     AV_PIX_FMT_NE(AYUV64BE, AYUV64LE)
 #define AV_PIX_FMT_P010       AV_PIX_FMT_NE(P010BE,  P010LE)
+#define AV_PIX_FMT_P012       AV_PIX_FMT_NE(P012BE,  P012LE)
 #define AV_PIX_FMT_P016       AV_PIX_FMT_NE(P016BE,  P016LE)
 
 #define AV_PIX_FMT_Y210       AV_PIX_FMT_NE(Y210BE,  Y210LE)
 #define AV_PIX_FMT_Y410       AV_PIX_FMT_NE(Y410BE,  Y410LE)
+#define AV_PIX_FMT_Y212       AV_PIX_FMT_NE(Y212BE,  Y212LE)
+#define AV_PIX_FMT_Y412       AV_PIX_FMT_NE(Y412BE,  Y412LE)
 #define AV_PIX_FMT_X2RGB10    AV_PIX_FMT_NE(X2RGB10BE, X2RGB10LE)
 #define AV_PIX_FMT_X2BGR10    AV_PIX_FMT_NE(X2BGR10BE, X2BGR10LE)
 

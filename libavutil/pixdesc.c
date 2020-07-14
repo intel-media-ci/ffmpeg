@@ -224,6 +224,29 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
         },
         .flags = AV_PIX_FMT_FLAG_BE,
     },
+    [AV_PIX_FMT_Y212LE] = {
+        .name = "y212le",
+        .nb_components = 3,
+        .log2_chroma_w = 1,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 4, 0, 4, 12 },		/* Y */
+            { 0, 8, 2, 4, 12 },		/* U */
+            { 0, 8, 6, 4, 12 },		/* V */
+        },
+    },
+    [AV_PIX_FMT_Y212BE] = {
+        .name = "y212be",
+        .nb_components = 3,
+        .log2_chroma_w = 1,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 4, 0, 4, 12 },		/* Y */
+            { 0, 8, 2, 4, 12 },		/* U */
+            { 0, 8, 6, 4, 12 },		/* V */
+        },
+        .flags = AV_PIX_FMT_FLAG_BE,
+    },
     [AV_PIX_FMT_0YUV] = {
         .name = "0yuv",
         .nb_components = 3,
@@ -258,6 +281,32 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
             { 0, 32, 20, 0, 10 },        /* V */
         },
         .flags = AV_PIX_FMT_FLAG_ALPHA | AV_PIX_FMT_FLAG_BITSTREAM | AV_PIX_FMT_FLAG_BE,
+    },
+    [AV_PIX_FMT_Y412LE] = {
+        .name = "y412le",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 8, 4, 4, 12 },		/* Y */
+            { 0, 8, 6, 4, 12 },		/* U */
+            { 0, 8, 2, 4, 12 },		/* V */
+            { 0, 8, 0, 4, 12 },		/* A */
+        },
+        .flags = AV_PIX_FMT_FLAG_ALPHA,
+    },
+    [AV_PIX_FMT_Y412BE] = {
+        .name = "y412be",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 8, 4, 4, 12 },		/* Y */
+            { 0, 8, 6, 4, 12 },		/* U */
+            { 0, 8, 2, 4, 12 },		/* V */
+            { 0, 8, 0, 4, 12 },		/* A */
+        },
+        .flags = AV_PIX_FMT_FLAG_ALPHA | AV_PIX_FMT_FLAG_BE,
     },
     [AV_PIX_FMT_RGB24] = {
         .name = "rgb24",
@@ -2179,6 +2228,30 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
             { 0, 2, 0, 6, 10 },        /* Y */
             { 1, 4, 0, 6, 10 },        /* U */
             { 1, 4, 2, 6, 10 },        /* V */
+        },
+        .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_BE,
+    },
+    [AV_PIX_FMT_P012LE] = {
+        .name = "p012le",
+        .nb_components = 3,
+        .log2_chroma_w = 1,
+        .log2_chroma_h = 1,
+        .comp = {
+            { 0, 2, 0, 4, 12 },        /* Y */
+            { 1, 4, 0, 4, 12 },        /* U */
+            { 1, 4, 2, 4, 12 },        /* V */
+        },
+        .flags = AV_PIX_FMT_FLAG_PLANAR,
+    },
+    [AV_PIX_FMT_P012BE] = {
+        .name = "p012be",
+        .nb_components = 3,
+        .log2_chroma_w = 1,
+        .log2_chroma_h = 1,
+        .comp = {
+            { 0, 2, 0, 4, 12 },        /* Y */
+            { 1, 4, 0, 4, 12 },        /* U */
+            { 1, 4, 2, 4, 12 },        /* V */
         },
         .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_BE,
     },

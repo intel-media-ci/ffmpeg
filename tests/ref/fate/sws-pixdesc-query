@@ -61,6 +61,8 @@ isNBPS:
   nv20le
   p010be
   p010le
+  p012be
+  p012le
   p210be
   p210le
   p410be
@@ -73,8 +75,12 @@ isNBPS:
   xyz12le
   y210be
   y210le
+  y212be
+  y212le
   y410be
   y410le
+  y412be
+  y412le
   yuv420p10be
   yuv420p10le
   yuv420p12be
@@ -149,6 +155,7 @@ isBE:
   grayf32be
   nv20be
   p010be
+  p012be
   p016be
   p210be
   p216be
@@ -163,7 +170,9 @@ isBE:
   x2rgb10be
   xyz12be
   y210be
+  y212be
   y410be
+  y412be
   ya16be
   yuv420p10be
   yuv420p12be
@@ -207,6 +216,8 @@ isYUV:
   nv42
   p010be
   p010le
+  p012be
+  p012le
   p016be
   p016le
   p210be
@@ -223,8 +234,12 @@ isYUV:
   xyz12le
   y210be
   y210le
+  y212be
+  y212le
   y410be
   y410le
+  y412be
+  y412le
   ya16be
   ya16le
   ya8
@@ -311,6 +326,8 @@ isPlanarYUV:
   nv42
   p010be
   p010le
+  p012be
+  p012le
   p016be
   p016le
   p210be
@@ -402,6 +419,8 @@ isSemiPlanarYUV:
   nv42
   p010be
   p010le
+  p012be
+  p012le
   p016be
   p016le
   p210be
@@ -662,6 +681,8 @@ ALPHA:
   rgba64le
   y410be
   y410le
+  y412be
+  y412le
   ya16be
   ya16le
   ya8
@@ -756,8 +777,12 @@ Packed:
   xyz12le
   y210be
   y210le
+  y212be
+  y212le
   y410be
   y410le
+  y412be
+  y412le
   ya16be
   ya16le
   ya8
@@ -796,6 +821,8 @@ Planar:
   nv42
   p010be
   p010le
+  p012be
+  p012le
   p016be
   p016le
   p210be
@@ -966,6 +993,8 @@ usePal:
 DataInHighBits:
   p010be
   p010le
+  p012be
+  p012le
   p210be
   p210le
   p410be
@@ -974,9 +1003,15 @@ DataInHighBits:
   xyz12le
   y210be
   y210le
+  y212be
+  y212le
+  y412be
+  y412le
 
 SwappedChroma:
   nv21
   nv42
+  y412be
+  y412le
   yvyu422
 
