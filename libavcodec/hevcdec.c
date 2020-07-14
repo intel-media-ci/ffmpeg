@@ -452,6 +452,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #endif
         break;
     case AV_PIX_FMT_YUV444P:
+#if CONFIG_HEVC_VAAPI_HWACCEL
+        *fmt++ = AV_PIX_FMT_VAAPI;
+#endif
 #if CONFIG_HEVC_VDPAU_HWACCEL
         *fmt++ = AV_PIX_FMT_VDPAU;
 #endif
@@ -477,6 +480,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #endif
     case AV_PIX_FMT_YUV420P12:
     case AV_PIX_FMT_YUV444P12:
+#if CONFIG_HEVC_VAAPI_HWACCEL
+        *fmt++ = AV_PIX_FMT_VAAPI;
+#endif
 #if CONFIG_HEVC_VDPAU_HWACCEL
         *fmt++ = AV_PIX_FMT_VDPAU;
 #endif
