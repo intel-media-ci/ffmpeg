@@ -88,6 +88,9 @@ static int find_frame_rps_type(const HEVCContext *h, const HEVCFrame *pic)
             return VA_PICTURE_HEVC_RPS_LT_CURR;
     }
 
+    if (h->ps.pps->pps_curr_pic_ref_enabled_flag)
+        return VA_PICTURE_HEVC_LONG_TERM_REFERENCE;
+
     return 0;
 }
 
