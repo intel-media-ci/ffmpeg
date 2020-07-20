@@ -64,6 +64,11 @@ int ff_qsv_codec_id_to_mfx(enum AVCodecID codec_id)
     case AV_CODEC_ID_VP9:
         return MFX_CODEC_VP9;
 #endif
+/* FIXME: change the requied version to 1.34 once mfx 1.34 is release */
+#if QSV_VERSION_ATLEAST(1, 33)
+    case AV_CODEC_ID_AV1:
+        return MFX_CODEC_AV1;
+#endif
 
     default:
         break;
