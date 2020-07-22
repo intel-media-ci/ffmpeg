@@ -56,6 +56,8 @@ static float get_expected(float f, DNNMathUnaryOperation op)
         return acosh(f);
     case DMUO_ATANH:
         return atanh(f);
+    case DMUO_CEIL:
+        return ceil(f);
     default:
         av_assert0(!"not supported yet");
         return 0.f;

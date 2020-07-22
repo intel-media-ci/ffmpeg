@@ -1,4 +1,5 @@
 /*
+ *
  * Copyright (c) 2020
  *
  * This file is part of FFmpeg.
@@ -129,6 +130,10 @@ int dnn_execute_layer_math_unary(DnnOperand *operands, const int32_t *input_oper
     case DMUO_ATANH:
         for (int i = 0; i < dims_count; ++i)
             dst[i] = atanh(src[i]);
+        return 0;
+    case DMUO_CEIL:
+        for (int i = 0; i <dims_count; ++i)
+            dst[i] = ceil(src[i]);
         return 0;
     default:
         return -1;

@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+
 /**
  * @file
  * DNN inference functions interface for native backend.
@@ -43,6 +44,7 @@ typedef enum {
     DMUO_ASINH = 10,
     DMUO_ACOSH = 11,
     DMUO_ATANH = 12,
+    DMUO_CEIL = 13,
     DMUO_COUNT
 } DNNMathUnaryOperation;
 
