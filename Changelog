@@ -15,6 +15,7 @@ version <next>:
 - Argonaut Games ASF muxer
 - AV1 Low overhead bitstream format demuxer
 - RPZA video encoder
+- AV1 decoder (Hardware acceleration used only)
 
 
 version 4.3:
