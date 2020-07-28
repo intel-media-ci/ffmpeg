@@ -21,6 +21,7 @@ version <next>:
 - MOFLEX demuxer
 - MODS demuxer
 - PhotoCD decoder
+- AV1 decoder (Hardware acceleration used only)
 
 
 version 4.3:
