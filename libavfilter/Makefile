@@ -528,6 +528,7 @@ OBJS-$(CONFIG_W3FDIF_FILTER)                 += vf_w3fdif.o
 OBJS-$(CONFIG_WAVEFORM_FILTER)               += vf_waveform.o
 OBJS-$(CONFIG_WEAVE_FILTER)                  += vf_weave.o
 OBJS-$(CONFIG_XBR_FILTER)                    += vf_xbr.o
+OBJS-$(CONFIG_XCAM_FILTER)                   += vf_xcam.o
 OBJS-$(CONFIG_XCORRELATE_FILTER)             += vf_convolve.o framesync.o
 OBJS-$(CONFIG_XFADE_FILTER)                  += vf_xfade.o
 OBJS-$(CONFIG_XFADE_OPENCL_FILTER)           += vf_xfade_opencl.o opencl.o opencl/xfade.o

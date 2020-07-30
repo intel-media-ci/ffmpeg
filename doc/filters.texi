@@ -24205,6 +24205,85 @@ can be @var{first} or @var{all}. Default is @var{all}.
 
 The @code{xcorrelate} filter also supports the @ref{framesync} options.
 
+@section xcam
+Image processing supported through libXCam.
+
+libXCam supports automotive surround view stitching, 360 video stitching,
+digital video stabilization, noise reduction and so on. For more information
+about libxcam see @url{https://github.com/intel/libxcam}.
+
+Please refer to @url{https://github.com/intel/libxcam/wiki/Build} to build
+libxcam.
+
+To enable compilation of @var{xcam} video filter you need to configure FFmpeg
+with @code{--enable-libxcam}.
+
+@subsection Options
+
+@table @option
+
+@item inputs
+The number of inputs. Default is @code{1}. @b{stitch} and @b{stitchcl}
+handlers support dynamic inputs, @b{fisheye}, @b{3dnr}, @b{waveletnr},
+@b{dvs} and @b{defog} handlers support one input.
+
+@item w
+Output video width. Default is @code{0}.
+If the value is 0, the corresponding input width is used for the output.
+
+@item h
+Output video height. Default is @code{0}.
+If the value is 0, the corresponding input height is used for the output.
+
+@item fmt
+Pixel format. Default is @code{nv12}.
+
+@table @samp
+@item auto
+Negotiate pixel format automatically, selects the input pixel format as the
+processing pixel format.
+@item nv12
+NV12 pixel format. All handlers support NV12 pixel format.
+@item yuv420
+YUV420 pixel format. Currently, only @b{CPU} stitching supports YUV420
+pixel format.
+@end table
+
+@item name
+Handler name. Default is @code{stitch}.
+
+@table @samp
+@item stitch
+CPU|GLES|Vulkan stitching, supports automotive surround view stitching and
+360 video stitching.
+@item stitchcl
+OpenCL stitching, supports automotive surround view stitching and 360 video
+stitching.
+@item fisheye
+Fisheye calibration
+@item 3dnr
+3D denoising
+@item waveletnr
+Wavelet denoising
+@item dvs
+Digital video stabilization
+@item defog
+Fog removal
+@end table
+
+@item params
+Private parameters for each handler. Currently, only @b{stitch} and
+@b{stitchcl} handlers have private parameters.
+
+@end table
+
+@subsection Examples
+Use @code{ffmpeg -h filter=xcam} to get the common parameters, @b{stitch}
+and @b{stitchcl} handlers have private parameters, use @code{params=help=1}
+to get the private parameters.
+
+For more detailed examples see @url{https://github.com/intel/libxcam/wiki/Tests#1-ffmpeg-xcam}.
+
 @section xfade
 
 Apply cross fade from one input video stream to another input video stream.
