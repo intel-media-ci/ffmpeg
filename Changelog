@@ -10,6 +10,7 @@ version <next>:
 - ADPCM IMA Ubisoft APM encoder
 - Rayman 2 APM muxer
 - AV1 encoding support SVT-AV1
+- xcam filter
 
 
 version 4.3:
