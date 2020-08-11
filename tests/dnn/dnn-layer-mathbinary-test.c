@@ -69,7 +69,7 @@ static int test_broadcast_input0(DNNMathBinaryOperation op)
     operands[1].data = NULL;
 
     input_indexes[0] = 0;
-    dnn_execute_layer_math_binary(operands, input_indexes, 1, &params);
+    dnn_execute_layer_math_binary(operands, input_indexes, 1, &params, NULL);
 
     output = operands[1].data;
     for (int i = 0; i < sizeof(input) / sizeof(float); i++) {
@@ -109,7 +109,7 @@ static int test_broadcast_input1(DNNMathBinaryOperation op)
     operands[1].data = NULL;
 
     input_indexes[0] = 0;
-    dnn_execute_layer_math_binary(operands, input_indexes, 1, &params);
+    dnn_execute_layer_math_binary(operands, input_indexes, 1, &params, NULL);
 
     output = operands[1].data;
     for (int i = 0; i < sizeof(input) / sizeof(float); i++) {
@@ -157,7 +157,7 @@ static int test_no_broadcast(DNNMathBinaryOperation op)
 
     input_indexes[0] = 0;
     input_indexes[1] = 1;
-    dnn_execute_layer_math_binary(operands, input_indexes, 2, &params);
+    dnn_execute_layer_math_binary(operands, input_indexes, 2, &params, NULL);
 
     output = operands[2].data;
     for (int i = 0; i < sizeof(input0) / sizeof(float); i++) {
