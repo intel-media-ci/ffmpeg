@@ -56,7 +56,7 @@ int dnn_load_layer_avg_pool(Layer *layer, AVIOContext *model_file_context, int f
 }
 
 int dnn_execute_layer_avg_pool(DnnOperand *operands, const int32_t *input_operand_indexes,
-                             int32_t output_operand_index, const void *parameters)
+                             int32_t output_operand_index, const void *parameters, NetworkContext *ctx)
 {
     float *output;
     int height_end, width_end, height_radius, width_radius, output_height, output_width, kernel_area;

@@ -89,7 +89,7 @@ int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int fil
 }
 
 int dnn_execute_layer_conv2d(DnnOperand *operands, const int32_t *input_operand_indexes,
-                             int32_t output_operand_index, const void *parameters)
+                             int32_t output_operand_index, const void *parameters, NetworkContext *ctx)
 {
     float *output;
     int32_t input_operand_index = input_operand_indexes[0];

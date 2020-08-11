@@ -28,15 +28,30 @@
 #include "dnn_backend_native_layer_conv2d.h"
 #include "dnn_backend_native_layers.h"
 
+static const AVClass dnn_native_class = {
+    .class_name = "dnn_native",
+    .item_name  = av_default_item_name,
+    .option     = NULL,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
+};
+
+NetworkContext network_ctx = {
+    .class      = &dnn_native_class,
+};
+
 static DNNReturnType get_input_native(void *model, DNNData *input, const char *input_name)
 {
     ConvolutionalNetwork *network = (ConvolutionalNetwork *)model;
+    NetworkContext *ctx = network->log_ctx;
 
     for (int i = 0; i < network->operands_num; ++i) {
         DnnOperand *oprd = &network->operands[i];
         if (strcmp(oprd->name, input_name) == 0) {
-            if (oprd->type != DOT_INPUT)
+            if (oprd->type != DOT_INPUT) {
+                av_log(ctx, AV_LOG_ERROR, "Found \"%s\" in model, but it is not input node\n", input_name);
                 return DNN_ERROR;
+            }
             input->dt = oprd->data_type;
             av_assert0(oprd->dims[0] == 1);
             input->height = oprd->dims[1];
@@ -47,30 +62,37 @@ static DNNReturnType get_input_native(void *model, DNNData *input, const char *i
     }
 
     // do not find the input operand
+    av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model\n", input_name);
     return DNN_ERROR;
 }
 
 static DNNReturnType set_input_output_native(void *model, DNNData *input, const char *input_name, const char **output_names, uint32_t nb_output)
 {
     ConvolutionalNetwork *network = (ConvolutionalNetwork *)model;
+    NetworkContext *ctx = network->log_ctx;
     DnnOperand *oprd = NULL;
 
-    if (network->layers_num <= 0 || network->operands_num <= 0)
+    if (network->layers_num <= 0 || network->operands_num <= 0) {
+        av_log(ctx, AV_LOG_ERROR, "No operands or layers in model\n");
         return DNN_ERROR;
+    }
 
     /* inputs */
     for (int i = 0; i < network->operands_num; ++i) {
         oprd = &network->operands[i];
         if (strcmp(oprd->name, input_name) == 0) {
-            if (oprd->type != DOT_INPUT)
+            if (oprd->type != DOT_INPUT) {
+                av_log(ctx, AV_LOG_ERROR, "Found \"%s\" in model, but it is not input node\n", input_name);
                 return DNN_ERROR;
+            }
             break;
         }
         oprd = NULL;
     }
-
-    if (!oprd)
+    if (!oprd) {
+        av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model\n", input_name);
         return DNN_ERROR;
+    }
 
     oprd->dims[0] = 1;
     oprd->dims[1] = input->height;
@@ -79,11 +101,15 @@ static DNNReturnType set_input_output_native(void *model, DNNData *input, const 
 
     av_freep(&oprd->data);
     oprd->length = calculate_operand_data_length(oprd);
-    if (oprd->length <= 0)
+    if (oprd->length <= 0) {
+        av_log(ctx, AV_LOG_ERROR, "The input data length overflow\n");
         return DNN_ERROR;
+    }
     oprd->data = av_malloc(oprd->length);
-    if (!oprd->data)
+    if (!oprd->data) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to malloc memory for input data\n");
         return DNN_ERROR;
+    }
 
     input->data = oprd->data;
 
@@ -91,8 +117,10 @@ static DNNReturnType set_input_output_native(void *model, DNNData *input, const 
     network->nb_output = 0;
     av_freep(&network->output_indexes);
     network->output_indexes = av_mallocz_array(nb_output, sizeof(*network->output_indexes));
-    if (!network->output_indexes)
+    if (!network->output_indexes) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to malloc memory for output\n");
         return DNN_ERROR;
+    }
 
     for (uint32_t i = 0; i < nb_output; ++i) {
         const char *output_name = output_names[i];
@@ -105,8 +133,10 @@ static DNNReturnType set_input_output_native(void *model, DNNData *input, const 
         }
     }
 
-    if (network->nb_output != nb_output)
+    if (network->nb_output != nb_output) {
+        av_log(ctx, AV_LOG_ERROR, "Output(s) name are not all set correctly\n");
         return DNN_ERROR;
+    }
 
     return DNN_SUCCESS;
 }
@@ -127,6 +157,7 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, const char *optio
     int file_size, dnn_size, parsed_size;
     int32_t layer;
     DNNLayerType layer_type;
+
 
     if (avio_open(&model_file_context, model_filename, AVIO_FLAG_READ) < 0){
         return NULL;
@@ -171,6 +202,8 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, const char *optio
     if (!network){
         goto fail;
     }
+
+    network->log_ctx = &network_ctx;
     model->model = (void *)network;
 
     avio_seek(model_file_context, file_size - 8, SEEK_SET);
@@ -258,20 +291,29 @@ fail:
 DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, DNNData *outputs, uint32_t nb_output)
 {
     ConvolutionalNetwork *network = (ConvolutionalNetwork *)model->model;
+    NetworkContext *ctx = network->log_ctx;
     int32_t layer;
     uint32_t nb = FFMIN(nb_output, network->nb_output);
 
-    if (network->layers_num <= 0 || network->operands_num <= 0)
+    if (network->layers_num <= 0 || network->operands_num <= 0) {
+        av_log(ctx, AV_LOG_ERROR, "Error network layer number: %d\n", network->layers_num);
         return DNN_ERROR;
-    if (!network->operands[0].data)
+    }
+    if (!network->operands[0].data) {
+        av_log(ctx, AV_LOG_ERROR, "Empty network input data\n");
         return DNN_ERROR;
+    }
 
-    for (layer = 0; layer < network->layers_num; ++layer){
+    for (layer = 0; layer < network->layers_num; ++layer) {
         DNNLayerType layer_type = network->layers[layer].type;
-        layer_funcs[layer_type].pf_exec(network->operands,
-                                  network->layers[layer].input_operand_indexes,
-                                  network->layers[layer].output_operand_index,
-                                  network->layers[layer].params);
+        if (layer_funcs[layer_type].pf_exec(network->operands,
+                                            network->layers[layer].input_operand_indexes,
+                                            network->layers[layer].output_operand_index,
+                                            network->layers[layer].params,
+                                            network->log_ctx) == DNN_ERROR) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to execuet network operands\n");
+            return DNN_ERROR;
+        }
     }
 
     for (uint32_t i = 0; i < nb; ++i) {

@@ -106,8 +106,13 @@ typedef struct InputParams{
     int height, width, channels;
 } InputParams;
 
+typedef struct NetworkContext {
+    const AVClass *class;
+} NetworkContext;
+
 // Represents simple feed-forward convolutional network.
 typedef struct ConvolutionalNetwork{
+    NetworkContext *log_ctx;
     Layer *layers;
     int32_t layers_num;
     DnnOperand *operands;

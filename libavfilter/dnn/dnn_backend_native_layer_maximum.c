@@ -50,7 +50,7 @@ int dnn_load_layer_maximum(Layer *layer, AVIOContext *model_file_context, int fi
 }
 
 int dnn_execute_layer_maximum(DnnOperand *operands, const int32_t *input_operand_indexes,
-                              int32_t output_operand_index, const void *parameters)
+                              int32_t output_operand_index, const void *parameters, NetworkContext *ctx)
 {
     const DnnOperand *input = &operands[input_operand_indexes[0]];
     DnnOperand *output = &operands[output_operand_index];

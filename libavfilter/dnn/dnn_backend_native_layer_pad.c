@@ -76,7 +76,7 @@ static int after_get_buddy(int given, int border, LayerPadModeParam mode)
 }
 
 int dnn_execute_layer_pad(DnnOperand *operands, const int32_t *input_operand_indexes,
-                          int32_t output_operand_index, const void *parameters)
+                          int32_t output_operand_index, const void *parameters, NetworkContext *ctx)
 {
     int32_t before_paddings;
     int32_t after_paddings;
