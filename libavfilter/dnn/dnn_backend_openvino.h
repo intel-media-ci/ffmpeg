@@ -28,6 +28,21 @@
 #define AVFILTER_DNN_DNN_BACKEND_OPENVINO_H
 
 #include "../dnn_interface.h"
+#include "libavformat/avio.h"
+#include <c_api/ie_c_api.h>
+
+typedef struct OVContext {
+    const AVClass *class;
+} OVContext;
+
+typedef struct OVModel{
+    OVContext ctx;
+    ie_core_t *core;
+    ie_network_t *network;
+    ie_executable_network_t *exe_network;
+    ie_infer_request_t *infer_request;
+    ie_blob_t *input_blob;
+} OVModel;
 
 DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options);
 
