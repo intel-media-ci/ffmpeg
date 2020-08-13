@@ -42,7 +42,7 @@ typedef struct DNNData{
 
 typedef struct DNNModel{
     // Stores model that can be different for different backends.
-    void *model;
+    void *model; 
     // Stores options when the model is executed by the backend
     const char *options;
     // Gets model input information
