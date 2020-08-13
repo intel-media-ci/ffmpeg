@@ -28,6 +28,23 @@
 #define AVFILTER_DNN_DNN_BACKEND_TF_H
 
 #include "../dnn_interface.h"
+#include "libavformat/avio.h"
+#include <tensorflow/c/c_api.h>
+
+typedef struct TFContext {
+    const AVClass *class;
+} TFContext;
+
+typedef struct TFModel{
+    TFContext ctx;
+    TF_Graph *graph;
+    TF_Session *session;
+    TF_Status *status;
+    TF_Output input;
+    TF_Tensor *input_tensor;
+    TF_Tensor **output_tensors;
+    uint32_t nb_output;
+} TFModel;
 
 DNNModel *ff_dnn_load_model_tf(const char *model_filename, const char *options);
 
