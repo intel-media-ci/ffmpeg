@@ -26,9 +26,37 @@
 #include "dnn_backend_openvino.h"
 #include "libavformat/avio.h"
 #include "libavutil/avassert.h"
+#include "libavutil/opt.h"
 #include <c_api/ie_c_api.h>
 
+typedef struct OVOptions{
+    int batch_size;
+    int req_num;
+} OVOptions;
+
+typedef struct OvContext {
+    const AVClass *class;
+    OVOptions options;
+} OvContext;
+
+#define OFFSET(x) offsetof(OvContext, x)
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM
+static const AVOption dnn_ov_options[] = {
+    { "batch",   "batch size",        OFFSET(options.batch_size), AV_OPT_TYPE_INT,  { .i64 = 1 }, INT_MIN, INT_MAX, FLAGS },
+    { "nireq",   "number of request", OFFSET(options.req_num),    AV_OPT_TYPE_INT,  { .i64 = 1 }, INT_MIN, INT_MAX, FLAGS },
+    { NULL },
+};
+
+static const AVClass dnn_ov_class = {
+    .class_name = "dnn_ov",
+    .item_name  = av_default_item_name,
+    .option     = dnn_ov_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
+};
+
 typedef struct OVModel{
+    OvContext ctx;
     ie_core_t *core;
     ie_network_t *network;
     ie_executable_network_t *exe_network;
@@ -155,6 +183,22 @@ err:
     return DNN_ERROR;
 }
 
+static int dnn_parse_options(void *ctx, const char *options)
+{
+    AVDictionary *dict = NULL;
+    int err = av_dict_parse_string(&dict, options, "=", "&", 0);
+    if (err < 0) {
+        av_dict_free(&dict);
+        return err;
+    }
+
+    av_opt_set_defaults(ctx);
+    err = av_opt_set_dict(ctx, &dict);
+
+    av_dict_free(&dict);
+    return err;
+}
+
 DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options)
 {
     DNNModel *model = NULL;
@@ -169,6 +213,11 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options)
 
     ov_model = av_mallocz(sizeof(OVModel));
     if (!ov_model)
+        goto err;
+
+    ov_model->ctx.class = &dnn_ov_class;
+    model->options = options;
+    if (dnn_parse_options(&ov_model->ctx, model->options) < 0)
         goto err;
 
     status = ie_core_create("", &ov_model->core);
@@ -186,7 +235,6 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options)
     model->model = (void *)ov_model;
     model->set_input_output = &set_input_output_ov;
     model->get_input = &get_input_ov;
-    model->options = options;
 
     return model;
 
