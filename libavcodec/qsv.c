@@ -37,6 +37,7 @@
 
 #define MFX_IMPL_VIA_MASK(impl) (0x0f00 & (impl))
 #define QSV_HAVE_USER_PLUGIN    !QSV_ONEVPL
+#define QSV_HAVE_AUDIO          !QSV_ONEVPL
 
 #if QSV_VERSION_ATLEAST(1, 12)
 #include "mfxvp8.h"
@@ -137,8 +138,10 @@ static const struct {
     { MFX_ERR_INVALID_VIDEO_PARAM,      AVERROR(EINVAL), "invalid video parameters"             },
     { MFX_ERR_UNDEFINED_BEHAVIOR,       AVERROR_BUG,     "undefined behavior"                   },
     { MFX_ERR_DEVICE_FAILED,            AVERROR(EIO),    "device failed"                        },
+#if QSV_HAVE_AUDIO
     { MFX_ERR_INCOMPATIBLE_AUDIO_PARAM, AVERROR(EINVAL), "incompatible audio parameters"        },
     { MFX_ERR_INVALID_AUDIO_PARAM,      AVERROR(EINVAL), "invalid audio parameters"             },
+#endif
 
     { MFX_WRN_IN_EXECUTION,             0,               "operation in execution"               },
     { MFX_WRN_DEVICE_BUSY,              0,               "device busy"                          },
@@ -148,7 +151,9 @@ static const struct {
     { MFX_WRN_VALUE_NOT_CHANGED,        0,               "value is saturated"                   },
     { MFX_WRN_OUT_OF_RANGE,             0,               "value out of range"                   },
     { MFX_WRN_FILTER_SKIPPED,           0,               "filter skipped"                       },
+#if QSV_HAVE_AUDIO
     { MFX_WRN_INCOMPATIBLE_AUDIO_PARAM, 0,               "incompatible audio parameters"        },
+#endif
 };
 
 /**
