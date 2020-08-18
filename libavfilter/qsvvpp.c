@@ -37,6 +37,8 @@
 #define IS_OPAQUE_MEMORY(mode) (mode & MFX_MEMTYPE_OPAQUE_FRAME)
 #define IS_SYSTEM_MEMORY(mode) (mode & MFX_MEMTYPE_SYSTEM_MEMORY)
 
+#define QSV_HAVE_AUDIO         !QSV_ONEVPL
+
 static const mfxHandleType handle_types[] = {
     MFX_HANDLE_VA_DISPLAY,
     MFX_HANDLE_D3D9_DEVICE_MANAGER,
@@ -100,8 +102,10 @@ static const struct {
     { MFX_ERR_INVALID_VIDEO_PARAM,      AVERROR(EINVAL), "invalid video parameters"             },
     { MFX_ERR_UNDEFINED_BEHAVIOR,       AVERROR_BUG,     "undefined behavior"                   },
     { MFX_ERR_DEVICE_FAILED,            AVERROR(EIO),    "device failed"                        },
+#if QSV_HAVE_AUDIO
     { MFX_ERR_INCOMPATIBLE_AUDIO_PARAM, AVERROR(EINVAL), "incompatible audio parameters"        },
     { MFX_ERR_INVALID_AUDIO_PARAM,      AVERROR(EINVAL), "invalid audio parameters"             },
+#endif
 
     { MFX_WRN_IN_EXECUTION,             0,               "operation in execution"               },
     { MFX_WRN_DEVICE_BUSY,              0,               "device busy"                          },
@@ -111,7 +115,9 @@ static const struct {
     { MFX_WRN_VALUE_NOT_CHANGED,        0,               "value is saturated"                   },
     { MFX_WRN_OUT_OF_RANGE,             0,               "value out of range"                   },
     { MFX_WRN_FILTER_SKIPPED,           0,               "filter skipped"                       },
+#if QSV_HAVE_AUDIO
     { MFX_WRN_INCOMPATIBLE_AUDIO_PARAM, 0,               "incompatible audio parameters"        },
+#endif
 };
 
 static int qsv_map_error(mfxStatus mfx_err, const char **desc)
