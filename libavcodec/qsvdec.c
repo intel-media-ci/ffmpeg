@@ -521,7 +521,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
             frame->key_frame = !!(out_frame->dec_info.FrameType & MFX_FRAMETYPE_IDR);
 
         /* update the surface properties */
-        if (avctx->pix_fmt == AV_PIX_FMT_QSV)
+        if (frame->format == AV_PIX_FMT_QSV)
             ((mfxFrameSurface1*)frame->data[3])->Info = outsurf->Info;
 
         *got_frame = 1;

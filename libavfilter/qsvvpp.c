@@ -61,6 +61,7 @@ struct QSVVPPContext {
     int                 nb_surface_ptrs_out;
     mfxFrameSurface1  **surface_ptrs_in;
     mfxFrameSurface1  **surface_ptrs_out;
+    int                 out_frame_deinterlaced;
 
     /* MFXVPP extern parameters */
     mfxExtOpaqueSurfaceAlloc opaque_alloc;
@@ -347,7 +348,7 @@ static QSVFrame *submit_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *p
 }
 
 /* get the output surface */
-static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
+static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink, AVFrame *picref)
 {
     AVFilterContext *ctx = outlink->src;
     QSVFrame        *out_frame;
@@ -394,6 +395,27 @@ static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
     }
 
     out_frame->surface->Info = s->vpp_param.vpp.Out;
+
+    if (!s->out_frame_deinterlaced) {
+        /* copy picture info from input to out_frame */
+        out_frame->frame->repeat_pict = picref->repeat_pict;
+        out_frame->frame->top_field_first = picref->top_field_first;
+        out_frame->frame->interlaced_frame = picref->interlaced_frame;
+        out_frame->frame->pict_type = picref->pict_type;
+
+        /* surfaces in pool is inited with MFX_PICSTRUCT_PROGRESSIVE, update
+         * it base on input frame info. */
+        out_frame->surface->Info.PicStruct =
+            !picref->interlaced_frame ? MFX_PICSTRUCT_PROGRESSIVE :
+            (picref->top_field_first ? MFX_PICSTRUCT_FIELD_TFF :
+                                       MFX_PICSTRUCT_FIELD_BFF);
+        if (picref->repeat_pict == 1)
+            out_frame->surface->Info.PicStruct |= MFX_PICSTRUCT_FIELD_REPEATED;
+        else if (picref->repeat_pict == 2)
+            out_frame->surface->Info.PicStruct |= MFX_PICSTRUCT_FRAME_DOUBLING;
+        else if (picref->repeat_pict == 4)
+            out_frame->surface->Info.PicStruct |= MFX_PICSTRUCT_FRAME_TRIPLING;
+    }
 
     return out_frame;
 }
@@ -612,6 +634,12 @@ int ff_qsvvpp_create(AVFilterContext *avctx, QSVVPPContext **vpp, QSVVPPParam *p
         goto failed;
     }
 
+    /* Update output's interlace state according to params */
+    for (i = 0; i < param->num_ext_buf; i++) {
+        if (param->ext_buf[i]->BufferId == MFX_EXTBUFF_VPP_DEINTERLACING)
+            s->out_frame_deinterlaced = 1;
+    }
+
     if (IS_OPAQUE_MEMORY(s->in_mem_mode) || IS_OPAQUE_MEMORY(s->out_mem_mode)) {
         s->nb_ext_buffers = param->num_ext_buf + 1;
         s->ext_buffers = av_mallocz_array(s->nb_ext_buffers, sizeof(*s->ext_buffers));
@@ -701,7 +729,7 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
     }
 
     do {
-        out_frame = query_frame(s, outlink);
+        out_frame = query_frame(s, outlink, picref);
         if (!out_frame) {
             av_log(ctx, AV_LOG_ERROR, "Failed to query an output frame.\n");
             return AVERROR(ENOMEM);
