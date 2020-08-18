@@ -19,7 +19,6 @@
  */
 
 #include <mfxvideo.h>
-#include <mfxplugin.h>
 #include <mfxjpeg.h>
 
 #include <stdio.h>
@@ -36,8 +35,14 @@
 #include "avcodec.h"
 #include "qsv_internal.h"
 
+#define QSV_HAVE_USER_PLUGIN    !QSV_ONEVPL
+
 #if QSV_VERSION_ATLEAST(1, 12)
 #include "mfxvp8.h"
+#endif
+
+#if QSV_HAVE_USER_PLUGIN
+#include <mfxplugin.h>
 #endif
 
 int ff_qsv_codec_id_to_mfx(enum AVCodecID codec_id)
@@ -286,6 +291,7 @@ enum AVPictureType ff_qsv_map_pictype(int mfx_pic_type)
 static int qsv_load_plugins(mfxSession session, const char *load_plugins,
                             void *logctx)
 {
+#if QSV_HAVE_USER_PLUGIN
     if (!load_plugins || !*load_plugins)
         return 0;
 
@@ -329,6 +335,7 @@ load_plugin_fail:
         if (err < 0)
             return err;
     }
+#endif
 
     return 0;
 
