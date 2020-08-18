@@ -26,6 +26,7 @@
 #ifndef AVFILTER_DNN_INTERFACE_H
 #define AVFILTER_DNN_INTERFACE_H
 
+
 #include <stdint.h>
 
 typedef enum {DNN_SUCCESS, DNN_ERROR} DNNReturnType;
