@@ -26,7 +26,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
 #include "libavutil/fifo.h"
 #include "libavutil/frame.h"
