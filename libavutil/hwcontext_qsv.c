@@ -48,6 +48,9 @@
     (MFX_VERSION_MAJOR > (MAJOR) ||         \
      MFX_VERSION_MAJOR == (MAJOR) && MFX_VERSION_MINOR >= (MINOR))
 
+#define QSV_ONEVPL       QSV_VERSION_ATLEAST(2, 0)
+#define QSV_HAVE_OPAQUE  !QSV_ONEVPL
+
 typedef struct QSVDevicePriv {
     AVBufferRef *child_device_ctx;
 } QSVDevicePriv;
@@ -78,11 +81,13 @@ typedef struct QSVFramesContext {
 
     // used in the frame allocator for non-opaque surfaces
     mfxMemId *mem_ids;
+#if QSV_HAVE_OPAQUE
     // used in the opaque alloc request for opaque surfaces
     mfxFrameSurface1 **surface_ptrs;
 
     mfxExtOpaqueSurfaceAlloc opaque_alloc;
     mfxExtBuffer *ext_buffers[1];
+#endif
 } QSVFramesContext;
 
 static const struct {
@@ -185,7 +190,9 @@ static void qsv_frames_uninit(AVHWFramesContext *ctx)
 #endif
 
     av_freep(&s->mem_ids);
+#if QSV_HAVE_OPAQUE
     av_freep(&s->surface_ptrs);
+#endif
     av_freep(&s->surfaces_internal);
     av_buffer_unref(&s->child_frames_ref);
 }
@@ -371,11 +378,17 @@ static int qsv_init_pool(AVHWFramesContext *ctx, uint32_t fourcc)
             return ret;
     }
 
+#if QSV_HAVE_OPAQUE
     if (!(frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME)) {
         ret = qsv_init_child_ctx(ctx);
         if (ret < 0)
             return ret;
     }
+#else
+    ret = qsv_init_child_ctx(ctx);
+    if (ret < 0)
+        return ret;
+#endif
 
     ctx->internal->pool_internal = av_buffer_pool_init2(sizeof(mfxFrameSurface1),
                                                         ctx, qsv_pool_alloc, NULL);
@@ -440,10 +453,9 @@ static mfxStatus frame_get_hdl(mfxHDL pthis, mfxMemId mid, mfxHDL *hdl)
 static int qsv_init_internal_session(AVHWFramesContext *ctx,
                                      mfxSession *session, int upload)
 {
-    QSVFramesContext              *s = ctx->internal->priv;
     AVQSVFramesContext *frames_hwctx = ctx->hwctx;
     QSVDeviceContext   *device_priv  = ctx->device_ctx->internal->priv;
-    int opaque = !!(frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
+    int opaque = 0;
 
     mfxFrameAllocator frame_allocator = {
         .pthis  = ctx,
@@ -456,6 +468,11 @@ static int qsv_init_internal_session(AVHWFramesContext *ctx,
 
     mfxVideoParam par;
     mfxStatus err;
+
+#if QSV_HAVE_OPAQUE
+    QSVFramesContext              *s = ctx->internal->priv;
+    opaque = !!(frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
+#endif
 
     err = MFXInit(device_priv->impl, &device_priv->ver, session);
     if (err != MFX_ERR_NONE) {
@@ -478,15 +495,18 @@ static int qsv_init_internal_session(AVHWFramesContext *ctx,
 
     memset(&par, 0, sizeof(par));
 
-    if (opaque) {
+    if (!opaque) {
+        par.IOPattern = upload ? MFX_IOPATTERN_OUT_VIDEO_MEMORY :
+                                 MFX_IOPATTERN_IN_VIDEO_MEMORY;
+    }
+#if QSV_HAVE_OPAQUE
+    else {
         par.ExtParam    = s->ext_buffers;
         par.NumExtParam = FF_ARRAY_ELEMS(s->ext_buffers);
         par.IOPattern   = upload ? MFX_IOPATTERN_OUT_OPAQUE_MEMORY :
                                    MFX_IOPATTERN_IN_OPAQUE_MEMORY;
-    } else {
-        par.IOPattern = upload ? MFX_IOPATTERN_OUT_VIDEO_MEMORY :
-                                 MFX_IOPATTERN_IN_VIDEO_MEMORY;
     }
+#endif
 
     par.IOPattern |= upload ? MFX_IOPATTERN_IN_SYSTEM_MEMORY :
                               MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
@@ -518,10 +538,14 @@ static int qsv_frames_init(AVHWFramesContext *ctx)
     QSVFramesContext              *s = ctx->internal->priv;
     AVQSVFramesContext *frames_hwctx = ctx->hwctx;
 
-    int opaque = !!(frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
+    int opaque = 0;
 
     uint32_t fourcc;
     int i, ret;
+
+#if QSV_HAVE_OPAQUE
+    opaque = !!(frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
+#endif
 
     fourcc = qsv_fourcc_from_pix_fmt(ctx->sw_format);
     if (!fourcc) {
@@ -537,7 +561,16 @@ static int qsv_frames_init(AVHWFramesContext *ctx)
         }
     }
 
-    if (opaque) {
+    if (!opaque) {
+        s->mem_ids = av_mallocz_array(frames_hwctx->nb_surfaces, sizeof(*s->mem_ids));
+        if (!s->mem_ids)
+            return AVERROR(ENOMEM);
+
+        for (i = 0; i < frames_hwctx->nb_surfaces; i++)
+            s->mem_ids[i] = frames_hwctx->surfaces[i].Data.MemId;
+    }
+#if QSV_HAVE_OPAQUE
+    else {
         s->surface_ptrs = av_mallocz_array(frames_hwctx->nb_surfaces,
                                            sizeof(*s->surface_ptrs));
         if (!s->surface_ptrs)
@@ -556,14 +589,8 @@ static int qsv_frames_init(AVHWFramesContext *ctx)
         s->opaque_alloc.Header.BufferSz = sizeof(s->opaque_alloc);
 
         s->ext_buffers[0] = (mfxExtBuffer*)&s->opaque_alloc;
-    } else {
-        s->mem_ids = av_mallocz_array(frames_hwctx->nb_surfaces, sizeof(*s->mem_ids));
-        if (!s->mem_ids)
-            return AVERROR(ENOMEM);
-
-        for (i = 0; i < frames_hwctx->nb_surfaces; i++)
-            s->mem_ids[i] = frames_hwctx->surfaces[i].Data.MemId;
     }
+#endif
 
     s->session_download = NULL;
     s->session_upload   = NULL;
