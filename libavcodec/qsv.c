@@ -91,10 +91,8 @@ static const struct {
 } qsv_iopatterns[] = {
     {MFX_IOPATTERN_IN_VIDEO_MEMORY,     "input is video memory surface"         },
     {MFX_IOPATTERN_IN_SYSTEM_MEMORY,    "input is system memory surface"        },
-    {MFX_IOPATTERN_IN_OPAQUE_MEMORY,    "input is opaque memory surface"        },
     {MFX_IOPATTERN_OUT_VIDEO_MEMORY,    "output is video memory surface"        },
     {MFX_IOPATTERN_OUT_SYSTEM_MEMORY,   "output is system memory surface"       },
-    {MFX_IOPATTERN_OUT_OPAQUE_MEMORY,   "output is opaque memory surface"       },
 };
 
 int ff_qsv_print_iopattern(void *log_ctx, int mfx_iopattern,

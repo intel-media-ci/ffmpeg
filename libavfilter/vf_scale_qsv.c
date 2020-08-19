@@ -89,8 +89,6 @@ typedef struct QSVScaleContext {
     mfxFrameSurface1 **surface_ptrs_out;
     int             nb_surface_ptrs_out;
 
-    mfxExtOpaqueSurfaceAlloc opaque_alloc;
-
 #if QSV_HAVE_SCALING_CONFIG
     mfxExtVPPScaling         scale_conf;
 #endif
@@ -284,8 +282,6 @@ static int init_out_session(AVFilterContext *ctx)
     AVQSVFramesContext *out_frames_hwctx = out_frames_ctx->hwctx;
     AVQSVDeviceContext     *device_hwctx = in_frames_ctx->device_ctx->hwctx;
 
-    int opaque = !!(in_frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
-
     mfxHDL handle = NULL;
     mfxHandleType handle_type;
     mfxVersion ver;
@@ -293,6 +289,15 @@ static int init_out_session(AVFilterContext *ctx)
     mfxVideoParam par;
     mfxStatus err;
     int i;
+
+    mfxFrameAllocator frame_allocator = {
+        .pthis  = ctx,
+        .Alloc  = frame_alloc,
+        .Lock   = frame_lock,
+        .Unlock = frame_unlock,
+        .GetHDL = frame_get_hdl,
+        .Free   = frame_free,
+    };
 
     s->num_ext_buf = 0;
 
@@ -340,69 +345,27 @@ static int init_out_session(AVFilterContext *ctx)
 
     memset(&par, 0, sizeof(par));
 
-    if (opaque) {
-        s->surface_ptrs_in = av_mallocz_array(in_frames_hwctx->nb_surfaces,
-                                              sizeof(*s->surface_ptrs_in));
-        if (!s->surface_ptrs_in)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < in_frames_hwctx->nb_surfaces; i++)
-            s->surface_ptrs_in[i] = in_frames_hwctx->surfaces + i;
-        s->nb_surface_ptrs_in = in_frames_hwctx->nb_surfaces;
+    s->mem_ids_in = av_mallocz_array(in_frames_hwctx->nb_surfaces,
+                                     sizeof(*s->mem_ids_in));
+    if (!s->mem_ids_in)
+        return AVERROR(ENOMEM);
+    for (i = 0; i < in_frames_hwctx->nb_surfaces; i++)
+        s->mem_ids_in[i] = in_frames_hwctx->surfaces[i].Data.MemId;
+    s->nb_mem_ids_in = in_frames_hwctx->nb_surfaces;
 
-        s->surface_ptrs_out = av_mallocz_array(out_frames_hwctx->nb_surfaces,
-                                               sizeof(*s->surface_ptrs_out));
-        if (!s->surface_ptrs_out)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < out_frames_hwctx->nb_surfaces; i++)
-            s->surface_ptrs_out[i] = out_frames_hwctx->surfaces + i;
-        s->nb_surface_ptrs_out = out_frames_hwctx->nb_surfaces;
+    s->mem_ids_out = av_mallocz_array(out_frames_hwctx->nb_surfaces,
+                                      sizeof(*s->mem_ids_out));
+    if (!s->mem_ids_out)
+        return AVERROR(ENOMEM);
+    for (i = 0; i < out_frames_hwctx->nb_surfaces; i++)
+        s->mem_ids_out[i] = out_frames_hwctx->surfaces[i].Data.MemId;
+    s->nb_mem_ids_out = out_frames_hwctx->nb_surfaces;
 
-        s->opaque_alloc.In.Surfaces   = s->surface_ptrs_in;
-        s->opaque_alloc.In.NumSurface = s->nb_surface_ptrs_in;
-        s->opaque_alloc.In.Type       = in_frames_hwctx->frame_type;
+    err = MFXVideoCORE_SetFrameAllocator(s->session, &frame_allocator);
+    if (err != MFX_ERR_NONE)
+        return AVERROR_UNKNOWN;
 
-        s->opaque_alloc.Out.Surfaces   = s->surface_ptrs_out;
-        s->opaque_alloc.Out.NumSurface = s->nb_surface_ptrs_out;
-        s->opaque_alloc.Out.Type       = out_frames_hwctx->frame_type;
-
-        s->opaque_alloc.Header.BufferId = MFX_EXTBUFF_OPAQUE_SURFACE_ALLOCATION;
-        s->opaque_alloc.Header.BufferSz = sizeof(s->opaque_alloc);
-
-        s->ext_buffers[s->num_ext_buf++] = (mfxExtBuffer*)&s->opaque_alloc;
-
-        par.IOPattern = MFX_IOPATTERN_IN_OPAQUE_MEMORY | MFX_IOPATTERN_OUT_OPAQUE_MEMORY;
-    } else {
-        mfxFrameAllocator frame_allocator = {
-            .pthis  = ctx,
-            .Alloc  = frame_alloc,
-            .Lock   = frame_lock,
-            .Unlock = frame_unlock,
-            .GetHDL = frame_get_hdl,
-            .Free   = frame_free,
-        };
-
-        s->mem_ids_in = av_mallocz_array(in_frames_hwctx->nb_surfaces,
-                                         sizeof(*s->mem_ids_in));
-        if (!s->mem_ids_in)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < in_frames_hwctx->nb_surfaces; i++)
-            s->mem_ids_in[i] = in_frames_hwctx->surfaces[i].Data.MemId;
-        s->nb_mem_ids_in = in_frames_hwctx->nb_surfaces;
-
-        s->mem_ids_out = av_mallocz_array(out_frames_hwctx->nb_surfaces,
-                                          sizeof(*s->mem_ids_out));
-        if (!s->mem_ids_out)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < out_frames_hwctx->nb_surfaces; i++)
-            s->mem_ids_out[i] = out_frames_hwctx->surfaces[i].Data.MemId;
-        s->nb_mem_ids_out = out_frames_hwctx->nb_surfaces;
-
-        err = MFXVideoCORE_SetFrameAllocator(s->session, &frame_allocator);
-        if (err != MFX_ERR_NONE)
-            return AVERROR_UNKNOWN;
-
-        par.IOPattern = MFX_IOPATTERN_IN_VIDEO_MEMORY | MFX_IOPATTERN_OUT_VIDEO_MEMORY;
-    }
+    par.IOPattern = MFX_IOPATTERN_IN_VIDEO_MEMORY | MFX_IOPATTERN_OUT_VIDEO_MEMORY;
 
 #if QSV_HAVE_SCALING_CONFIG
     memset(&s->scale_conf, 0, sizeof(mfxExtVPPScaling));

@@ -1008,43 +1008,6 @@ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
     return 0;
 }
 
-static int qsv_init_opaque_alloc(AVCodecContext *avctx, QSVEncContext *q)
-{
-    AVQSVContext *qsv = avctx->hwaccel_context;
-    mfxFrameSurface1 *surfaces;
-    int nb_surfaces, i;
-
-    nb_surfaces = qsv->nb_opaque_surfaces + q->req.NumFrameSuggested;
-
-    q->opaque_alloc_buf = av_buffer_allocz(sizeof(*surfaces) * nb_surfaces);
-    if (!q->opaque_alloc_buf)
-        return AVERROR(ENOMEM);
-
-    q->opaque_surfaces = av_malloc_array(nb_surfaces, sizeof(*q->opaque_surfaces));
-    if (!q->opaque_surfaces)
-        return AVERROR(ENOMEM);
-
-    surfaces = (mfxFrameSurface1*)q->opaque_alloc_buf->data;
-    for (i = 0; i < nb_surfaces; i++) {
-        surfaces[i].Info      = q->req.Info;
-        q->opaque_surfaces[i] = surfaces + i;
-    }
-
-    q->opaque_alloc.Header.BufferId = MFX_EXTBUFF_OPAQUE_SURFACE_ALLOCATION;
-    q->opaque_alloc.Header.BufferSz = sizeof(q->opaque_alloc);
-    q->opaque_alloc.In.Surfaces     = q->opaque_surfaces;
-    q->opaque_alloc.In.NumSurface   = nb_surfaces;
-    q->opaque_alloc.In.Type         = q->req.Type;
-
-    q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->opaque_alloc;
-
-    qsv->nb_opaque_surfaces = nb_surfaces;
-    qsv->opaque_surfaces    = q->opaque_alloc_buf;
-    qsv->opaque_alloc_type  = q->req.Type;
-
-    return 0;
-}
-
 static int qsvenc_init_session(AVCodecContext *avctx, QSVEncContext *q)
 {
     int ret;
@@ -1059,7 +1022,7 @@ static int qsvenc_init_session(AVCodecContext *avctx, QSVEncContext *q)
 
         ret = ff_qsv_init_session_frames(avctx, &q->internal_qs.session,
                                          &q->frames_ctx, q->load_plugins,
-                                         q->param.IOPattern == MFX_IOPATTERN_IN_OPAQUE_MEMORY,
+                                         0,
                                          MFX_GPUCOPY_OFF);
         if (ret < 0) {
             av_buffer_unref(&q->frames_ctx.hw_frames_ctx);
@@ -1100,7 +1063,6 @@ static inline unsigned int qsv_fifo_size(const AVFifoBuffer* fifo)
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
 {
     int iopattern = 0;
-    int opaque_alloc = 0;
     int ret;
 
     q->param.AsyncDepth = q->async_depth;
@@ -1113,7 +1075,6 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
         AVQSVContext *qsv = avctx->hwaccel_context;
 
         iopattern    = qsv->iopattern;
-        opaque_alloc = qsv->opaque_alloc;
     }
 
     if (avctx->hw_frames_ctx) {
@@ -1121,10 +1082,8 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
         AVQSVFramesContext *frames_hwctx = frames_ctx->hwctx;
 
         if (!iopattern) {
-            if (frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME)
-                iopattern = MFX_IOPATTERN_IN_OPAQUE_MEMORY;
-            else if (frames_hwctx->frame_type &
-                     (MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET | MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET))
+            if (frames_hwctx->frame_type &
+                (MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET | MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET))
                 iopattern = MFX_IOPATTERN_IN_VIDEO_MEMORY;
         }
     }
@@ -1196,12 +1155,6 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
     if (ret < 0)
         return ff_qsv_print_error(avctx, ret,
                                   "Error querying (IOSurf) the encoding parameters");
-
-    if (opaque_alloc) {
-        ret = qsv_init_opaque_alloc(avctx, q);
-        if (ret < 0)
-            return ret;
-    }
 
     ret = MFXVideoENCODE_Init(q->session, &q->param);
     if (ret < 0)
@@ -1646,9 +1599,6 @@ int ff_qsv_enc_close(AVCodecContext *avctx, QSVEncContext *q)
     }
     av_fifo_free(q->async_fifo);
     q->async_fifo = NULL;
-
-    av_freep(&q->opaque_surfaces);
-    av_buffer_unref(&q->opaque_alloc_buf);
 
     av_freep(&q->extparam);
 

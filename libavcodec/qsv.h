@@ -52,19 +52,6 @@ typedef struct AVQSVContext {
     int         nb_ext_buffers;
 
     /**
-     * Encoding only. If this field is set to non-zero by the caller, libavcodec
-     * will create an mfxExtOpaqueSurfaceAlloc extended buffer and pass it to
-     * the encoder initialization. This only makes sense if iopattern is also
-     * set to MFX_IOPATTERN_IN_OPAQUE_MEMORY.
-     *
-     * The number of allocated opaque surfaces will be the sum of the number
-     * required by the encoder and the user-provided value nb_opaque_surfaces.
-     * The array of the opaque surfaces will be exported to the caller through
-     * the opaque_surfaces field.
-     */
-    int opaque_alloc;
-
-    /**
      * Encoding only, and only if opaque_alloc is set to non-zero. Before
      * calling avcodec_open2(), the caller should set this field to the number
      * of extra opaque surfaces to allocate beyond what is required by the

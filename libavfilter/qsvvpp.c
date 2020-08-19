@@ -27,6 +27,7 @@
 #include "libavutil/hwcontext_qsv.h"
 #include "libavutil/time.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/avassert.h"
 
 #include "internal.h"
 #include "qsvvpp.h"
@@ -34,7 +35,6 @@
 
 #define IS_VIDEO_MEMORY(mode)  (mode & (MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET | \
                                         MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET))
-#define IS_OPAQUE_MEMORY(mode) (mode & MFX_MEMTYPE_OPAQUE_FRAME)
 #define IS_SYSTEM_MEMORY(mode) (mode & MFX_MEMTYPE_SYSTEM_MEMORY)
 
 typedef struct QSVFrame {
@@ -61,11 +61,6 @@ struct QSVVPPContext {
     int                 nb_surface_ptrs_out;
     mfxFrameSurface1  **surface_ptrs_in;
     mfxFrameSurface1  **surface_ptrs_out;
-
-    /* MFXVPP extern parameters */
-    mfxExtOpaqueSurfaceAlloc opaque_alloc;
-    mfxExtBuffer      **ext_buffers;
-    int                 nb_ext_buffers;
 };
 
 static const mfxHandleType handle_types[] = {
@@ -449,9 +444,7 @@ static int init_vpp_session(AVFilterContext *avctx, QSVVPPContext *s)
         if (!out_frames_ref)
             return AVERROR(ENOMEM);
 
-        s->out_mem_mode = IS_OPAQUE_MEMORY(s->in_mem_mode) ?
-                          MFX_MEMTYPE_OPAQUE_FRAME :
-                          MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET;
+        s->out_mem_mode = MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET;
 
         out_frames_ctx   = (AVHWFramesContext *)out_frames_ref->data;
         out_frames_hwctx = out_frames_ctx->hwctx;
@@ -529,18 +522,7 @@ static int init_vpp_session(AVFilterContext *avctx, QSVVPPContext *s)
             return AVERROR_UNKNOWN;
     }
 
-    if (IS_OPAQUE_MEMORY(s->in_mem_mode) || IS_OPAQUE_MEMORY(s->out_mem_mode)) {
-        s->opaque_alloc.In.Surfaces   = s->surface_ptrs_in;
-        s->opaque_alloc.In.NumSurface = s->nb_surface_ptrs_in;
-        s->opaque_alloc.In.Type       = s->in_mem_mode;
-
-        s->opaque_alloc.Out.Surfaces   = s->surface_ptrs_out;
-        s->opaque_alloc.Out.NumSurface = s->nb_surface_ptrs_out;
-        s->opaque_alloc.Out.Type       = s->out_mem_mode;
-
-        s->opaque_alloc.Header.BufferId = MFX_EXTBUFF_OPAQUE_SURFACE_ALLOCATION;
-        s->opaque_alloc.Header.BufferSz = sizeof(s->opaque_alloc);
-    } else if (IS_VIDEO_MEMORY(s->in_mem_mode) || IS_VIDEO_MEMORY(s->out_mem_mode)) {
+    if (IS_VIDEO_MEMORY(s->in_mem_mode) || IS_VIDEO_MEMORY(s->out_mem_mode)) {
         mfxFrameAllocator frame_allocator = {
             .pthis  = s,
             .Alloc  = frame_alloc,
@@ -612,39 +594,24 @@ int ff_qsvvpp_create(AVFilterContext *avctx, QSVVPPContext **vpp, QSVVPPParam *p
         goto failed;
     }
 
-    if (IS_OPAQUE_MEMORY(s->in_mem_mode) || IS_OPAQUE_MEMORY(s->out_mem_mode)) {
-        s->nb_ext_buffers = param->num_ext_buf + 1;
-        s->ext_buffers = av_mallocz_array(s->nb_ext_buffers, sizeof(*s->ext_buffers));
-        if (!s->ext_buffers) {
-            ret = AVERROR(ENOMEM);
-            goto failed;
-        }
-
-        s->ext_buffers[0] = (mfxExtBuffer *)&s->opaque_alloc;
-        for (i = 1; i < param->num_ext_buf; i++)
-            s->ext_buffers[i]    = param->ext_buf[i - 1];
-        s->vpp_param.ExtParam    = s->ext_buffers;
-        s->vpp_param.NumExtParam = s->nb_ext_buffers;
-    } else {
-        s->vpp_param.NumExtParam = param->num_ext_buf;
-        s->vpp_param.ExtParam    = param->ext_buf;
-    }
+    s->vpp_param.NumExtParam = param->num_ext_buf;
+    s->vpp_param.ExtParam    = param->ext_buf;
 
     s->vpp_param.AsyncDepth = 1;
 
     if (IS_SYSTEM_MEMORY(s->in_mem_mode))
         s->vpp_param.IOPattern |= MFX_IOPATTERN_IN_SYSTEM_MEMORY;
-    else if (IS_VIDEO_MEMORY(s->in_mem_mode))
+    else {
+        av_assert0(IS_VIDEO_MEMORY(s->in_mem_mode));
         s->vpp_param.IOPattern |= MFX_IOPATTERN_IN_VIDEO_MEMORY;
-    else if (IS_OPAQUE_MEMORY(s->in_mem_mode))
-        s->vpp_param.IOPattern |= MFX_IOPATTERN_IN_OPAQUE_MEMORY;
+    }
 
     if (IS_SYSTEM_MEMORY(s->out_mem_mode))
         s->vpp_param.IOPattern |= MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
-    else if (IS_VIDEO_MEMORY(s->out_mem_mode))
+    else {
+        av_assert0(IS_VIDEO_MEMORY(s->out_mem_mode));
         s->vpp_param.IOPattern |= MFX_IOPATTERN_OUT_VIDEO_MEMORY;
-    else if (IS_OPAQUE_MEMORY(s->out_mem_mode))
-        s->vpp_param.IOPattern |= MFX_IOPATTERN_OUT_OPAQUE_MEMORY;
+    }
 
     ret = MFXVideoVPP_Init(s->session, &s->vpp_param);
     if (ret < 0) {
@@ -678,7 +645,6 @@ int ff_qsvvpp_free(QSVVPPContext **vpp)
     clear_frame_list(&s->out_frame_list);
     av_freep(&s->surface_ptrs_in);
     av_freep(&s->surface_ptrs_out);
-    av_freep(&s->ext_buffers);
     av_freep(&s->frame_infos);
     av_freep(vpp);
 

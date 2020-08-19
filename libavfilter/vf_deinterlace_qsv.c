@@ -68,7 +68,6 @@ typedef struct QSVDeintContext {
     mfxFrameSurface1 **surface_ptrs;
     int             nb_surface_ptrs;
 
-    mfxExtOpaqueSurfaceAlloc opaque_alloc;
     mfxExtVPPDeinterlacing   deint_conf;
     mfxExtBuffer            *ext_buffers[2];
     int                      num_ext_buffers;
@@ -175,8 +174,6 @@ static int init_out_session(AVFilterContext *ctx)
     AVQSVFramesContext *hw_frames_hwctx = hw_frames_ctx->hwctx;
     AVQSVDeviceContext    *device_hwctx = hw_frames_ctx->device_ctx->hwctx;
 
-    int opaque = !!(hw_frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
-
     mfxHDL handle = NULL;
     mfxHandleType handle_type;
     mfxVersion ver;
@@ -184,6 +181,15 @@ static int init_out_session(AVFilterContext *ctx)
     mfxVideoParam par;
     mfxStatus err;
     int i;
+
+    mfxFrameAllocator frame_allocator = {
+        .pthis  = ctx,
+        .Alloc  = frame_alloc,
+        .Lock   = frame_lock,
+        .Unlock = frame_unlock,
+        .GetHDL = frame_get_hdl,
+        .Free   = frame_free,
+    };
 
     /* extract the properties of the "master" session given to us */
     err = MFXQueryIMPL(device_hwctx->session, &impl);
@@ -235,51 +241,19 @@ static int init_out_session(AVFilterContext *ctx)
 
     s->ext_buffers[s->num_ext_buffers++] = (mfxExtBuffer *)&s->deint_conf;
 
-    if (opaque) {
-        s->surface_ptrs = av_mallocz_array(hw_frames_hwctx->nb_surfaces,
-                                           sizeof(*s->surface_ptrs));
-        if (!s->surface_ptrs)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < hw_frames_hwctx->nb_surfaces; i++)
-            s->surface_ptrs[i] = hw_frames_hwctx->surfaces + i;
-        s->nb_surface_ptrs = hw_frames_hwctx->nb_surfaces;
+    s->mem_ids = av_mallocz_array(hw_frames_hwctx->nb_surfaces,
+                                  sizeof(*s->mem_ids));
+    if (!s->mem_ids)
+        return AVERROR(ENOMEM);
+    for (i = 0; i < hw_frames_hwctx->nb_surfaces; i++)
+        s->mem_ids[i] = hw_frames_hwctx->surfaces[i].Data.MemId;
+    s->nb_mem_ids = hw_frames_hwctx->nb_surfaces;
 
-        s->opaque_alloc.In.Surfaces   = s->surface_ptrs;
-        s->opaque_alloc.In.NumSurface = s->nb_surface_ptrs;
-        s->opaque_alloc.In.Type       = hw_frames_hwctx->frame_type;
+    err = MFXVideoCORE_SetFrameAllocator(s->session, &frame_allocator);
+    if (err != MFX_ERR_NONE)
+        return AVERROR_UNKNOWN;
 
-        s->opaque_alloc.Out = s->opaque_alloc.In;
-
-        s->opaque_alloc.Header.BufferId = MFX_EXTBUFF_OPAQUE_SURFACE_ALLOCATION;
-        s->opaque_alloc.Header.BufferSz = sizeof(s->opaque_alloc);
-
-        s->ext_buffers[s->num_ext_buffers++] = (mfxExtBuffer *)&s->opaque_alloc;
-
-        par.IOPattern = MFX_IOPATTERN_IN_OPAQUE_MEMORY | MFX_IOPATTERN_OUT_OPAQUE_MEMORY;
-    } else {
-        mfxFrameAllocator frame_allocator = {
-            .pthis  = ctx,
-            .Alloc  = frame_alloc,
-            .Lock   = frame_lock,
-            .Unlock = frame_unlock,
-            .GetHDL = frame_get_hdl,
-            .Free   = frame_free,
-        };
-
-        s->mem_ids = av_mallocz_array(hw_frames_hwctx->nb_surfaces,
-                                      sizeof(*s->mem_ids));
-        if (!s->mem_ids)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < hw_frames_hwctx->nb_surfaces; i++)
-            s->mem_ids[i] = hw_frames_hwctx->surfaces[i].Data.MemId;
-        s->nb_mem_ids = hw_frames_hwctx->nb_surfaces;
-
-        err = MFXVideoCORE_SetFrameAllocator(s->session, &frame_allocator);
-        if (err != MFX_ERR_NONE)
-            return AVERROR_UNKNOWN;
-
-        par.IOPattern = MFX_IOPATTERN_IN_VIDEO_MEMORY | MFX_IOPATTERN_OUT_VIDEO_MEMORY;
-    }
+    par.IOPattern = MFX_IOPATTERN_IN_VIDEO_MEMORY | MFX_IOPATTERN_OUT_VIDEO_MEMORY;
 
     par.ExtParam    = s->ext_buffers;
     par.NumExtParam = s->num_ext_buffers;
