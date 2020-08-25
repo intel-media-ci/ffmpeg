@@ -28,6 +28,7 @@
 #include "dnn_backend_native_layer_conv2d.h"
 #include "dnn_backend_native_layers.h"
 
+
 static DNNReturnType get_input_native(void *model, DNNData *input, const char *input_name)
 {
     NativeModel *native_model = (NativeModel *)model;
