@@ -55,6 +55,14 @@ static int qsv_device_init(InputStream *ist)
             return err;
     }
 
+#if CONFIG_VAAPI
+    else if (ist->hwaccel_device && !strncmp(ist->hwaccel_device, "/dev/dri/", 9)) {
+        err = av_dict_set(&dict, "child_device", ist->hwaccel_device, 0);
+        if (err < 0)
+            return err;
+    }
+#endif
+
     err = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_QSV,
                                  ist->hwaccel_device, dict, 0);
     if (err < 0) {
