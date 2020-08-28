@@ -113,6 +113,7 @@ typedef struct NativeContext {
 // Represents simple feed-forward convolutional network.
 typedef struct NativeModel{
     NativeContext ctx;
+    DNNModel *model;
     Layer *layers;
     int32_t layers_num;
     DnnOperand *operands;

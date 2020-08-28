@@ -27,6 +27,7 @@
 #define AVFILTER_DNN_INTERFACE_H
 
 #include <stdint.h>
+#include "libavutil/frame.h"
 
 typedef enum {DNN_SUCCESS, DNN_ERROR} DNNReturnType;
 
@@ -53,6 +54,12 @@ typedef struct DNNModel{
     // Sets model input and output.
     // Should be called at least once before model execution.
     DNNReturnType (*set_input)(void *model, DNNData *input, const char *input_name);
+    // Sets model input.
+    // Should be called every time before model execution.
+    DNNReturnType (*set_input_new)(void *model, AVFrame *frame, const char *input_name);
+    // set the pre process to transfer data from AVFrame to DNNData
+    // currently every filter must provide the function, we plan to also support within dnn module
+    int (*pre_proc)(AVFrame *frame_in, DNNData *model_input, void *user_data);
 } DNNModel;
 
 // Stores pointers to functions for loading, executing, freeing DNN models for one of the backends.

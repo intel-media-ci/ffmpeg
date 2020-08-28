@@ -34,6 +34,7 @@ typedef struct OVContext {
 
 typedef struct OVModel{
     OVContext ctx;
+    DNNModel *model;
     ie_core_t *core;
     ie_network_t *network;
     ie_executable_network_t *exe_network;
@@ -114,7 +115,7 @@ static DNNReturnType get_input_ov(void *model, DNNData *input, const char *input
     return DNN_ERROR;
 }
 
-static DNNReturnType set_input_ov(void *model, DNNData *input, const char *input_name)
+static DNNReturnType set_input_new_ov(void *model, AVFrame *frame, const char *input_name)
 {
     OVModel *ov_model = (OVModel *)model;
     OVContext *ctx = &ov_model->ctx;
@@ -122,10 +123,6 @@ static DNNReturnType set_input_ov(void *model, DNNData *input, const char *input
     dimensions_t dims;
     precision_e precision;
     ie_blob_buffer_t blob_buffer;
-
-    status = ie_exec_network_create_infer_request(ov_model->exe_network, &ov_model->infer_request);
-    if (status != OK)
-        goto err;
 
     status = ie_infer_request_get_blob(ov_model->infer_request, input_name, &ov_model->input_blob);
     if (status != OK)
@@ -136,23 +133,25 @@ static DNNReturnType set_input_ov(void *model, DNNData *input, const char *input
     if (status != OK)
         goto err;
 
-    av_assert0(input->channels == dims.dims[1]);
-    av_assert0(input->height   == dims.dims[2]);
-    av_assert0(input->width    == dims.dims[3]);
-    av_assert0(input->dt       == precision_to_datatype(precision));
-
     status = ie_blob_get_buffer(ov_model->input_blob, &blob_buffer);
     if (status != OK)
         goto err;
-    input->data = blob_buffer.buffer;
+
+    if (ov_model->model->pre_proc != NULL) {
+        DNNData input;
+        input.height = dims.dims[2];
+        input.width = dims.dims[3];
+        input.channels = dims.dims[1];
+        input.data = blob_buffer.buffer;
+        input.dt = precision_to_datatype(precision);
+        ov_model->model->pre_proc(frame, &input, ov_model->model->userdata);
+    }
 
     return DNN_SUCCESS;
 
 err:
     if (ov_model->input_blob)
         ie_blob_free(&ov_model->input_blob);
-    if (ov_model->infer_request)
-        ie_infer_request_free(&ov_model->infer_request);
     av_log(ctx, AV_LOG_ERROR, "Failed to create inference instance or get input data/dims/precision/memory\n");
     return DNN_ERROR;
 }
@@ -164,7 +163,7 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options, 
     IEStatusCode status;
     ie_config_t config = {NULL, NULL, NULL};
 
-    model = av_malloc(sizeof(DNNModel));
+    model = av_mallocz(sizeof(DNNModel));
     if (!model){
         return NULL;
     }
@@ -173,6 +172,7 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options, 
     if (!ov_model)
         goto err;
     ov_model->ctx.class = &dnn_openvino_class;
+    ov_model->model = model;
 
     status = ie_core_create("", &ov_model->core);
     if (status != OK)
@@ -186,8 +186,12 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options, 
     if (status != OK)
         goto err;
 
+    status = ie_exec_network_create_infer_request(ov_model->exe_network, &ov_model->infer_request);
+    if (status != OK)
+        goto err;
+
     model->model = (void *)ov_model;
-    model->set_input = &set_input_ov;
+    model->set_input_new = &set_input_new_ov;
     model->get_input = &get_input_ov;
     model->options = options;
     model->userdata = userdata;
@@ -198,6 +202,8 @@ err:
     if (model)
         av_freep(&model);
     if (ov_model) {
+        if (ov_model->infer_request)
+            ie_infer_request_free(&ov_model->infer_request);
         if (ov_model->exe_network)
             ie_exec_network_free(&ov_model->exe_network);
         if (ov_model->network)

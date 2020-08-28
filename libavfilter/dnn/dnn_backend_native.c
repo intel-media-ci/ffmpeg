@@ -62,7 +62,7 @@ static DNNReturnType get_input_native(void *model, DNNData *input, const char *i
     return DNN_ERROR;
 }
 
-static DNNReturnType set_input_native(void *model, DNNData *input, const char *input_name)
+static DNNReturnType set_input_new_native(void *model, AVFrame *frame, const char *input_name)
 {
     NativeModel *native_model = (NativeModel *)model;
     NativeContext *ctx = &native_model->ctx;
@@ -73,7 +73,7 @@ static DNNReturnType set_input_native(void *model, DNNData *input, const char *i
         return DNN_ERROR;
     }
 
-    /* inputs */
+    // query input
     for (int i = 0; i < native_model->operands_num; ++i) {
         oprd = &native_model->operands[i];
         if (strcmp(oprd->name, input_name) == 0) {
@@ -90,11 +90,10 @@ static DNNReturnType set_input_native(void *model, DNNData *input, const char *i
         return DNN_ERROR;
     }
 
-    oprd->dims[0] = 1;
-    oprd->dims[1] = input->height;
-    oprd->dims[2] = input->width;
-    oprd->dims[3] = input->channels;
+    oprd->dims[1] = frame->height;
+    oprd->dims[2] = frame->width;
 
+    // prepare input data
     av_freep(&oprd->data);
     oprd->length = calculate_operand_data_length(oprd);
     if (oprd->length <= 0) {
@@ -107,7 +106,15 @@ static DNNReturnType set_input_native(void *model, DNNData *input, const char *i
         return DNN_ERROR;
     }
 
-    input->data = oprd->data;
+    if (native_model->model->pre_proc != NULL) {
+        DNNData input;
+        input.height = oprd->dims[1];
+        input.width = oprd->dims[2];
+        input.channels = oprd->dims[3];
+        input.data = oprd->data;
+        input.dt = oprd->data_type;
+        native_model->model->pre_proc(frame, &input, native_model->model->userdata);
+    }
 
     return DNN_SUCCESS;
 }
@@ -175,6 +182,7 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, const char *optio
 
     native_model->ctx.class = &dnn_native_class;
     model->model = (void *)native_model;
+    native_model->model = model;
 
     avio_seek(model_file_context, file_size - 8, SEEK_SET);
     native_model->layers_num = (int32_t)avio_rl32(model_file_context);
@@ -246,7 +254,7 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, const char *optio
         return NULL;
     }
 
-    model->set_input = &set_input_native;
+    model->set_input_new = &set_input_new_native;
     model->get_input = &get_input_native;
     model->options = options;
     model->userdata = userdata;

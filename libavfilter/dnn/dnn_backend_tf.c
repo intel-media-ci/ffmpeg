@@ -40,6 +40,7 @@ typedef struct TFContext {
 
 typedef struct TFModel{
     TFContext ctx;
+    DNNModel *model;
     TF_Graph *graph;
     TF_Session *session;
     TF_Status *status;
@@ -152,12 +153,18 @@ static DNNReturnType get_input_tf(void *model, DNNData *input, const char *input
     return DNN_SUCCESS;
 }
 
-static DNNReturnType set_input_tf(void *model, DNNData *input, const char *input_name)
+static DNNReturnType set_input_new_tf(void *model, AVFrame *frame, const char *input_name)
 {
     TFModel *tf_model = (TFModel *)model;
     TFContext *ctx = &tf_model->ctx;
+    DNNData input;
     TF_SessionOptions *sess_opts;
     const TF_Operation *init_op = TF_GraphOperationByName(tf_model->graph, "init");
+
+    if (get_input_tf(model, &input, input_name) != DNN_SUCCESS)
+        return DNN_ERROR;
+    input.height = frame->height;
+    input.width = frame->width;
 
     // Input operation
     tf_model->input.oper = TF_GraphOperationByName(tf_model->graph, input_name);
@@ -169,12 +176,16 @@ static DNNReturnType set_input_tf(void *model, DNNData *input, const char *input
     if (tf_model->input_tensor){
         TF_DeleteTensor(tf_model->input_tensor);
     }
-    tf_model->input_tensor = allocate_input_tensor(input);
+    tf_model->input_tensor = allocate_input_tensor(&input);
     if (!tf_model->input_tensor){
         av_log(ctx, AV_LOG_ERROR, "Failed to allocate memory for input tensor\n");
         return DNN_ERROR;
     }
-    input->data = (float *)TF_TensorData(tf_model->input_tensor);
+    input.data = (float *)TF_TensorData(tf_model->input_tensor);
+
+    if (tf_model->model->pre_proc != NULL) {
+        tf_model->model->pre_proc(frame, &input, tf_model->model->userdata);
+    }
 
     // session
     if (tf_model->session){
@@ -591,7 +602,7 @@ DNNModel *ff_dnn_load_model_tf(const char *model_filename, const char *options, 
     DNNModel *model = NULL;
     TFModel *tf_model = NULL;
 
-    model = av_malloc(sizeof(DNNModel));
+    model = av_mallocz(sizeof(DNNModel));
     if (!model){
         return NULL;
     }
@@ -602,6 +613,7 @@ DNNModel *ff_dnn_load_model_tf(const char *model_filename, const char *options, 
         return NULL;
     }
     tf_model->ctx.class = &dnn_tensorflow_class;
+    tf_model->model = model;
 
     if (load_tf_model(tf_model, model_filename) != DNN_SUCCESS){
         if (load_native_model(tf_model, model_filename) != DNN_SUCCESS){
@@ -613,7 +625,7 @@ DNNModel *ff_dnn_load_model_tf(const char *model_filename, const char *options, 
     }
 
     model->model = (void *)tf_model;
-    model->set_input = &set_input_tf;
+    model->set_input_new = &set_input_new_tf;
     model->get_input = &get_input_tf;
     model->options = options;
     model->userdata = userdata;
