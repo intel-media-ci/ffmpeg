@@ -21,6 +21,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/thread.h"
 #include "libavutil/cpu.h"
+#include "libavutil/x86/cpu.h"
 #include "dnn_backend_native_layer_conv2d.h"
 
 #define CLAMP_TO_EDGE(x, w) ((x) < 0 ? 0 : ((x) >= (w) ? (w - 1) : (x)))
@@ -33,6 +34,7 @@ typedef struct thread_common_param{
     const void *parameters;
     NativeContext *ctx;
     int thread_num;
+    int channel_step;
 } thread_common_param;
 
 typedef struct thread_param{
@@ -49,6 +51,7 @@ typedef struct execute_param{
 } execute_param;
 
 void ff_dnn_execute_layer_conv2d_c(const execute_param *exe_param);
+void ff_dnn_execute_layer_conv2d_sse4(const execute_param *exe_param);
 
 int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int file_size, int operands_num)
 {
@@ -230,7 +233,12 @@ static void * dnn_execute_layer_conv2d_thread(void *threadarg)
     exe_param.filter_size = filter_size;
     exe_param.filter_linesize = filter_linesize;
 
-    ff_dnn_execute_layer_conv2d_c(&exe_param);
+     if ((thread_common_param->channel_step >= 4) && (conv_params->input_num >= 4)) {
+        ff_dnn_execute_layer_conv2d_sse4(&exe_param);
+    }
+    else {
+        ff_dnn_execute_layer_conv2d_c(&exe_param);
+    }
 
     output = output_operand->data;
     output += (conv_params->output_num) * (width - 2 * pad_size) * (thread_start - pad_size);
@@ -282,6 +290,13 @@ int dnn_execute_layer_conv2d(DnnOperand *operands, const int32_t *input_operand_
     thread_common_param.output_operand_index = output_operand_index;
     thread_common_param.parameters = parameters;
     thread_common_param.ctx = ctx;
+
+    thread_common_param.channel_step = 1;
+    #if ARCH_X86_64
+        int cpu_flags = av_get_cpu_flags();
+        if (EXTERNAL_SSE4(cpu_flags))
+            thread_common_param.channel_step = 4;
+    #endif
 
 #if HAVE_PTHREAD_CANCEL
     thread_common_param.thread_num = thread_num;
