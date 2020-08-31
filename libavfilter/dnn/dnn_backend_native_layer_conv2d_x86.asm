@@ -211,4 +211,125 @@ cglobal dnn_execute_layer_conv2d, 8, 15, 3, exe_param,\
     jl .loop_y
 
     RET
+
+; void ff_dnn_execute_layer_conv2d_avx2(const execute_param *exe_param);
+
+INIT_YMM avx2
+cglobal dnn_execute_layer_conv2d, 8, 15, 3, exe_param,\
+    x, y, n_filter, cha, kernel_x, kernel_y, x_pos, y_pos, kernel_pos,\
+    input, output, kernel, tmp1, tmp2
+
+%define thread_start [exe_paramq]
+%define thread_end [exe_paramq + 1 * 4]
+%define input_num [exe_paramq + 2 * 4]
+%define output_num [exe_paramq + 3 * 4]
+%define kernel_size [exe_paramq + 4 * 4]
+%define padding_method [exe_paramq + 5 * 4]
+%define dilation [exe_paramq + 6 * 4]
+%define pad_size [exe_paramq + 7 * 4]
+%define width [exe_paramq + 8 * 4]
+%define height [exe_paramq + 9 * 4]
+%define radius [exe_paramq + 10 * 4]
+%define src_linesize [exe_paramq + 11 * 4]
+%define filter_size [exe_paramq + 12 * 4]
+%define filter_linesize [exe_paramq + 13 * 4]
+%define SAME_CLAMP_TO_EDGE 2
+
+    mov inputq, [exe_paramq + 14 * 4]
+    mov outputq, [exe_paramq + 14 * 4 + 8]
+    mov kernelq, [exe_paramq + 14 * 4 + 2 * 8]
+
+    mov yd, thread_start
+.loop_y:
+    mov xd, pad_size
+    .loop_x:
+        xor n_filterd, n_filterd
+        xor kernel_posq, kernel_posq
+        .loop_filter:
+            xorps m2, m2
+            xor kernel_yd, kernel_yd
+
+            mov tmp1d, kernel_yd
+            sub tmp1d, radius
+            mov y_posd, dilation
+            imul y_posd, tmp1d
+            add y_posd, yd
+
+            .loop_kery:
+                xor kernel_xd, kernel_xd
+
+                mov tmp1d, kernel_xd
+                sub tmp1d, radius
+                mov x_posd, dilation
+                imul x_posd, tmp1d
+                add x_posd, xd
+
+                .loop_kerx:
+                    COUNT_INPUT
+                    xor chad, chad
+                    .loop_ch:
+                        cmp tmp1d, -1
+                        je .out
+
+                        movsxdifnidn tmp1q, tmp1d
+                        movups m0, [inputq + tmp1q * 4]
+                        add tmp1d, 8
+                        jmp .load_end
+
+                        .out:
+                        xorps m0, m0
+
+                        .load_end:
+
+                        movups m1, [kernelq + kernel_posq * 4]
+                        add kernel_posq, 8
+
+                        mulps m0, m1
+                        addps m2, m0
+
+                        add chad, 8
+                        mov tmp2d, input_num
+                        cmp chad, tmp2d
+                        jl .loop_ch
+
+                    add x_posd, dilation
+                    add kernel_xd, 1
+                    mov tmp1d, kernel_size
+                    cmp kernel_xd, tmp1d
+                    jl .loop_kerx
+
+                add y_posd, dilation
+                add kernel_yd, 1
+                mov tmp1d, kernel_size
+                cmp kernel_yd, tmp1d
+                jl .loop_kery
+
+            vperm2f128 m1, m2, m2, 1
+            addps m2, m1
+            haddps m2, m2
+            haddps m2, m2
+            movsxdifnidn n_filterq, n_filterd
+            movss [outputq + n_filterq * 4], xm2
+
+            add n_filterd, 1
+            mov tmp1d, output_num
+            cmp n_filterd, tmp1d
+            jl .loop_filter
+
+        mov tmp1d, output_num
+        movsxdifnidn tmp1q, tmp1d
+        shl tmp1d, 2
+        add outputq, tmp1q
+        add xd, 1
+        mov tmp2d, width
+        sub tmp2d, pad_size
+        cmp xd, tmp2d
+        jl .loop_x
+
+    add yd, 1
+    mov tmp1d, thread_end
+    cmp yd, tmp1d
+    jl .loop_y
+
+    RET
 %endif

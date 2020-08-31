@@ -52,6 +52,7 @@ typedef struct execute_param{
 
 void ff_dnn_execute_layer_conv2d_c(const execute_param *exe_param);
 void ff_dnn_execute_layer_conv2d_sse4(const execute_param *exe_param);
+void ff_dnn_execute_layer_conv2d_avx2(const execute_param *exe_param);
 
 int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int file_size, int operands_num)
 {
@@ -233,7 +234,10 @@ static void * dnn_execute_layer_conv2d_thread(void *threadarg)
     exe_param.filter_size = filter_size;
     exe_param.filter_linesize = filter_linesize;
 
-     if ((thread_common_param->channel_step >= 4) && (conv_params->input_num >= 4)) {
+    if ((thread_common_param->channel_step >= 8) && (conv_params->input_num >= 8)) {
+        ff_dnn_execute_layer_conv2d_avx2(&exe_param);
+    }
+    else if ((thread_common_param->channel_step >= 4) && (conv_params->input_num >= 4)) {
         ff_dnn_execute_layer_conv2d_sse4(&exe_param);
     }
     else {
@@ -296,6 +300,8 @@ int dnn_execute_layer_conv2d(DnnOperand *operands, const int32_t *input_operand_
         int cpu_flags = av_get_cpu_flags();
         if (EXTERNAL_SSE4(cpu_flags))
             thread_common_param.channel_step = 4;
+        if (EXTERNAL_AVX2(cpu_flags))
+            thread_common_param.channel_step = 8;
     #endif
 
 #if HAVE_PTHREAD_CANCEL
