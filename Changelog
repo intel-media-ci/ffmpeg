@@ -16,6 +16,7 @@ version <next>:
 - AV1 Low overhead bitstream format demuxer
 - RPZA video encoder
 - AV1 decoder (Hardware acceleration used only)
+- AV1 VAAPI decoder
 
 
 version 4.3:
