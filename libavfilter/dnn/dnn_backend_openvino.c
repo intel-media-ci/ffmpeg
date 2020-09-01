@@ -24,6 +24,7 @@
  */
 
 #include "dnn_backend_openvino.h"
+#include "dnn_io_proc.h"
 #include "libavformat/avio.h"
 #include "libavutil/avassert.h"
 #include <c_api/ie_c_api.h>
@@ -123,6 +124,7 @@ static DNNReturnType set_input_new_ov(void *model, AVFrame *frame, const char *i
     dimensions_t dims;
     precision_e precision;
     ie_blob_buffer_t blob_buffer;
+    DNNData input;
 
     status = ie_infer_request_get_blob(ov_model->infer_request, input_name, &ov_model->input_blob);
     if (status != OK)
@@ -137,14 +139,15 @@ static DNNReturnType set_input_new_ov(void *model, AVFrame *frame, const char *i
     if (status != OK)
         goto err;
 
+    input.height = dims.dims[2];
+    input.width = dims.dims[3];
+    input.channels = dims.dims[1];
+    input.data = blob_buffer.buffer;
+    input.dt = precision_to_datatype(precision);
     if (ov_model->model->pre_proc != NULL) {
-        DNNData input;
-        input.height = dims.dims[2];
-        input.width = dims.dims[3];
-        input.channels = dims.dims[1];
-        input.data = blob_buffer.buffer;
-        input.dt = precision_to_datatype(precision);
         ov_model->model->pre_proc(frame, &input, ov_model->model->userdata);
+    } else {
+        proc_from_frame_to_dnn(frame, &input, ctx);
     }
 
     return DNN_SUCCESS;

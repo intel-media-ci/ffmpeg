@@ -76,47 +76,6 @@ static const AVOption dnn_processing_options[] = {
 
 AVFILTER_DEFINE_CLASS(dnn_processing);
 
-static int pre_proc(AVFrame *frame, DNNData *dnn_input, void *user_data)
-{
-    DnnProcessingContext *ctx = user_data;
-    int bytewidth = av_image_get_linesize(frame->format, frame->width, 0);
-
-    switch (frame->format) {
-    case AV_PIX_FMT_RGB24:
-    case AV_PIX_FMT_BGR24:
-        if (dnn_input->dt == DNN_FLOAT) {
-            sws_scale(ctx->sws_gray8_to_grayf32, (const uint8_t **)frame->data, frame->linesize,
-                      0, frame->height, (uint8_t * const*)(&dnn_input->data),
-                      (const int [4]){frame->width * 3 * sizeof(float), 0, 0, 0});
-        } else {
-            av_assert0(dnn_input->dt == DNN_UINT8);
-            av_image_copy_plane(dnn_input->data, bytewidth,
-                                frame->data[0], frame->linesize[0],
-                                bytewidth, frame->height);
-        }
-        return 0;
-    case AV_PIX_FMT_GRAY8:
-    case AV_PIX_FMT_GRAYF32:
-        av_image_copy_plane(dnn_input->data, bytewidth,
-                            frame->data[0], frame->linesize[0],
-                            bytewidth, frame->height);
-        return 0;
-    case AV_PIX_FMT_YUV420P:
-    case AV_PIX_FMT_YUV422P:
-    case AV_PIX_FMT_YUV444P:
-    case AV_PIX_FMT_YUV410P:
-    case AV_PIX_FMT_YUV411P:
-        sws_scale(ctx->sws_gray8_to_grayf32, (const uint8_t **)frame->data, frame->linesize,
-                  0, frame->height, (uint8_t * const*)(&dnn_input->data),
-                  (const int [4]){frame->width * sizeof(float), 0, 0, 0});
-        return 0;
-    default:
-        return AVERROR(EIO);
-    }
-
-    return 0;
-}
-
 static av_cold int init(AVFilterContext *context)
 {
     DnnProcessingContext *ctx = context->priv;
@@ -361,7 +320,6 @@ static int config_output(AVFilterLink *outlink)
     outlink->h = ctx->output.height;
 
     prepare_sws_context(outlink);
-    ctx->model->pre_proc = pre_proc;
 
     return 0;
 }

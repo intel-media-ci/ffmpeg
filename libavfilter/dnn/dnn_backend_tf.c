@@ -31,6 +31,7 @@
 #include "libavutil/avassert.h"
 #include "dnn_backend_native_layer_pad.h"
 #include "dnn_backend_native_layer_maximum.h"
+#include "dnn_io_proc.h"
 
 #include <tensorflow/c/c_api.h>
 
@@ -185,6 +186,8 @@ static DNNReturnType set_input_new_tf(void *model, AVFrame *frame, const char *i
 
     if (tf_model->model->pre_proc != NULL) {
         tf_model->model->pre_proc(frame, &input, tf_model->model->userdata);
+    } else {
+        proc_from_frame_to_dnn(frame, &input, ctx);
     }
 
     // session

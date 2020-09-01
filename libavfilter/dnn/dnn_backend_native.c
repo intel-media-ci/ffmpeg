@@ -27,6 +27,7 @@
 #include "libavutil/avassert.h"
 #include "dnn_backend_native_layer_conv2d.h"
 #include "dnn_backend_native_layers.h"
+#include "dnn_io_proc.h"
 
 static const AVClass dnn_native_class = {
     .class_name = "dnn_native",
@@ -67,6 +68,7 @@ static DNNReturnType set_input_new_native(void *model, AVFrame *frame, const cha
     NativeModel *native_model = (NativeModel *)model;
     NativeContext *ctx = &native_model->ctx;
     DnnOperand *oprd = NULL;
+    DNNData input;
 
     if (native_model->layers_num <= 0 || native_model->operands_num <= 0) {
         av_log(ctx, AV_LOG_ERROR, "No operands or layers in model\n");
@@ -106,14 +108,15 @@ static DNNReturnType set_input_new_native(void *model, AVFrame *frame, const cha
         return DNN_ERROR;
     }
 
+    input.height = oprd->dims[1];
+    input.width = oprd->dims[2];
+    input.channels = oprd->dims[3];
+    input.data = oprd->data;
+    input.dt = oprd->data_type;
     if (native_model->model->pre_proc != NULL) {
-        DNNData input;
-        input.height = oprd->dims[1];
-        input.width = oprd->dims[2];
-        input.channels = oprd->dims[3];
-        input.data = oprd->data;
-        input.dt = oprd->data_type;
         native_model->model->pre_proc(frame, &input, native_model->model->userdata);
+    } else {
+        proc_from_frame_to_dnn(frame, &input, ctx);
     }
 
     return DNN_SUCCESS;
