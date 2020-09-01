@@ -22,6 +22,7 @@ version <next>:
 - MODS demuxer
 - PhotoCD decoder
 - AV1 decoder (Hardware acceleration used only)
+- AV1 VAAPI decoder
 
 
 version 4.3:
