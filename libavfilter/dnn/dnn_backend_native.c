@@ -31,7 +31,7 @@
 static const AVClass dnn_native_class = {
     .class_name = "dnn_native",
     .item_name  = av_default_item_name,
-    .option     = NULL,
+    .option     = dnn_native_options,
     .version    = LIBAVUTIL_VERSION_INT,
     .category   = AV_CLASS_CATEGORY_FILTER,
 };
@@ -112,6 +112,22 @@ static DNNReturnType set_input_native(void *model, DNNData *input, const char *i
     return DNN_SUCCESS;
 }
 
+static int dnn_parse_options(void *ctx, const char *options)
+{
+    AVDictionary *dict = NULL;
+    int err = av_dict_parse_string(&dict, options, "=", "&", 0);
+    if (err < 0) {
+        av_dict_free(&dict);
+        return err;
+    }
+
+    av_opt_set_defaults(ctx);
+    err = av_opt_set_dict(ctx, &dict);
+
+    av_dict_free(&dict);
+    return err;
+}
+
 // Loads model and its parameters that are stored in a binary file with following structure:
 // layers_num,layer_type,layer_parameterss,layer_type,layer_parameters...
 // For CONV layer: activation_function, input_num, output_num, kernel_size, kernel, biases
@@ -174,6 +190,9 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, const char *optio
     }
 
     native_model->ctx.class = &dnn_native_class;
+    model->options = options;
+    if (dnn_parse_options(&native_model->ctx, model->options) < 0)
+        goto fail;
     model->model = (void *)native_model;
 
     avio_seek(model_file_context, file_size - 8, SEEK_SET);
@@ -248,7 +267,6 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, const char *optio
 
     model->set_input = &set_input_native;
     model->get_input = &get_input_native;
-    model->options = options;
 
     return model;
 

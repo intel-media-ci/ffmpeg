@@ -29,6 +29,7 @@
 
 #include "../dnn_interface.h"
 #include "libavformat/avio.h"
+#include "libavutil/opt.h"
 
 /**
  * the enum value of DNNLayerType should not be changed,
@@ -106,9 +107,21 @@ typedef struct InputParams{
     int height, width, channels;
 } InputParams;
 
+typedef struct NativeOptions{
+    uint32_t conv2d_threads;
+} NativeOptions;
+
 typedef struct NativeContext {
     const AVClass *class;
+    NativeOptions options;
 } NativeContext;
+
+#define OFFSET(x) offsetof(NativeContext, x)
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM
+static const AVOption dnn_native_options[] = {
+    { "conv2d_threads", "threads num for conv2d layer", OFFSET(options.conv2d_threads), AV_OPT_TYPE_INT,  { .i64 = 0 }, INT_MIN, INT_MAX, FLAGS },
+    { NULL },
+};
 
 // Represents simple feed-forward convolutional network.
 typedef struct NativeModel{
