@@ -40,6 +40,16 @@ typedef struct thread_param{
     int thread_index;
 } thread_param;
 
+typedef struct execute_param{
+    int thread_start, thread_end, input_num, output_num, kernel_size, padding_method, dilation;
+    int pad_size, width, height, radius, src_linesize, filter_size, filter_linesize;
+    float *input;
+    float *output;
+    float *kernel;
+} execute_param;
+
+void ff_dnn_execute_layer_conv2d_c(const execute_param *exe_param);
+
 int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int file_size, int operands_num)
 {
     ConvolutionalParams *conv_params;
@@ -105,6 +115,55 @@ int dnn_load_layer_conv2d(Layer *layer, AVIOContext *model_file_context, int fil
     return dnn_size;
 }
 
+void ff_dnn_execute_layer_conv2d_c(const execute_param *exe_param){
+    int thread_start = exe_param->thread_start;
+    int thread_end = exe_param->thread_end;
+    float *input = exe_param->input;
+    float *output = exe_param->output;
+    float *kernel = exe_param->kernel;
+    int input_num = exe_param->input_num;
+    int output_num = exe_param->output_num;
+    int kernel_size = exe_param->kernel_size;
+    int padding_method = exe_param->padding_method;
+    int dilation = exe_param->dilation;
+    int pad_size = exe_param->pad_size;
+    int width = exe_param->width;
+    int height = exe_param->height;
+    int radius = exe_param->radius;
+    int src_linesize = exe_param->src_linesize;
+    int filter_size = exe_param->filter_size;
+    int filter_linesize = exe_param->filter_linesize;
+
+    for (int y = thread_start; y < thread_end; ++y) {
+        for (int x = pad_size; x < width - pad_size; ++x) {
+            for (int n_filter = 0; n_filter < output_num; ++n_filter) {
+                output[n_filter] = 0.0f;
+                for (int ch = 0; ch < input_num; ++ch) {
+                    for (int kernel_y = 0; kernel_y < kernel_size; ++kernel_y) {
+                        for (int kernel_x = 0; kernel_x < kernel_size; ++kernel_x) {
+                            float input_pel;
+                            if (padding_method == SAME_CLAMP_TO_EDGE) {
+                                int y_pos = CLAMP_TO_EDGE(y + (kernel_y - radius) * dilation, height);
+                                int x_pos = CLAMP_TO_EDGE(x + (kernel_x - radius) * dilation, width);
+                                input_pel = input[y_pos * src_linesize + x_pos * input_num + ch];
+                            } else {
+                                int y_pos = y + (kernel_y - radius) * dilation;
+                                int x_pos = x + (kernel_x - radius) * dilation;
+                                input_pel = (x_pos < 0 || x_pos >= width || y_pos < 0 || y_pos >= height) ? 0.0 :
+                                                input[y_pos * src_linesize + x_pos * input_num + ch];
+                            }
+
+                            output[n_filter] += input_pel * kernel[n_filter * filter_size + kernel_y * filter_linesize +
+                                                                                kernel_x * input_num + ch];
+                        }
+                    }
+                }
+            }
+            output += output_num;
+        }
+    }
+}
+
 static void * dnn_execute_layer_conv2d_thread(void *threadarg)
 {
     //pass parameters
@@ -152,35 +211,35 @@ static void * dnn_execute_layer_conv2d_thread(void *threadarg)
 
     av_assert0(channel == conv_params->input_num);
 
+    struct execute_param exe_param;
+    exe_param.thread_start = thread_start;
+    exe_param.thread_end = thread_end;
+    exe_param.input = input;
+    exe_param.output = output;
+    exe_param.kernel = conv_params->kernel;
+    exe_param.input_num = conv_params->input_num;
+    exe_param.output_num = conv_params->output_num;
+    exe_param.kernel_size = conv_params->kernel_size;
+    exe_param.padding_method = conv_params->padding_method;
+    exe_param.dilation = conv_params->dilation;
+    exe_param.pad_size = pad_size;
+    exe_param.width = width;
+    exe_param.height = height;
+    exe_param.radius = radius;
+    exe_param.src_linesize = src_linesize;
+    exe_param.filter_size = filter_size;
+    exe_param.filter_linesize = filter_linesize;
+
+    ff_dnn_execute_layer_conv2d_c(&exe_param);
+
+    output = output_operand->data;
+    output += (conv_params->output_num) * (width - 2 * pad_size) * (thread_start - pad_size);
     for (int y = thread_start; y < thread_end; ++y) {
         for (int x = pad_size; x < width - pad_size; ++x) {
             for (int n_filter = 0; n_filter < conv_params->output_num; ++n_filter) {
                 if (conv_params->has_bias)
-                    output[n_filter] = conv_params->biases[n_filter];
-                else
-                    output[n_filter] = 0.f;
+                    output[n_filter] += conv_params->biases[n_filter];
 
-                for (int ch = 0; ch < conv_params->input_num; ++ch) {
-                    for (int kernel_y = 0; kernel_y < conv_params->kernel_size; ++kernel_y) {
-                        for (int kernel_x = 0; kernel_x < conv_params->kernel_size; ++kernel_x) {
-                            float input_pel;
-                            if (conv_params->padding_method == SAME_CLAMP_TO_EDGE) {
-                                int y_pos = CLAMP_TO_EDGE(y + (kernel_y - radius) * conv_params->dilation, height);
-                                int x_pos = CLAMP_TO_EDGE(x + (kernel_x - radius) * conv_params->dilation, width);
-                                input_pel = input[y_pos * src_linesize + x_pos * conv_params->input_num + ch];
-                            } else {
-                                int y_pos = y + (kernel_y - radius) * conv_params->dilation;
-                                int x_pos = x + (kernel_x - radius) * conv_params->dilation;
-                                input_pel = (x_pos < 0 || x_pos >= width || y_pos < 0 || y_pos >= height) ? 0.0 :
-                                                   input[y_pos * src_linesize + x_pos * conv_params->input_num + ch];
-                            }
-
-
-                            output[n_filter] += input_pel * conv_params->kernel[n_filter * filter_size + kernel_y * filter_linesize +
-                                                                                kernel_x * conv_params->input_num + ch];
-                        }
-                    }
-                }
                 switch (conv_params->activation){
                 case RELU:
                     output[n_filter] = FFMAX(output[n_filter], 0.0);
@@ -223,6 +282,7 @@ int dnn_execute_layer_conv2d(DnnOperand *operands, const int32_t *input_operand_
     thread_common_param.output_operand_index = output_operand_index;
     thread_common_param.parameters = parameters;
     thread_common_param.ctx = ctx;
+
 #if HAVE_PTHREAD_CANCEL
     thread_common_param.thread_num = thread_num;
 
