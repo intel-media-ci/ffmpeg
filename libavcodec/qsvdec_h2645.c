@@ -25,7 +25,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
 #include "libavutil/common.h"
 #include "libavutil/fifo.h"
