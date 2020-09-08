@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
 #include "config.h"
 
