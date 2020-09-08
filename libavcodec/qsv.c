@@ -18,9 +18,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <mfx/mfxvideo.h>
-#include <mfx/mfxplugin.h>
-#include <mfx/mfxjpeg.h>
+#include <mfxvideo.h>
+#include <mfxplugin.h>
+#include <mfxjpeg.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -37,7 +37,7 @@
 #include "qsv_internal.h"
 
 #if QSV_VERSION_ATLEAST(1, 12)
-#include "mfx/mfxvp8.h"
+#include "mfxvp8.h"
 #endif
 
 int ff_qsv_codec_id_to_mfx(enum AVCodecID codec_id)
