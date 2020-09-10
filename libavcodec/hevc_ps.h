@@ -223,6 +223,21 @@ typedef struct HEVCSPS {
     int persistent_rice_adaptation_enabled_flag;
     int cabac_bypass_alignment_enabled_flag;
 
+    // Not yet implemented
+    int sps_multilayer_extension_flag;
+    int sps_3d_extension_flag;
+
+    int sps_scc_extension_flag;
+    int sps_curr_pic_ref_enabled_flag;
+    int palette_mode_enabled_flag;
+    int palette_max_size;
+    int delta_palette_max_predictor_size;
+    int sps_palette_predictor_initializers_present_flag;
+    int sps_num_palette_predictor_initializers_minus1;
+    int sps_palette_predictor_initializer[3][HEVC_MAX_PALETTE_PREDICTOR_SIZE];
+    int motion_vector_resolution_control_idc;
+    int intra_boundary_filtering_disabled_flag;
+
     ///< coded frame dimension in various units
     int width;
     int height;
