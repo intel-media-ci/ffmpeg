@@ -312,6 +312,9 @@ typedef struct HEVCPPS {
     uint8_t slice_header_extension_present_flag;
     uint8_t log2_max_transform_skip_block_size;
     uint8_t pps_range_extensions_flag;
+    uint8_t pps_multilayer_extension_flag;
+    uint8_t pps_3d_extension_flag;
+    uint8_t pps_scc_extension_flag;
     uint8_t cross_component_prediction_enabled_flag;
     uint8_t chroma_qp_offset_list_enabled_flag;
     uint8_t diff_cu_chroma_qp_offset_depth;
@@ -320,6 +323,20 @@ typedef struct HEVCPPS {
     int8_t  cr_qp_offset_list[6];
     uint8_t log2_sao_offset_scale_luma;
     uint8_t log2_sao_offset_scale_chroma;
+
+    // SCC extension parameters
+    uint8_t pps_curr_pic_ref_enabled_flag;
+    uint8_t residual_adaptive_colour_transform_enabled_flag;
+    uint8_t pps_slice_act_qp_offsets_present_flag;
+    int8_t  pps_act_y_qp_offset;  // _plus5
+    int8_t  pps_act_cb_qp_offset; // _plus5
+    int8_t  pps_act_cr_qp_offset; // _plus3
+    uint8_t pps_palette_predictor_initializers_present_flag;
+    uint8_t pps_num_palette_predictor_initializers;
+    uint8_t monochrome_palette_flag;
+    uint8_t luma_bit_depth_entry_minus8;
+    uint8_t chroma_bit_depth_entry_minus8;
+    uint8_t pps_palette_predictor_initializer[3][HEVC_MAX_PALETTE_PREDICTOR_SIZE];
 
     // Inferred parameters
     unsigned int *column_width;  ///< ColumnWidth
