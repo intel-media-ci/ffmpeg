@@ -670,7 +670,8 @@ static int hls_slice_header(HEVCContext *s)
                    sh->slice_type);
             return AVERROR_INVALIDDATA;
         }
-        if (IS_IRAP(s) && sh->slice_type != HEVC_SLICE_I) {
+        if (IS_IRAP(s) && sh->slice_type != HEVC_SLICE_I &&
+            s->ps.sps->ptl.general_ptl.profile_idc != FF_PROFILE_HEVC_SCC) {
             av_log(s->avctx, AV_LOG_ERROR, "Inter slices in an IRAP frame.\n");
             return AVERROR_INVALIDDATA;
         }

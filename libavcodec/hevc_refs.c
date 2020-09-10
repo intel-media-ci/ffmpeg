@@ -322,7 +322,7 @@ int ff_hevc_slice_rpl(HEVCContext *s)
         return ret;
 
     if (!(s->rps[ST_CURR_BEF].nb_refs + s->rps[ST_CURR_AFT].nb_refs +
-          s->rps[LT_CURR].nb_refs)) {
+          s->rps[LT_CURR].nb_refs) && !s->ps.pps->pps_curr_pic_ref_enabled_flag) {
         av_log(s->avctx, AV_LOG_ERROR, "Zero refs in the frame RPS.\n");
         return AVERROR_INVALIDDATA;
     }
@@ -349,6 +349,12 @@ int ff_hevc_slice_rpl(HEVCContext *s)
                     rpl_tmp.nb_refs++;
                 }
             }
+            // Construct RefPicList0, RefPicList1 (8-8, 8-10)
+            if (s->ps.pps->pps_curr_pic_ref_enabled_flag) {
+                rpl_tmp.ref[rpl_tmp.nb_refs]            = s->ref;
+                rpl_tmp.isLongTerm[rpl_tmp.nb_refs]     = 1;
+                rpl_tmp.nb_refs++;
+            }
         }
 
         /* reorder the references if necessary */
@@ -369,6 +375,12 @@ int ff_hevc_slice_rpl(HEVCContext *s)
         } else {
             memcpy(rpl, &rpl_tmp, sizeof(*rpl));
             rpl->nb_refs = FFMIN(rpl->nb_refs, sh->nb_refs[list_idx]);
+        }
+
+        // 8-9
+        if (s->ps.pps->pps_curr_pic_ref_enabled_flag && sh->slice_type == HEVC_SLICE_P &&
+            !sh->rpl_modification_flag[list_idx] && rpl_tmp.nb_refs > sh->nb_refs[L0]) {
+            rpl->ref[sh->nb_refs[L0]] = s->ref;
         }
 
         if (sh->collocated_list == list_idx &&
@@ -444,7 +456,8 @@ static int add_candidate_ref(HEVCContext *s, RefPicList *list,
 {
     HEVCFrame *ref = find_ref_idx(s, poc, use_msb);
 
-    if (ref == s->ref || list->nb_refs >= HEVC_MAX_REFS)
+    if ((ref == s->ref && !s->ps.pps->pps_curr_pic_ref_enabled_flag) ||
+        list->nb_refs >= HEVC_MAX_REFS)
         return AVERROR_INVALIDDATA;
 
     if (!ref) {
@@ -513,6 +526,12 @@ int ff_hevc_frame_rps(HEVCContext *s)
             goto fail;
     }
 
+    if (s->ps.pps->pps_curr_pic_ref_enabled_flag) {
+        ret = add_candidate_ref(s, &rps[LT_FOLL], s->poc, HEVC_FRAME_FLAG_LONG_REF, 1);
+        if (ret < 0)
+            goto fail;
+    }
+
 fail:
     /* release any frames that are now unused */
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++)
@@ -539,5 +558,9 @@ int ff_hevc_frame_nb_refs(const HEVCContext *s)
         for (i = 0; i < long_rps->nb_refs; i++)
             ret += !!long_rps->used[i];
     }
+
+    if (s->ps.pps->pps_curr_pic_ref_enabled_flag)
+        ret++;
+
     return ret;
 }
