@@ -173,6 +173,7 @@ int filter_nbthreads = 0;
 int filter_complex_nbthreads = 0;
 int vstats_version = 2;
 int auto_conversion_filters = 1;
+int fps_skip_frames = 0;
 
 
 static int intra_only         = 0;
@@ -3674,6 +3675,8 @@ const OptionDef options[] = {
     { "autoscale",        HAS_ARG | OPT_BOOL | OPT_SPEC |
                           OPT_EXPERT | OPT_OUTPUT,                               { .off = OFFSET(autoscale) },
         "automatically insert a scale filter at the end of the filter graph" },
+    { "fps_skip_frames",  OPT_INT | HAS_ARG | OPT_EXPERT,                        { &fps_skip_frames },
+        "the number of frames skipped at beginning when calculate FPS"},
 
     /* audio options */
     { "aframes",        OPT_AUDIO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_audio_frames },

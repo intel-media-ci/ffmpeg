@@ -1656,6 +1656,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     double speed;
     int64_t pts = INT64_MIN + 1;
     static int64_t last_time = -1;
+    static int64_t fps_skip_timer_start = -1;
     static int qp_histogram[52];
     int hours, mins, secs, us;
     const char *hours_sign;
@@ -1703,13 +1704,28 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
             float fps;
 
             frame_number = ost->frame_number;
-            fps = t > 1 ? frame_number / t : 0;
-            av_bprintf(&buf, "frame=%5d fps=%3.*f q=%3.1f ",
-                     frame_number, fps < 9.95, fps, q);
-            av_bprintf(&buf_script, "frame=%d\n", frame_number);
-            av_bprintf(&buf_script, "fps=%.2f\n", fps);
-            av_bprintf(&buf_script, "stream_%d_%d_q=%.1f\n",
-                       ost->file_index, ost->index, q);
+            if (fps_skip_frames < 0)
+                fps_skip_frames = 0;
+            if (frame_number <= fps_skip_frames) {
+                fps_skip_timer_start = cur_time;
+            } else if (fps_skip_frames > 0 && fps_skip_timer_start == -1) {
+                av_log(NULL, AV_LOG_WARNING, "The first %d frames run very quickly, "
+                                             "so skip these frames to calculate FPS\n", frame_number);
+                fps_skip_timer_start = cur_time;
+                fps_skip_frames = frame_number;
+            } else {
+                fps = t > 1 ? frame_number / t : 0;
+                if (fps_skip_frames > 0) {
+                    float newt = (cur_time - fps_skip_timer_start) / 1000000.0;
+                    fps = newt > 1 ? (frame_number - fps_skip_frames) * 1.0f / newt : 0;
+                }
+                av_bprintf(&buf, "frame=%5d fps=%3.*f q=%3.1f ",
+                         frame_number, fps < 9.95, fps, q);
+                av_bprintf(&buf_script, "frame=%d\n", frame_number);
+                av_bprintf(&buf_script, "fps=%.2f\n", fps);
+                av_bprintf(&buf_script, "stream_%d_%d_q=%.1f\n",
+                           ost->file_index, ost->index, q);
+            }
             if (is_last_report)
                 av_bprintf(&buf, "L");
             if (qp_hist) {
