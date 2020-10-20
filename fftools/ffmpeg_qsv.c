@@ -82,6 +82,8 @@ int qsv_init(AVCodecContext *s)
             return ret;
     }
 
+    hwaccel_decode_init(s);
+
     av_buffer_unref(&ist->hw_frames_ctx);
     ist->hw_frames_ctx = av_hwframe_ctx_alloc(hw_device_ctx);
     if (!ist->hw_frames_ctx)
