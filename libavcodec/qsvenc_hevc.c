@@ -268,7 +268,7 @@ static const AVCodecDefault qsv_enc_defaults[] = {
     { "qmin",      "-1"    },
     { "qmax",      "-1"    },
     { "trellis",   "-1"    },
-    { "flags",     "+cgop" },
+    { "flags",     "-cgop" },
 #if FF_API_PRIVATE_OPT
     { "b_strategy", "-1"   },
 #endif

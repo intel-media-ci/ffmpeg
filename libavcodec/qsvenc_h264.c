@@ -173,7 +173,7 @@ static const AVCodecDefault qsv_enc_defaults[] = {
     { "coder",     "-1"    },
 #endif
     { "trellis",   "-1"    },
-    { "flags",     "+cgop" },
+    { "flags",     "-cgop" },
 #if FF_API_PRIVATE_OPT
     { "b_strategy", "-1"   },
 #endif
