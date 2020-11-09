@@ -351,6 +351,7 @@ int ff_hevc_slice_rpl(HEVCContext *s)
             }
             // Construct RefPicList0, RefPicList1 (8-8, 8-10)
             if (s->ps.pps->pps_curr_pic_ref_enabled_flag) {
+                rpl_tmp.list[rpl_tmp.nb_refs]           = s->ref->poc;
                 rpl_tmp.ref[rpl_tmp.nb_refs]            = s->ref;
                 rpl_tmp.isLongTerm[rpl_tmp.nb_refs]     = 1;
                 rpl_tmp.nb_refs++;
@@ -378,9 +379,11 @@ int ff_hevc_slice_rpl(HEVCContext *s)
         }
 
         // 8-9
-        if (s->ps.pps->pps_curr_pic_ref_enabled_flag && sh->slice_type == HEVC_SLICE_P &&
-            !sh->rpl_modification_flag[list_idx] && rpl_tmp.nb_refs > sh->nb_refs[L0]) {
-            rpl->ref[sh->nb_refs[L0]] = s->ref;
+        if (s->ps.pps->pps_curr_pic_ref_enabled_flag &&
+            !sh->rpl_modification_flag[list_idx] &&
+            rpl_tmp.nb_refs > sh->nb_refs[L0]) {
+            rpl->list[sh->nb_refs[L0] - 1] = s->ref->poc;
+            rpl->ref[sh->nb_refs[L0] - 1]  = s->ref;
         }
 
         if (sh->collocated_list == list_idx &&
