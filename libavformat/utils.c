@@ -226,6 +226,7 @@ static const AVCodec *find_probe_decoder(AVFormatContext *s, const AVStream *st,
                 return probe_codec;
             }
         }
+        return NULL;
     }
 
     return codec;
