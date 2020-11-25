@@ -909,8 +909,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
     sh->slice_type = hpic->slice_type;
 
-    // driver requires low delay B frame in low power mode
-    if (sh->slice_type == HEVC_SLICE_P && priv->b_frame_strategy)
+    if (sh->slice_type == HEVC_SLICE_P && ctx->b_frame_strategy)
         sh->slice_type = HEVC_SLICE_B;
 
     sh->slice_pic_order_cnt_lsb = hpic->pic_order_cnt &
@@ -1071,7 +1070,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         av_assert0(pic->type == PICTURE_TYPE_P ||
                    pic->type == PICTURE_TYPE_B);
         vslice->ref_pic_list0[0] = vpic->reference_frames[0];
-        if (priv->b_frame_strategy && pic->type == PICTURE_TYPE_P)
+        if (ctx->b_frame_strategy && pic->type == PICTURE_TYPE_P)
             // Reference for low delay B-frame, L0 == L1
             vslice->ref_pic_list1[0] = vpic->reference_frames[0];
     }
@@ -1079,6 +1078,15 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         // Forward reference for B-frame.
         av_assert0(pic->type == PICTURE_TYPE_B);
         vslice->ref_pic_list1[0] = vpic->reference_frames[1];
+    }
+
+    // Driver requires low delay B frame and matched ref_pic_list0/1[]
+    if (pic->type == PICTURE_TYPE_P && ctx->b_frame_strategy) {
+        vslice->slice_type = HEVC_SLICE_B;
+        for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
+            vslice->ref_pic_list1[i].picture_id = vslice->ref_pic_list0[i].picture_id;
+            vslice->ref_pic_list1[i].flags      = vslice->ref_pic_list0[i].flags;
+        }
     }
 
     return 0;
@@ -1207,20 +1215,7 @@ static av_cold int vaapi_encode_h265_init(AVCodecContext *avctx)
     if (priv->qp > 0)
         ctx->explicit_qp = priv->qp;
 
-    // Low delay B-frames is required for low power encoding.
-    if (ctx->low_power && priv->b_frame_strategy != 1) {
-        priv->b_frame_strategy = 1;
-        av_log(avctx, AV_LOG_WARNING, "Low delay B-frames required "
-               "for low power encoding.\n");
-    }
-
-    if (priv->b_frame_strategy) {
-        ctx->b_frame_strategy = priv->b_frame_strategy;
-        if (ctx->b_frame_strategy == 1)
-            av_log(avctx, AV_LOG_VERBOSE, "Low delay B-frames enabled.\n");
-        else
-            av_log(avctx, AV_LOG_VERBOSE, "Reference B-frames enabled.\n");
-    }
+    ctx->b_frame_strategy = priv->b_frame_strategy;
 
     return ff_vaapi_encode_init(avctx);
 }
@@ -1299,7 +1294,7 @@ static const AVOption vaapi_encode_h265_options[] = {
       INT_MIN, INT_MAX, FLAGS, "sei" },
     { "b_strategy", "Strategy to choose between I/P/B-frames",
       OFFSET(b_frame_strategy), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 2, FLAGS, "b_strategy" },
-        { "normal",      "Normal IB..BPB..B strategy",
+        { "auto",         "auto set the option base on query result",
                           0, AV_OPT_TYPE_CONST, { .i64 = 0 }, INT_MIN, INT_MAX, FLAGS, "b_strategy" },
         { "low_delay_b", "Use low delay B-frames with forward-prediction only",
                           0, AV_OPT_TYPE_CONST, { .i64 = 1 }, INT_MIN, INT_MAX, FLAGS, "b_strategy" },

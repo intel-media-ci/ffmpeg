@@ -1845,6 +1845,30 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
         ref_l1 = attr.value >> 16 & 0xffff;
     }
 
+#if VA_CHECK_VERSION(1, 9, 0)
+    // if backend doesn't support P frame, convert P to forward-prediction B.
+    // if backend doesn't support future prediction, convert B to forward-prediction B.
+    if (!ctx->b_frame_strategy) {
+        attr = (VAConfigAttrib) { VAConfigAttribPredictionDirection };
+        vas = vaGetConfigAttributes(ctx->hwctx->display,
+                                    ctx->va_profile,
+                                    ctx->va_entrypoint,
+                                    &attr, 1);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to query prediction direction "
+                   "attribute: %d (%s).\n", vas, vaErrorStr(vas));
+            return AVERROR_EXTERNAL;
+        }
+
+        if (attr.value & VA_PREDICTION_DIRECTION_BI_NOT_EMPTY) {
+            if (attr.value & VA_PREDICTION_DIRECTION_FUTURE)
+                ctx->b_frame_strategy = 2;
+            else
+                ctx->b_frame_strategy = 1;
+        }
+    }
+#endif
+
     if (ctx->codec->flags & FLAG_INTRA_ONLY ||
         avctx->gop_size <= 1) {
         av_log(avctx, AV_LOG_VERBOSE, "Using intra frames only.\n");
@@ -1856,7 +1880,7 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
     } else if (!(ctx->codec->flags & FLAG_B_PICTURES) ||
                ref_l1 < 1 || avctx->max_b_frames < 1 ||
                ctx->b_frame_strategy == 1) {
-        if (ctx->b_frame_strategy == 1)
+        if (ctx->b_frame_strategy)
             av_log(avctx, AV_LOG_VERBOSE, "Using intra and low delay "
                    "B-frames (supported references: %d / %d).\n",
                    ref_l0, ref_l1);
@@ -1867,7 +1891,7 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
         ctx->p_per_i  = INT_MAX;
         ctx->b_per_p  = 0;
     } else {
-        if (ctx->b_frame_strategy == 2)
+        if (ctx->b_frame_strategy)
             av_log(avctx, AV_LOG_VERBOSE, "Using intra, reference B- and "
                    "B-frames (supported references: %d / %d).\n",
                    ref_l0, ref_l1);
