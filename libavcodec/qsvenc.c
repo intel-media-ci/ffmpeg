@@ -691,7 +691,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco;
 
 #if QSV_HAVE_CO2
-        if (avctx->codec_id == AV_CODEC_ID_H264) {
+        if (avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_HEVC) {
             if (q->int_ref_type >= 0)
                 q->extco2.IntRefType = q->int_ref_type;
             if (q->int_ref_cycle_size >= 0)
