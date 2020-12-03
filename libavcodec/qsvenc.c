@@ -710,6 +710,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
             if (q->max_slice_size >= 0)
                 q->extco2.MaxSliceSize = q->max_slice_size;
 #endif
+#if QSV_HAVE_DISABLEDEBLOCKIDC
+            if(q->dblk_idc >= 0)
+                q->extco2.DisableDeblockingIdc = q->dblk_idc;
+#endif
 
 #if QSV_HAVE_TRELLIS
             if (avctx->trellis >= 0)
