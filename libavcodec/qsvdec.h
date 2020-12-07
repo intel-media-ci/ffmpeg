@@ -62,6 +62,7 @@ typedef struct QSVContext {
     AVBufferPool *pool;
 
     int initialized;
+    int pre_initialized;
 
     // options set by the caller
     int async_depth;

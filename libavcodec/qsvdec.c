@@ -272,6 +272,7 @@ static int qsv_decode_header(AVCodecContext *avctx, QSVContext *q, AVPacket *avp
 
 
     if(!q->session) {
+        q->pre_initialized = 1;
         ret = qsv_decode_preinit(avctx, q, pix_fmt, param);
         if (ret < 0)
             return ret;
@@ -608,9 +609,12 @@ int ff_qsv_process_data(AVCodecContext *avctx, QSVContext *q,
         avctx->coded_width  = param.mfx.FrameInfo.Width;
         avctx->coded_height = param.mfx.FrameInfo.Height;
 
-        ret = qsv_decode_preinit(avctx, q, pix_fmt, &param);
-        if (ret < 0)
-            goto reinit_fail;
+        if(!q->pre_initialized){
+            ret = qsv_decode_preinit(avctx, q, pix_fmt, &param);
+            if (ret < 0)
+                goto reinit_fail;
+        }
+        q->pre_initialized = 0;
         q->initialized = 0;
     }
 
