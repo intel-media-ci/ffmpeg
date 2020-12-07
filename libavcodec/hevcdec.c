@@ -554,7 +554,7 @@ static int hls_slice_header(HEVCContext *s)
 
     sh->pps_id = get_ue_golomb_long(gb);
     if (sh->pps_id >= HEVC_MAX_PPS_COUNT || !s->ps.pps_list[sh->pps_id]) {
-        av_log(s->avctx, AV_LOG_ERROR, "PPS id out of range: %d\n", sh->pps_id);
+        av_log(s->avctx, AV_LOG_ERROR, "PPS id out of range or empty pps_list[%d]: %d\n", sh->pps_id, sh->pps_id);
         return AVERROR_INVALIDDATA;
     }
     if (!sh->first_slice_in_pic_flag &&

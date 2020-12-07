@@ -75,7 +75,7 @@ static int hevc_parse_slice_header(AVCodecParserContext *s, H2645NAL *nal,
 
     pps_id = get_ue_golomb(gb);
     if (pps_id >= HEVC_MAX_PPS_COUNT || !ps->pps_list[pps_id]) {
-        av_log(avctx, AV_LOG_ERROR, "PPS id out of range: %d\n", pps_id);
+        av_log(avctx, AV_LOG_ERROR, "PPS id out of range or empty pps_list[%d]: %d\n", pps_id, pps_id);
         return AVERROR_INVALIDDATA;
     }
     ps->pps = (HEVCPPS*)ps->pps_list[pps_id]->data;
