@@ -268,6 +268,13 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
     case MFX_B_REF_PYRAMID: av_log(avctx, AV_LOG_VERBOSE, "pyramid");   break;
     default:                av_log(avctx, AV_LOG_VERBOSE, "auto");      break;
     }
+    av_log(avctx, AV_LOG_VERBOSE, "; PRefType: ");
+    switch(co3->PRefType){
+        case MFX_P_REF_DEFAULT: av_log(avctx, AV_LOG_VERBOSE, "default");   break;
+        case MFX_P_REF_SIMPLE:  av_log(avctx, AV_LOG_VERBOSE, "simple");   break;
+        case MFX_P_REF_PYRAMID: av_log(avctx, AV_LOG_VERBOSE, "pyramid");   break;
+        default:    break;
+    }
     av_log(avctx, AV_LOG_VERBOSE, "\n");
 #endif
 
@@ -777,6 +784,21 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #if QSV_HAVE_CO3
         q->extco3.Header.BufferId      = MFX_EXTBUFF_CODING_OPTION3;
         q->extco3.Header.BufferSz      = sizeof(q->extco3);
+        switch(q->p_strategy){
+            case 0:
+                q->extco3.PRefType = MFX_P_REF_DEFAULT;
+                break;
+            case 1:
+                q->extco3.PRefType = MFX_P_REF_SIMPLE;
+                break;
+            case 2:
+                q->extco3.PRefType = MFX_P_REF_PYRAMID;
+                break;
+            default:
+                q->extco3.PRefType = MFX_P_REF_DEFAULT;
+                av_log(avctx, AV_LOG_VERBOSE, "invalid p_strategy, set to default\n");
+                break;
+        }
 #if QSV_HAVE_GPB
         if (avctx->codec_id == AV_CODEC_ID_HEVC)
             q->extco3.GPB              = q->gpb ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
