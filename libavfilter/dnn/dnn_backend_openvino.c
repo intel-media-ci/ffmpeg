@@ -34,6 +34,7 @@
 
 typedef struct OVOptions{
     char *device_type;
+    int fix_input_size;
 } OVOptions;
 
 typedef struct OVContext {
@@ -57,7 +58,8 @@ typedef struct OVModel{
 #define OFFSET(x) offsetof(OVContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption dnn_openvino_options[] = {
-    { "device", "device to run model", OFFSET(options.device_type), AV_OPT_TYPE_STRING, { .str = "CPU" }, 0, 0, FLAGS },
+    { "device",         "device to run model",   OFFSET(options.device_type),    AV_OPT_TYPE_STRING, { .str = "CPU" }, 0, 0, FLAGS },
+    { "fix_input_size", "fix input size or not", OFFSET(options.fix_input_size), AV_OPT_TYPE_BOOL,   { .i64 = 1 },     0, 1, FLAGS },
     { NULL }
 };
 
@@ -89,6 +91,7 @@ static DNNReturnType get_input_ov(void *model, DNNData *input, const char *input
     size_t model_input_count = 0;
     dimensions_t dims;
     precision_e precision;
+    int fix_input_size = ctx->options.fix_input_size;
 
     status = ie_network_get_inputs_number(ov_model->network, &model_input_count);
     if (status != OK) {
@@ -112,8 +115,8 @@ static DNNReturnType get_input_ov(void *model, DNNData *input, const char *input
             }
 
             input->channels = dims.dims[1];
-            input->height   = dims.dims[2];
-            input->width    = dims.dims[3];
+            input->height   = fix_input_size ? dims.dims[2] : -1;
+            input->width    = fix_input_size ? dims.dims[3] : -1;
             input->dt       = precision_to_datatype(precision);
             return DNN_SUCCESS;
         } else {
@@ -136,6 +139,11 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
     OVContext *ctx = &ov_model->ctx;
     AVFrame *in_frame = av_frame_alloc();
     AVFrame *out_frame = NULL;
+    IEStatusCode status;
+    input_shapes_t input_shapes;
+    ie_available_devices_t a_dev;
+    ie_config_t config = {NULL, NULL, NULL};
+    char *all_dev_names = NULL;
 
     if (!in_frame) {
         av_log(ctx, AV_LOG_ERROR, "Failed to allocate memory for input frame\n");
@@ -150,6 +158,38 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
     in_frame->width = input_width;
     in_frame->height = input_height;
 
+    if (!ctx->options.fix_input_size) {
+        status = ie_network_get_input_shapes(ov_model->network, &input_shapes);
+        input_shapes.shapes->shape.dims[2] = input_height;
+        input_shapes.shapes->shape.dims[3] = input_width;
+        status |= ie_network_reshape(ov_model->network, input_shapes);
+        ie_network_input_shapes_free(&input_shapes);
+        if (status != OK) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to reshape input size for %s\n", input_name);
+            return DNN_ERROR;
+        }
+    }
+
+    status = ie_core_load_network(ov_model->core, ov_model->network, ctx->options.device_type, &config, &ov_model->exe_network);
+    if (status != OK) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to init OpenVINO model\n");
+        status = ie_core_get_available_devices(ov_model->core, &a_dev);
+        if (status != OK) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to get available devices\n");
+            return DNN_ERROR;
+        }
+        for (int i = 0; i < a_dev.num_devices; i++) {
+            APPEND_STRING(all_dev_names, a_dev.devices[i])
+        }
+        av_log(ctx, AV_LOG_ERROR,"device %s may not be supported, all available devices are: \"%s\"\n",
+               ctx->options.device_type, all_dev_names);
+        return DNN_ERROR;
+    }
+
+    status = ie_exec_network_create_infer_request(ov_model->exe_network, &ov_model->infer_request);
+    if (status != OK)
+        return DNN_ERROR;
+
     ret = execute_model_ov(ov_model->model, input_name, in_frame, &output_name, 1, out_frame, 0);
     *output_width = out_frame->width;
     *output_height = out_frame->height;
@@ -161,13 +201,10 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
 
 DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options, void *userdata)
 {
-    char *all_dev_names = NULL;
     DNNModel *model = NULL;
     OVModel *ov_model = NULL;
     OVContext *ctx = NULL;
     IEStatusCode status;
-    ie_config_t config = {NULL, NULL, NULL};
-    ie_available_devices_t a_dev;
 
     model = av_mallocz(sizeof(DNNModel));
     if (!model){
@@ -193,26 +230,6 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options, 
         goto err;
 
     status = ie_core_read_network(ov_model->core, model_filename, NULL, &ov_model->network);
-    if (status != OK)
-        goto err;
-
-    status = ie_core_load_network(ov_model->core, ov_model->network, ctx->options.device_type, &config, &ov_model->exe_network);
-    if (status != OK) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to init OpenVINO model\n");
-        status = ie_core_get_available_devices(ov_model->core, &a_dev);
-        if (status != OK) {
-            av_log(ctx, AV_LOG_ERROR, "Failed to get available devices\n");
-            goto err;
-        }
-        for (int i = 0; i < a_dev.num_devices; i++) {
-            APPEND_STRING(all_dev_names, a_dev.devices[i])
-        }
-        av_log(ctx, AV_LOG_ERROR,"device %s may not be supported, all available devices are: \"%s\"\n",
-               ctx->options.device_type, all_dev_names);
-        goto err;
-    }
-
-    status = ie_exec_network_create_infer_request(ov_model->exe_network, &ov_model->infer_request);
     if (status != OK)
         goto err;
 
