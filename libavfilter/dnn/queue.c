@@ -25,17 +25,17 @@
 
 typedef struct _queue_entry queue_entry;
 
-typedef struct _queue {
+struct _queue {
     queue_entry *head;
     queue_entry *tail;
     size_t length;
-}queue;
+};
 
-typedef struct _queue_entry {
+struct _queue_entry {
     void *value;
     queue_entry *prev;
     queue_entry *next;
-} queue_entry;
+};
 
 static inline queue_entry *create_entry(void *val)
 {

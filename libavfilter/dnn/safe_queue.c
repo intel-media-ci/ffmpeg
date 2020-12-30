@@ -25,11 +25,11 @@
 #include "libavutil/avassert.h"
 #include "libavutil/thread.h"
 
-typedef struct _safe_queue {
+struct _safe_queue {
     queue *q;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
-}safe_queue;
+};
 
 safe_queue *safe_queue_create(void)
 {
