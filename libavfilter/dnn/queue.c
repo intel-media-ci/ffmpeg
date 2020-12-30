@@ -40,8 +40,8 @@ struct _queue_entry {
 static inline queue_entry *create_entry(void *val)
 {
     queue_entry *entry = av_malloc(sizeof(*entry));
-    av_assert0(entry != NULL);
-    entry->value = val;
+    if (entry)
+        entry->value = val;
     return entry;
 }
 
@@ -53,6 +53,14 @@ queue* queue_create(void)
 
     q->head = create_entry(q);
     q->tail = create_entry(q);
+
+    if (!q->head || !q->tail) {
+        av_freep(&q->head);
+        av_freep(&q->tail);
+        av_freep(&q);
+        return NULL;
+    }
+
     q->head->next = q->tail;
     q->tail->prev = q->head;
     q->head->prev = NULL;
@@ -99,14 +107,16 @@ void *queue_peek_back(queue *q)
     return q->tail->prev->value;
 }
 
-void queue_push_front(queue *q, void *v)
+int queue_push_front(queue *q, void *v)
 {
     queue_entry *new_entry;
     queue_entry *original_next;
     if (!q)
-        return;
+        return 0;
 
     new_entry = create_entry(v);
+    if (!new_entry)
+        return -1;
     original_next = q->head->next;
 
     q->head->next = new_entry;
@@ -114,16 +124,20 @@ void queue_push_front(queue *q, void *v)
     new_entry->prev = q->head;
     new_entry->next = original_next;
     q->length++;
+
+    return q->length;
 }
 
-void queue_push_back(queue *q, void *v)
+int queue_push_back(queue *q, void *v)
 {
     queue_entry *new_entry;
     queue_entry *original_prev;
     if (!q)
-        return;
+        return 0;
 
     new_entry = create_entry(v);
+    if (!new_entry)
+        return -1;
     original_prev = q->tail->prev;
 
     q->tail->prev = new_entry;
@@ -131,6 +145,8 @@ void queue_push_back(queue *q, void *v)
     new_entry->next = q->tail;
     new_entry->prev = original_prev;
     q->length++;
+
+    return q->length;
 }
 
 void *queue_pop_front(queue *q)

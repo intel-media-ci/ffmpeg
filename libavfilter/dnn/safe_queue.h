@@ -28,8 +28,8 @@ void safe_queue_destroy(safe_queue *sq);
 
 size_t safe_queue_size(safe_queue *sq);
 
-void safe_queue_push_front(safe_queue *sq, void *v);
-void safe_queue_push_back(safe_queue *sq, void *v);
+int safe_queue_push_front(safe_queue *sq, void *v);
+int safe_queue_push_back(safe_queue *sq, void *v);
 
 void *safe_queue_pop_front(safe_queue *sq);
 

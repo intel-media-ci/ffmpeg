@@ -56,8 +56,10 @@ safe_queue *safe_queue_create(void)
         return NULL;
 
     sq->q = queue_create();
-    if (!sq->q)
+    if (!sq->q) {
+        av_freep(&sq);
         return NULL;
+    }
 
     ff_mutex_init(&sq->mutex, NULL);
     dnn_cond_init(&sq->cond, NULL);
@@ -80,20 +82,24 @@ size_t safe_queue_size(safe_queue *sq)
     return sq ? queue_size(sq->q) : 0;
 }
 
-void safe_queue_push_front(safe_queue *sq, void *v)
+int safe_queue_push_front(safe_queue *sq, void *v)
 {
+    int ret;
     ff_mutex_lock(&sq->mutex);
-    queue_push_front(sq->q, v);
+    ret = queue_push_front(sq->q, v);
     dnn_cond_signal(&sq->cond);
     ff_mutex_unlock(&sq->mutex);
+    return ret;
 }
 
-void safe_queue_push_back(safe_queue *sq, void *v)
+int safe_queue_push_back(safe_queue *sq, void *v)
 {
+    int ret;
     ff_mutex_lock(&sq->mutex);
-    queue_push_back(sq->q, v);
+    ret = queue_push_back(sq->q, v);
     dnn_cond_signal(&sq->cond);
     ff_mutex_unlock(&sq->mutex);
+    return ret;
 }
 
 void *safe_queue_pop_front(safe_queue *sq)

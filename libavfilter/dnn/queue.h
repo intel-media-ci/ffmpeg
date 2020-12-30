@@ -32,8 +32,8 @@ size_t queue_size(queue *q);
 void *queue_peek_front(queue *q);
 void *queue_peek_back(queue *q);
 
-void queue_push_front(queue *q, void *v);
-void queue_push_back(queue *q, void *v);
+int queue_push_front(queue *q, void *v);
+int queue_push_back(queue *q, void *v);
 
 void *queue_pop_front(queue *q);
 void *queue_pop_back(queue *q);
