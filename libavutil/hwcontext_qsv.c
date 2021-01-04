@@ -58,6 +58,12 @@
 #define QSV_ONEVPL       QSV_VERSION_ATLEAST(2, 0)
 #define QSV_HAVE_OPAQUE  !QSV_ONEVPL
 
+#if QSV_ONEVPL
+#include <mfxdispatcher.h>
+#else
+#define MFXUnload(a) do { } while(0)
+#endif
+
 typedef struct QSVDevicePriv {
     AVBufferRef *child_device_ctx;
 } QSVDevicePriv;
@@ -74,8 +80,10 @@ typedef struct QSVDeviceContext {
 
 typedef struct QSVFramesContext {
     mfxSession session_download;
+    void *loader_download;
     atomic_int session_download_init;
     mfxSession session_upload;
+    void *loader_upload;
     atomic_int session_upload_init;
 #if HAVE_PTHREADS
     pthread_mutex_t session_lock;
@@ -299,15 +307,19 @@ static void qsv_frames_uninit(AVHWFramesContext *ctx)
     if (s->session_download) {
         MFXVideoVPP_Close(s->session_download);
         MFXClose(s->session_download);
+        MFXUnload(s->loader_download);
     }
     s->session_download = NULL;
+    s->loader_download = NULL;
     s->session_download_init = 0;
 
     if (s->session_upload) {
         MFXVideoVPP_Close(s->session_upload);
         MFXClose(s->session_upload);
+        MFXUnload(s->loader_upload);
     }
     s->session_upload = NULL;
+    s->loader_upload = NULL;
     s->session_upload_init = 0;
 
 #if HAVE_PTHREADS
@@ -631,8 +643,378 @@ static mfxStatus frame_get_hdl(mfxHDL pthis, mfxMemId mid, mfxHDL *hdl)
     return MFX_ERR_NONE;
 }
 
+#if QSV_ONEVPL
+
+static int qsv_create_mfx_session(void *ctx,
+                                  mfxHDL handle,
+                                  mfxHandleType handle_type,
+                                  mfxIMPL implementation,
+                                  mfxVersion *pver,
+                                  mfxSession *psession,
+                                  void **ploader)
+{
+    mfxStatus sts;
+    mfxLoader loader = NULL;
+    mfxSession session = NULL;
+    mfxConfig cfg;
+    mfxVersion ver;
+    mfxVariant impl_value;
+    uint32_t impl_idx = 0;
+
+    av_log(ctx, AV_LOG_VERBOSE,
+           "Use Intel(R) oneVPL to create MFX session, API version is "
+           "%d.%d, the required implementation version is %d.%d\n",
+           MFX_VERSION_MAJOR, MFX_VERSION_MINOR, pver->Major, pver->Minor);
+
+    if (handle_type != MFX_HANDLE_VA_DISPLAY &&
+        handle_type != MFX_HANDLE_D3D9_DEVICE_MANAGER &&
+        handle_type != MFX_HANDLE_D3D11_DEVICE) {
+        av_log(ctx, AV_LOG_ERROR,
+               "Invalid MFX device handle\n");
+        return AVERROR(EXDEV);
+    }
+
+    *psession = NULL;
+    *ploader = NULL;
+    loader = MFXLoad();
+
+    if (!loader) {
+        av_log(ctx, AV_LOG_ERROR, "Error creating a MFX loader\n");
+        goto fail;
+    }
+
+    /* Create configurations for implementation */
+    cfg = MFXCreateConfig(loader);
+
+    if (!cfg) {
+        av_log(ctx, AV_LOG_ERROR, "Error creating a MFX configuration\n");
+        goto fail;
+    }
+
+    impl_value.Type = MFX_VARIANT_TYPE_U32;
+    impl_value.Data.U32 = (implementation == MFX_IMPL_SOFTWARE) ?
+        MFX_IMPL_TYPE_SOFTWARE : MFX_IMPL_TYPE_HARDWARE;
+    sts = MFXSetConfigFilterProperty(cfg,
+                                     (const mfxU8 *)"mfxImplDescription.Impl", impl_value);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration "
+               "property: %d.\n", sts);
+        goto fail;
+    }
+
+    impl_value.Type = MFX_VARIANT_TYPE_U32;
+
+    if (MFX_HANDLE_VA_DISPLAY == handle_type)
+        impl_value.Data.U32 = MFX_ACCEL_MODE_VIA_VAAPI;
+    else if (MFX_HANDLE_D3D9_DEVICE_MANAGER == handle_type)
+        impl_value.Data.U32 = MFX_ACCEL_MODE_VIA_D3D9;
+    else
+        impl_value.Data.U32 = MFX_ACCEL_MODE_VIA_D3D11;
+
+    sts = MFXSetConfigFilterProperty(cfg,
+                                     (const mfxU8 *)"mfxImplDescription.AccelerationMode", impl_value);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration"
+               "AccelerationMode property: %d.\n", sts);
+        goto fail;
+    }
+
+    impl_value.Type = MFX_VARIANT_TYPE_U16;
+    impl_value.Data.U16 = 0x8086;
+    sts = MFXSetConfigFilterProperty(cfg,
+                                     (const mfxU8 *)"mfxExtendedDeviceId.VendorID", impl_value);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration"
+               "VendorID property: %d.\n", sts);
+        goto fail;
+    }
+
+#if CONFIG_D3D11VA
+    if (MFX_HANDLE_D3D11_DEVICE == handle_type) {
+        if (handle) {
+            IDXGIAdapter* pDXGIAdapter;
+            DXGI_ADAPTER_DESC adapterDesc;
+            IDXGIDevice* pDXGIDevice = NULL;
+            HRESULT hr;
+            ID3D11Device* device = handle;
+
+            hr = ID3D11Device_QueryInterface(device, &IID_IDXGIDevice, (void**)&pDXGIDevice);
+
+            if (SUCCEEDED(hr)) {
+                hr = IDXGIDevice_GetAdapter(pDXGIDevice, &pDXGIAdapter);
+
+                if (FAILED(hr)) {
+                    av_log(ctx, AV_LOG_ERROR, "Error IDXGIDevice_GetAdapter %d\n", hr);
+                    goto fail;
+                }
+
+                hr = IDXGIAdapter_GetDesc(pDXGIAdapter, &adapterDesc);
+
+                if (FAILED(hr)) {
+                    av_log(ctx, AV_LOG_ERROR, "Error IDXGIAdapter_GetDesc %d\n", hr);
+                    goto fail;
+                }
+            } else {
+                av_log(ctx, AV_LOG_ERROR, "Error ID3D11Device_QueryInterface %d\n", hr);
+                goto fail;
+            }
+
+            impl_value.Type = MFX_VARIANT_TYPE_U16;
+            impl_value.Data.U16 = adapterDesc.DeviceId;
+            sts = MFXSetConfigFilterProperty(cfg,
+                                             (const mfxU8 *)"mfxExtendedDeviceId.DeviceID", impl_value);
+
+            if (sts != MFX_ERR_NONE) {
+                av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration"
+                       "DeviceID property: %d.\n", sts);
+                goto fail;
+            }
+
+            impl_value.Type = MFX_VARIANT_TYPE_PTR;
+            impl_value.Data.Ptr = &adapterDesc.AdapterLuid;
+            sts = MFXSetConfigFilterProperty(cfg,
+                                             (const mfxU8 *)"mfxExtendedDeviceId.DeviceLUID", impl_value);
+
+            if (sts != MFX_ERR_NONE) {
+                av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration"
+                       "DeviceLUID property: %d.\n", sts);
+                goto fail;
+            }
+
+            impl_value.Type = MFX_VARIANT_TYPE_U32;
+            impl_value.Data.U32 = 0x0001;
+            sts = MFXSetConfigFilterProperty(cfg,
+                                             (const mfxU8 *)"mfxExtendedDeviceId.LUIDDeviceNodeMask", impl_value);
+
+            if (sts != MFX_ERR_NONE) {
+                av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration"
+                       "LUIDDeviceNodeMask property: %d.\n", sts);
+                goto fail;
+            }
+        }
+    }
+#endif
+#if CONFIG_DXVA2
+    if (MFX_HANDLE_D3D9_DEVICE_MANAGER == handle_type) {
+        if (handle) {
+            IDirect3DDeviceManager9* devmgr = handle;
+            IDirect3DDevice9Ex *device = NULL;
+            HANDLE device_handle = 0;
+            IDirect3D9Ex *d3d9ex = NULL;
+            LUID luid;
+            D3DDEVICE_CREATION_PARAMETERS params;
+            HRESULT hr = IDirect3DDeviceManager9_OpenDeviceHandle(devmgr, &device_handle);
+
+            if (SUCCEEDED(hr)) {
+                hr = IDirect3DDeviceManager9_LockDevice(devmgr, device_handle, &device, TRUE);
+
+                if (FAILED(hr)) {
+                    av_log(ctx, AV_LOG_ERROR, "Error LockDevice %d\n", hr);
+                    goto fail;
+                }
+
+                hr = IDirect3DDevice9Ex_GetCreationParameters(device, &params);
+
+                if (FAILED(hr)) {
+                    av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDevice9_GetCreationParameters %d\n", hr);
+                    IDirect3DDeviceManager9_UnlockDevice(devmgr, device_handle, FALSE);
+                    goto fail;
+                }
+
+                hr = IDirect3DDevice9Ex_GetDirect3D(device, &d3d9ex);
+
+                if (FAILED(hr)) {
+                    av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDevice9Ex_GetAdapterLUID %d\n", hr);
+                    IDirect3DDeviceManager9_UnlockDevice(devmgr, device_handle, FALSE);
+                    goto fail;
+                }
+
+                hr = IDirect3D9Ex_GetAdapterLUID(d3d9ex, params.AdapterOrdinal, &luid);
+
+                if (FAILED(hr)) {
+                    av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDevice9Ex_GetAdapterLUID %d\n", hr);
+                    IDirect3DDeviceManager9_UnlockDevice(devmgr, device_handle, FALSE);
+                    goto fail;
+                }
+
+                hr = IDirect3DDeviceManager9_UnlockDevice(devmgr, device_handle, FALSE);
+
+                if (FAILED(hr)) {
+                    av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDeviceManager9_UnlockDevice %d\n", hr);
+                    goto fail;
+                }
+
+                impl_value.Type = MFX_VARIANT_TYPE_PTR;
+                impl_value.Data.Ptr = &luid;
+                sts = MFXSetConfigFilterProperty(cfg,
+                                                (const mfxU8 *)"mfxExtendedDeviceId.DeviceLUID", impl_value);
+
+                if (sts != MFX_ERR_NONE) {
+                    av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration"
+                        "DeviceLUID property: %d.\n", sts);
+                    goto fail;
+                }
+            } else {
+                av_log(ctx, AV_LOG_ERROR, "Error OpenDeviceHandle %d\n", hr);
+                goto fail;
+            }
+        }
+    }
+#endif
+#if CONFIG_VAAPI
+    // TODO: add config filter for device
+    // Without device info, oneVPL loads the default implementation which doesn't
+    // matter on a single GPU. But on multiple GPUs, the default implementation might
+    // not work with the given device. We'll add the config filter for device once we
+    // can get device info via a VADisplay handle
+    // if (MFX_HANDLE_VA_DISPLAY == handle_type) {
+    //
+    // }
+#endif
+
+    impl_value.Type = MFX_VARIANT_TYPE_U32;
+    impl_value.Data.U32 = pver->Version;
+    sts = MFXSetConfigFilterProperty(cfg,
+                                     (const mfxU8 *)"mfxImplDescription.ApiVersion.Version",
+                                     impl_value);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration "
+               "property: %d.\n", sts);
+        goto fail;
+    }
+
+    while (1) {
+        /* Enumerate all implementations */
+        mfxImplDescription *impl_desc;
+
+        sts = MFXEnumImplementations(loader, impl_idx,
+                                     MFX_IMPLCAPS_IMPLDESCSTRUCTURE,
+                                     (mfxHDL *)&impl_desc);
+
+        /* Failed to find an available implementation */
+        if (sts == MFX_ERR_NOT_FOUND)
+            break;
+        else if (sts != MFX_ERR_NONE) {
+            impl_idx++;
+            continue;
+        }
+
+        sts = MFXCreateSession(loader, impl_idx, &session);
+        MFXDispReleaseImplDescription(loader, impl_desc);
+
+        if (sts == MFX_ERR_NONE)
+            break;
+
+        impl_idx++;
+    }
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error creating a MFX session: %d.\n", sts);
+        goto fail;
+    }
+
+    sts = MFXQueryVersion(session, &ver);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error querying a MFX session: %d.\n", sts);
+        goto fail;
+    }
+
+    av_log(ctx, AV_LOG_VERBOSE, "Initialize MFX session: implementation "
+           "version is %d.%d\n", ver.Major, ver.Minor);
+
+    *psession = session;
+    *ploader = loader;
+
+    return 0;
+
+fail:
+    if (session)
+        MFXClose(session);
+
+    MFXUnload(loader);
+
+    return AVERROR_UNKNOWN;
+}
+
+#else
+
+static int qsv_create_mfx_session(void *ctx,
+                                  mfxHDL handle,
+                                  mfxHandleType handle_type,
+                                  mfxIMPL implementation,
+                                  mfxVersion *pver,
+                                  mfxSession *psession,
+                                  void **ploader)
+{
+    mfxVersion ver;
+    mfxStatus sts;
+    mfxSession session = NULL;
+
+    av_log(ctx, AV_LOG_VERBOSE,
+           "Use Intel(R) Media SDK to create MFX session, API version is "
+           "%d.%d, the required implementation version is %d.%d\n",
+           MFX_VERSION_MAJOR, MFX_VERSION_MINOR, pver->Major, pver->Minor);
+
+    if (handle_type != MFX_HANDLE_VA_DISPLAY &&
+        handle_type != MFX_HANDLE_D3D9_DEVICE_MANAGER &&
+        handle_type != MFX_HANDLE_D3D11_DEVICE) {
+        av_log(ctx, AV_LOG_ERROR,
+               "Invalid MFX device handle\n");
+        return AVERROR(EXDEV);
+    }
+
+    *ploader = NULL;
+    *psession = NULL;
+    ver = *pver;
+    sts = MFXInit(implementation, &ver, &session);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
+               "%d.\n", sts);
+        goto fail;
+    }
+
+    sts = MFXQueryVersion(session, &ver);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error querying an MFX session: "
+               "%d.\n", sts);
+        goto fail;
+    }
+
+    av_log(ctx, AV_LOG_VERBOSE, "Initialize MFX session: implementation "
+           "version is %d.%d\n", ver.Major, ver.Minor);
+
+    MFXClose(session);
+    sts = MFXInit(implementation, &ver, &session);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
+               "%d.\n", sts);
+        goto fail;
+    }
+
+    *psession = session;
+
+    return 0;
+
+fail:
+    if (session)
+        MFXClose(session);
+
+    return AVERROR_UNKNOWN;
+}
+
+#endif
+
 static int qsv_init_internal_session(AVHWFramesContext *ctx,
-                                     mfxSession *session, int upload)
+                                     mfxSession *session, void **loader,
+                                     int upload)
 {
     AVQSVFramesContext *frames_hwctx = ctx->hwctx;
     QSVDeviceContext   *device_priv  = ctx->device_ctx->internal->priv;
@@ -649,29 +1031,34 @@ static int qsv_init_internal_session(AVHWFramesContext *ctx,
 
     mfxVideoParam par;
     mfxStatus err;
+    int ret = AVERROR_UNKNOWN;
 
 #if QSV_HAVE_OPAQUE
     QSVFramesContext              *s = ctx->internal->priv;
     opaque = !!(frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
 #endif
 
-    err = MFXInit(device_priv->impl, &device_priv->ver, session);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR, "Error initializing an internal session\n");
-        return AVERROR_UNKNOWN;
-    }
+    ret = qsv_create_mfx_session(ctx, device_priv->handle, device_priv->handle_type,
+                                 device_priv->impl, &device_priv->ver, session, loader);
+
+    if (ret)
+        goto fail;
 
     if (device_priv->handle) {
         err = MFXVideoCORE_SetHandle(*session, device_priv->handle_type,
                                      device_priv->handle);
-        if (err != MFX_ERR_NONE)
-            return AVERROR_UNKNOWN;
+        if (err != MFX_ERR_NONE) {
+            ret = AVERROR_UNKNOWN;
+            goto fail;
+        }
     }
 
     if (!opaque) {
         err = MFXVideoCORE_SetFrameAllocator(*session, &frame_allocator);
-        if (err != MFX_ERR_NONE)
-            return AVERROR_UNKNOWN;
+        if (err != MFX_ERR_NONE) {
+            ret = AVERROR_UNKNOWN;
+            goto fail;
+        }
     }
 
     memset(&par, 0, sizeof(par));
@@ -707,11 +1094,22 @@ static int qsv_init_internal_session(AVHWFramesContext *ctx,
     if (err != MFX_ERR_NONE) {
         av_log(ctx, AV_LOG_VERBOSE, "Error opening the internal VPP session."
                "Surface upload/download will not be possible\n");
-        MFXClose(*session);
-        *session = NULL;
+
+        ret = AVERROR_UNKNOWN;
+        goto fail;
     }
 
     return 0;
+
+fail:
+    if (*session)
+        MFXClose(*session);
+
+    MFXUnload(*loader);
+    *session = NULL;
+    *loader = NULL;
+
+    return ret;
 }
 
 static int qsv_frames_init(AVHWFramesContext *ctx)
@@ -775,6 +1173,9 @@ static int qsv_frames_init(AVHWFramesContext *ctx)
 
     s->session_download = NULL;
     s->session_upload   = NULL;
+
+    s->loader_download = NULL;
+    s->loader_upload = NULL;
 
     s->session_download_init = 0;
     s->session_upload_init   = 0;
@@ -1092,6 +1493,7 @@ static int qsv_internal_session_check_init(AVHWFramesContext *ctx, int upload)
     QSVFramesContext *s = ctx->internal->priv;
     atomic_int *inited  = upload ? &s->session_upload_init : &s->session_download_init;
     mfxSession *session = upload ? &s->session_upload      : &s->session_download;
+    void **loader       = upload ? &s->loader_upload       : &s->loader_download;
     int ret = 0;
 
     if (atomic_load(inited))
@@ -1102,7 +1504,7 @@ static int qsv_internal_session_check_init(AVHWFramesContext *ctx, int upload)
 #endif
 
     if (!atomic_load(inited)) {
-        ret = qsv_init_internal_session(ctx, session, upload);
+        ret = qsv_init_internal_session(ctx, session, loader, upload);
         atomic_store(inited, 1);
     }
 
@@ -1485,6 +1887,7 @@ static void qsv_device_free(AVHWDeviceContext *ctx)
     if (hwctx->session)
         MFXClose(hwctx->session);
 
+    MFXUnload(hwctx->loader);
     av_buffer_unref(&priv->child_device_ctx);
     av_freep(&priv);
 }
@@ -1574,34 +1977,11 @@ static int qsv_device_derive_from_child(AVHWDeviceContext *ctx,
         goto fail;
     }
 
-    err = MFXInit(implementation, &ver, &hwctx->session);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
-               "%d.\n", err);
-        ret = AVERROR_UNKNOWN;
+    ret = qsv_create_mfx_session(ctx, handle, handle_type, implementation, &ver,
+                                 &hwctx->session, &hwctx->loader);
+
+    if (ret)
         goto fail;
-    }
-
-    err = MFXQueryVersion(hwctx->session, &ver);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR, "Error querying an MFX session: %d.\n", err);
-        ret = AVERROR_UNKNOWN;
-        goto fail;
-    }
-
-    av_log(ctx, AV_LOG_VERBOSE,
-           "Initialize MFX session: API version is %d.%d, implementation version is %d.%d\n",
-           MFX_VERSION_MAJOR, MFX_VERSION_MINOR, ver.Major, ver.Minor);
-
-    MFXClose(hwctx->session);
-
-    err = MFXInit(implementation, &ver, &hwctx->session);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR,
-               "Error initializing an MFX session: %d.\n", err);
-        ret = AVERROR_UNKNOWN;
-        goto fail;
-    }
 
     err = MFXVideoCORE_SetHandle(hwctx->session, handle_type, handle);
     if (err != MFX_ERR_NONE) {
@@ -1616,6 +1996,8 @@ static int qsv_device_derive_from_child(AVHWDeviceContext *ctx,
 fail:
     if (hwctx->session)
         MFXClose(hwctx->session);
+
+    MFXUnload(hwctx->loader);
     return ret;
 }
 
@@ -1658,6 +2040,16 @@ static int qsv_device_create(AVHWDeviceContext *ctx, const char *device,
         }
     } else if (CONFIG_VAAPI) {
         child_device_type = AV_HWDEVICE_TYPE_VAAPI;
+#if QSV_ONEVPL
+    } else if (CONFIG_D3D11VA) {  // Use D3D11 by default if d3d11va is enabled
+        av_log(NULL, AV_LOG_WARNING,
+               "WARNING: defaulting child_device_type to AV_HWDEVICE_TYPE_D3D11VA for "
+               "oneVPL. Please explicitly set child device type via \"-init_hw_device\" "
+               "option if needed.\n");
+        child_device_type = AV_HWDEVICE_TYPE_D3D11VA;
+    } else if (CONFIG_DXVA2) {
+        child_device_type = AV_HWDEVICE_TYPE_DXVA2;
+#else
     } else if (CONFIG_DXVA2) {
         av_log(NULL, AV_LOG_WARNING,
                 "WARNING: defaulting child_device_type to AV_HWDEVICE_TYPE_DXVA2 for compatibility "
@@ -1666,6 +2058,7 @@ static int qsv_device_create(AVHWDeviceContext *ctx, const char *device,
         child_device_type = AV_HWDEVICE_TYPE_DXVA2;
     } else if (CONFIG_D3D11VA) {
         child_device_type = AV_HWDEVICE_TYPE_D3D11VA;
+#endif
     } else {
         av_log(ctx, AV_LOG_ERROR, "No supported child device type is enabled\n");
         return AVERROR(ENOSYS);
@@ -1692,6 +2085,13 @@ static int qsv_device_create(AVHWDeviceContext *ctx, const char *device,
 #endif
 #if CONFIG_DXVA2
     case AV_HWDEVICE_TYPE_DXVA2:
+#if QSV_ONEVPL
+        {
+            av_log(NULL, AV_LOG_WARNING,
+                   "WARNING: d3d11va is not available or child device type is "
+                   "set to dxva2 explicitly for oneVPL.\n");
+        }
+#endif
         break;
 #endif
     default:
