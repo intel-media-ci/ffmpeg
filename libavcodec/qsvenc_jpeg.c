@@ -30,7 +30,6 @@
 #include "avcodec.h"
 #include "internal.h"
 #include "qsv.h"
-#include "qsv_internal.h"
 #include "qsvenc.h"
 
 typedef struct QSVMJPEGEncContext {
