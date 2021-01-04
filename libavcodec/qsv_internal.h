@@ -99,6 +99,7 @@ typedef struct QSVSession {
     AVBufferRef *va_device_ref;
     AVHWDeviceContext *va_device_ctx;
 #endif
+    void *loader;
 } QSVSession;
 
 typedef struct QSVFramesContext {
