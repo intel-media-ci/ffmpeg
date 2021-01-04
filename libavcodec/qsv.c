@@ -39,7 +39,7 @@
 #include "mfxvp8.h"
 #endif
 
-#if !QSV_VERSION_ATLEAST(2, 0)
+#if !QSV_ONEVPL
 #include <mfxplugin.h>
 #endif
 
@@ -151,7 +151,7 @@ static const struct {
     { MFX_ERR_INVALID_VIDEO_PARAM,      AVERROR(EINVAL), "invalid video parameters"             },
     { MFX_ERR_UNDEFINED_BEHAVIOR,       AVERROR_BUG,     "undefined behavior"                   },
     { MFX_ERR_DEVICE_FAILED,            AVERROR(EIO),    "device failed"                        },
-#if !QSV_VERSION_ATLEAST(2, 0)
+#if !QSV_ONEVPL
     { MFX_ERR_INCOMPATIBLE_AUDIO_PARAM, AVERROR(EINVAL), "incompatible audio parameters"        },
     { MFX_ERR_INVALID_AUDIO_PARAM,      AVERROR(EINVAL), "invalid audio parameters"             },
 #endif
@@ -164,7 +164,7 @@ static const struct {
     { MFX_WRN_VALUE_NOT_CHANGED,        0,               "value is saturated"                   },
     { MFX_WRN_OUT_OF_RANGE,             0,               "value out of range"                   },
     { MFX_WRN_FILTER_SKIPPED,           0,               "filter skipped"                       },
-#if !QSV_VERSION_ATLEAST(2, 0)
+#if !QSV_ONEVPL
     { MFX_WRN_INCOMPATIBLE_AUDIO_PARAM, 0,               "incompatible audio parameters"        },
 #endif
 };
@@ -310,7 +310,7 @@ enum AVPictureType ff_qsv_map_pictype(int mfx_pic_type)
 static int qsv_load_plugins(mfxSession session, const char *load_plugins,
                             void *logctx)
 {
-#if !QSV_VERSION_ATLEAST(2, 0)
+#if !QSV_ONEVPL
     if (!load_plugins || !*load_plugins)
         return 0;
 

@@ -48,7 +48,8 @@
     (MFX_VERSION_MAJOR > (MAJOR) ||         \
      MFX_VERSION_MAJOR == (MAJOR) && MFX_VERSION_MINOR >= (MINOR))
 
-#define QSV_HAVE_OPAQUE  !QSV_VERSION_ATLEAST(2, 0)
+#define QSV_ONEVPL       QSV_VERSION_ATLEAST(2, 0)
+#define QSV_HAVE_OPAQUE  !QSV_ONEVPL
 
 typedef struct QSVDevicePriv {
     AVBufferRef *child_device_ctx;

@@ -39,7 +39,8 @@
     ((MFX_VERSION.Major > (MAJOR)) ||                           \
     (MFX_VERSION.Major == (MAJOR) && MFX_VERSION.Minor >= (MINOR)))
 
-#define QSV_HAVE_OPAQUE  !QSV_VERSION_ATLEAST(2, 0)
+#define QSV_ONEVPL       QSV_VERSION_ATLEAST(2, 0)
+#define QSV_HAVE_OPAQUE  !QSV_ONEVPL
 
 typedef struct QSVVPPContext QSVVPPContext;
 
