@@ -34,6 +34,7 @@
  */
 typedef struct AVQSVDeviceContext {
     mfxSession session;
+    void      *loader;
 } AVQSVDeviceContext;
 
 /**

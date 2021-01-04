@@ -38,6 +38,10 @@
  */
 typedef struct AVDXVA2DeviceContext {
     IDirect3DDeviceManager9 *devmgr;
+    /**
+     * The string for the used adapter
+     */
+    char *device_name;
 } AVDXVA2DeviceContext;
 
 /**

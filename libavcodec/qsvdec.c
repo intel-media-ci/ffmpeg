@@ -46,6 +46,12 @@
 #include "qsv.h"
 #include "qsv_internal.h"
 
+#if QSV_ONEVPL
+#include <mfxdispatcher.h>
+#else
+#define MFXUnload(a) do { } while(0)
+#endif
+
 static const AVRational mfx_tb = { 1, 90000 };
 
 #define PTS_TO_MFX_PTS(pts, pts_tb) ((pts) == AV_NOPTS_VALUE ? \
@@ -161,7 +167,9 @@ static int qsv_init_session(AVCodecContext *avctx, QSVContext *q, mfxSession ses
     } else if (hw_frames_ref) {
         if (q->internal_qs.session) {
             MFXClose(q->internal_qs.session);
+            MFXUnload(q->internal_qs.loader);
             q->internal_qs.session = NULL;
+            q->internal_qs.loader = NULL;
         }
         av_buffer_unref(&q->frames_ctx.hw_frames_ctx);
 
@@ -186,7 +194,9 @@ static int qsv_init_session(AVCodecContext *avctx, QSVContext *q, mfxSession ses
     } else if (hw_device_ref) {
         if (q->internal_qs.session) {
             MFXClose(q->internal_qs.session);
+            MFXUnload(q->internal_qs.loader);
             q->internal_qs.session = NULL;
+            q->internal_qs.loader = NULL;
         }
 
         ret = ff_qsv_init_session_device(avctx, &q->internal_qs.session,

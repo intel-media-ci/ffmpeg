@@ -78,6 +78,10 @@ typedef struct AVVAAPIDeviceContext {
      * operations using VAAPI with the same VADisplay.
      */
     unsigned int driver_quirks;
+    /**
+     * The string for the used device
+     */
+    char *device_name;
 } AVVAAPIDeviceContext;
 
 /**
