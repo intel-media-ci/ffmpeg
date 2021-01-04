@@ -39,7 +39,9 @@
 #include "mfxvp8.h"
 #endif
 
-#if !QSV_ONEVPL
+#if QSV_ONEVPL
+#include <mfxdispatcher.h>
+#else
 #include <mfxplugin.h>
 #endif
 
@@ -393,6 +395,59 @@ static int ff_qsv_set_display_handle(AVCodecContext *avctx, QSVSession *qs)
 }
 #endif //AVCODEC_QSV_LINUX_SESSION_HANDLE
 
+#if QSV_ONEVPL
+static int vpl_init_internal_session(AVCodecContext *avctx, mfxSession *psession)
+{
+    mfxStatus sts;
+    mfxLoader loader = NULL;
+    uint32_t impl_idx = 0;
+    mfxSession session;
+
+    loader = MFXLoad();
+
+    if (!loader)
+        return ff_qsv_print_warning(avctx, MFX_ERR_UNSUPPORTED,
+                                    "Failed to create the loader");
+
+    while (1) {
+        /* Enumerate all implementations */
+        mfxImplDescription *impl_desc;
+
+        sts = MFXEnumImplementations(loader, impl_idx,
+                                     MFX_IMPLCAPS_IMPLDESCSTRUCTURE,
+                                     (mfxHDL *)&impl_desc);
+
+        /* Failed to find an available implementation */
+        if (sts == MFX_ERR_NOT_FOUND)
+            break;
+        else if (sts < 0) {
+            impl_idx++;
+            continue;
+        }
+
+        sts = MFXCreateSession(loader, impl_idx, &session);
+        MFXDispReleaseImplDescription(loader, impl_desc);
+
+        if (sts == MFX_ERR_NONE)
+            break;
+
+        impl_idx++;
+    }
+
+    MFXUnload(loader);
+
+    if (sts < 0)
+        return ff_qsv_print_error(avctx, sts,
+                                  "Failed to create a VPL session");
+
+    av_assert0(session != NULL);
+    *psession = session;
+
+    return 0;
+}
+
+#endif
+
 int ff_qsv_init_internal_session(AVCodecContext *avctx, QSVSession *qs,
                                  const char *load_plugins, int gpu_copy)
 {
@@ -401,17 +456,23 @@ int ff_qsv_init_internal_session(AVCodecContext *avctx, QSVSession *qs,
     mfxInitParam init_par = { MFX_IMPL_AUTO_ANY };
 
     const char *desc;
-    int ret;
+    int ret = AVERROR_UNKNOWN;
 
-#if QSV_VERSION_ATLEAST(1, 16)
-    init_par.GPUCopy        = gpu_copy;
+#if QSV_ONEVPL
+    ret = vpl_init_internal_session(avctx, &qs->session);
 #endif
-    init_par.Implementation = impl;
-    init_par.Version        = ver;
-    ret = MFXInitEx(init_par, &qs->session);
-    if (ret < 0)
-        return ff_qsv_print_error(avctx, ret,
-                                  "Error initializing an internal MFX session");
+
+    if (ret != 0) {
+#if QSV_VERSION_ATLEAST(1, 16)
+        init_par.GPUCopy        = gpu_copy;
+#endif
+        init_par.Implementation = impl;
+        init_par.Version        = ver;
+        ret = MFXInitEx(init_par, &qs->session);
+        if (ret < 0)
+            return ff_qsv_print_error(avctx, ret,
+                                      "Error initializing an internal MFX session");
+    }
 
 #ifdef AVCODEC_QSV_LINUX_SESSION_HANDLE
     ret = ff_qsv_set_display_handle(avctx, qs);
@@ -742,15 +803,22 @@ int ff_qsv_init_session_device(AVCodecContext *avctx, mfxSession *psession,
                "from the session\n");
     }
 
-#if QSV_VERSION_ATLEAST(1, 16)
-    init_par.GPUCopy        = gpu_copy;
+    ret = AVERROR_UNKNOWN;
+#if QSV_ONEVPL
+    ret = vpl_init_internal_session(avctx, &session);
 #endif
-    init_par.Implementation = impl;
-    init_par.Version        = ver;
-    err = MFXInitEx(init_par, &session);
-    if (err != MFX_ERR_NONE)
-        return ff_qsv_print_error(avctx, err,
-                                  "Error initializing a child MFX session");
+
+    if (ret != 0) {
+#if QSV_VERSION_ATLEAST(1, 16)
+        init_par.GPUCopy        = gpu_copy;
+#endif
+        init_par.Implementation = impl;
+        init_par.Version        = ver;
+        err = MFXInitEx(init_par, &session);
+        if (err != MFX_ERR_NONE)
+            return ff_qsv_print_error(avctx, err,
+                                      "Error initializing a child MFX session");
+    }
 
     if (handle) {
         err = MFXVideoCORE_SetHandle(session, handle_type, handle);

@@ -51,6 +51,10 @@
 #define QSV_ONEVPL       QSV_VERSION_ATLEAST(2, 0)
 #define QSV_HAVE_OPAQUE  !QSV_ONEVPL
 
+#if QSV_ONEVPL
+#include <mfxdispatcher.h>
+#endif
+
 typedef struct QSVDevicePriv {
     AVBufferRef *child_device_ctx;
 } QSVDevicePriv;
@@ -450,6 +454,61 @@ static mfxStatus frame_get_hdl(mfxHDL pthis, mfxMemId mid, mfxHDL *hdl)
     return MFX_ERR_NONE;
 }
 
+#if QSV_ONEVPL
+
+static int vpl_init_internal_session(void *ctx, mfxSession *psession)
+{
+    mfxStatus sts;
+    mfxLoader loader = NULL;
+    uint32_t impl_idx = 0;
+    mfxSession session;
+
+    loader = MFXLoad();
+
+    if (!loader) {
+        av_log(ctx, AV_LOG_WARNING, "Failed to create the loader\n");
+        return AVERROR(ENOSYS);
+    }
+
+    while (1) {
+        /* Enumerate all implementations */
+        mfxImplDescription *impl_desc;
+
+        sts = MFXEnumImplementations(loader, impl_idx,
+                                     MFX_IMPLCAPS_IMPLDESCSTRUCTURE,
+                                     (mfxHDL *)&impl_desc);
+
+        /* Failed to find an available implementation */
+        if (sts == MFX_ERR_NOT_FOUND)
+            break;
+        else if (sts < 0) {
+            impl_idx++;
+            continue;
+        }
+
+        sts = MFXCreateSession(loader, impl_idx, &session);
+        MFXDispReleaseImplDescription(loader, impl_desc);
+
+        if (sts == MFX_ERR_NONE)
+            break;
+
+        impl_idx++;
+    }
+
+    MFXUnload(loader);
+
+    if (sts < 0) {
+        av_log(ctx, AV_LOG_WARNING, "Failed to create a VPL session\n");
+        return AVERROR(ENOSYS);
+    }
+
+    *psession = session;
+
+    return 0;
+}
+
+#endif
+
 static int qsv_init_internal_session(AVHWFramesContext *ctx,
                                      mfxSession *session, int upload)
 {
@@ -468,16 +527,23 @@ static int qsv_init_internal_session(AVHWFramesContext *ctx,
 
     mfxVideoParam par;
     mfxStatus err;
+    int ret = AVERROR_UNKNOWN;
 
 #if QSV_HAVE_OPAQUE
     QSVFramesContext              *s = ctx->internal->priv;
     opaque = !!(frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
 #endif
 
-    err = MFXInit(device_priv->impl, &device_priv->ver, session);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR, "Error initializing an internal session\n");
-        return AVERROR_UNKNOWN;
+#if QSV_ONEVPL
+    ret = vpl_init_internal_session(ctx, session);
+#endif
+
+    if (ret != 0) {
+        err = MFXInit(device_priv->impl, &device_priv->ver, session);
+        if (err != MFX_ERR_NONE) {
+            av_log(ctx, AV_LOG_ERROR, "Error initializing an internal session\n");
+            return AVERROR_UNKNOWN;
+        }
     }
 
     if (device_priv->handle) {
@@ -1194,33 +1260,41 @@ static int qsv_device_derive_from_child(AVHWDeviceContext *ctx,
         goto fail;
     }
 
-    err = MFXInit(implementation, &ver, &hwctx->session);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
-               "%d.\n", err);
-        ret = AVERROR_UNKNOWN;
-        goto fail;
-    }
+    ret = AVERROR_UNKNOWN;
 
-    err = MFXQueryVersion(hwctx->session, &ver);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR, "Error querying an MFX session: %d.\n", err);
-        ret = AVERROR_UNKNOWN;
-        goto fail;
-    }
+#if QSV_ONEVPL
+    ret = vpl_init_internal_session(ctx, &hwctx->session);
+#endif
 
-    av_log(ctx, AV_LOG_VERBOSE,
-           "Initialize MFX session: API version is %d.%d, implementation version is %d.%d\n",
-           MFX_VERSION_MAJOR, MFX_VERSION_MINOR, ver.Major, ver.Minor);
+    if (ret != 0) {
+        err = MFXInit(implementation, &ver, &hwctx->session);
+        if (err != MFX_ERR_NONE) {
+            av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
+                   "%d.\n", err);
+            ret = AVERROR_UNKNOWN;
+            goto fail;
+        }
 
-    MFXClose(hwctx->session);
+        err = MFXQueryVersion(hwctx->session, &ver);
+        if (err != MFX_ERR_NONE) {
+            av_log(ctx, AV_LOG_ERROR, "Error querying an MFX session: %d.\n", err);
+            ret = AVERROR_UNKNOWN;
+            goto fail;
+        }
 
-    err = MFXInit(implementation, &ver, &hwctx->session);
-    if (err != MFX_ERR_NONE) {
-        av_log(ctx, AV_LOG_ERROR,
-               "Error initializing an MFX session: %d.\n", err);
-        ret = AVERROR_UNKNOWN;
-        goto fail;
+        av_log(ctx, AV_LOG_VERBOSE,
+               "Initialize MFX session: API version is %d.%d, implementation version is %d.%d\n",
+               MFX_VERSION_MAJOR, MFX_VERSION_MINOR, ver.Major, ver.Minor);
+
+        MFXClose(hwctx->session);
+
+        err = MFXInit(implementation, &ver, &hwctx->session);
+        if (err != MFX_ERR_NONE) {
+            av_log(ctx, AV_LOG_ERROR,
+                   "Error initializing an MFX session: %d.\n", err);
+            ret = AVERROR_UNKNOWN;
+            goto fail;
+        }
     }
 
     err = MFXVideoCORE_SetHandle(hwctx->session, handle_type, handle);

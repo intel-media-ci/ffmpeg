@@ -74,4 +74,12 @@ int ff_qsvvpp_free(QSVVPPContext **vpp);
 /* vpp filter frame and call the cb if needed */
 int ff_qsvvpp_filter_frame(QSVVPPContext *vpp, AVFilterLink *inlink, AVFrame *frame);
 
+#if QSV_ONEVPL
+
+#include <mfxdispatcher.h>
+
+int ff_qsv_vpl_init_internal_session(void *ctx, mfxSession *psession);
+
+#endif
+
 #endif /* AVFILTER_QSVVPP_H */

@@ -417,7 +417,7 @@ static int init_vpp_session(AVFilterContext *avctx, QSVVPPContext *s)
     mfxHandleType handle_type;
     mfxVersion ver;
     mfxIMPL impl;
-    int ret, i;
+    int ret, i, ret1;
 
     if (inlink->hw_frames_ctx) {
         AVHWFramesContext *frames_ctx = (AVHWFramesContext *)inlink->hw_frames_ctx->data;
@@ -519,10 +519,18 @@ static int init_vpp_session(AVFilterContext *avctx, QSVVPPContext *s)
     }
 
     /* create a "slave" session with those same properties, to be used for vpp */
-    ret = MFXInit(impl, &ver, &s->session);
-    if (ret != MFX_ERR_NONE) {
-        av_log(avctx, AV_LOG_ERROR, "Error initializing a session for scaling\n");
-        return AVERROR_UNKNOWN;
+    ret1 = AVERROR_UNKNOWN;
+
+#if QSV_ONEVPL
+    ret1 = ff_qsv_vpl_init_internal_session(avctx, &s->session);
+#endif
+
+    if (ret1 != 0) {
+        ret = MFXInit(impl, &ver, &s->session);
+        if (ret != MFX_ERR_NONE) {
+            av_log(avctx, AV_LOG_ERROR, "Error initializing a session for scaling\n");
+            return AVERROR_UNKNOWN;
+        }
     }
 
     if (handle) {
@@ -760,3 +768,58 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
 
     return ret;
 }
+
+#if QSV_ONEVPL
+
+int ff_qsv_vpl_init_internal_session(void *ctx, mfxSession *psession)
+{
+    mfxStatus sts;
+    mfxLoader loader = NULL;
+    uint32_t impl_idx = 0;
+    mfxSession session;
+
+    loader = MFXLoad();
+
+    if (!loader) {
+        av_log(ctx, AV_LOG_WARNING, "Failed to create the loader\n");
+        return AVERROR(ENOSYS);
+    }
+
+    while (1) {
+        /* Enumerate all implementations */
+        mfxImplDescription *impl_desc;
+
+        sts = MFXEnumImplementations(loader, impl_idx,
+                                     MFX_IMPLCAPS_IMPLDESCSTRUCTURE,
+                                     (mfxHDL *)&impl_desc);
+
+        /* Failed to find an available implementation */
+        if (sts == MFX_ERR_NOT_FOUND)
+            break;
+        else if (sts < 0) {
+            impl_idx++;
+            continue;
+        }
+
+        sts = MFXCreateSession(loader, impl_idx, &session);
+        MFXDispReleaseImplDescription(loader, impl_desc);
+
+        if (sts == MFX_ERR_NONE)
+            break;
+
+        impl_idx++;
+    }
+
+    MFXUnload(loader);
+
+    if (sts < 0) {
+        av_log(ctx, AV_LOG_WARNING, "Failed to create a VPL session\n");
+        return AVERROR(ENOSYS);
+    }
+
+    *psession = session;
+
+    return 0;
+}
+
+#endif
