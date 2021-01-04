@@ -525,6 +525,13 @@ static void d3d11va_device_uninit(AVHWDeviceContext *hwdev)
     }
 }
 
+static void d3d11va_device_free(AVHWDeviceContext *ctx)
+{
+    AVD3D11VADeviceContext *hwctx = ctx->hwctx;
+
+    av_free(hwctx->device_name);
+}
+
 static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
                                  AVDictionary *opts, int flags)
 {
@@ -536,6 +543,8 @@ static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
     UINT creationFlags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
     int is_debug       = !!av_dict_get(opts, "debug", NULL, 0);
     int ret;
+
+    ctx->free = d3d11va_device_free;
 
     // (On UWP we can't check this.)
 #if !HAVE_UWP
@@ -561,6 +570,10 @@ static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
             if (FAILED(IDXGIFactory2_EnumAdapters(pDXGIFactory, adapter, &pAdapter)))
                 pAdapter = NULL;
             IDXGIFactory2_Release(pDXGIFactory);
+
+            device_hwctx->device_name = av_strdup(device);
+            if (!device_hwctx->device_name)
+                return AVERROR(ENOMEM);
         }
     }
 

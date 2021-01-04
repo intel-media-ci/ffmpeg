@@ -1517,6 +1517,7 @@ static void vaapi_device_free(AVHWDeviceContext *ctx)
     if (priv->drm_fd >= 0)
         close(priv->drm_fd);
 
+    av_free(hwctx->device_name);
     av_freep(&priv);
 }
 
@@ -1565,6 +1566,7 @@ static int vaapi_device_connect(AVHWDeviceContext *ctx,
 static int vaapi_device_create(AVHWDeviceContext *ctx, const char *device,
                                AVDictionary *opts, int flags)
 {
+    AVVAAPIDeviceContext *hwctx = ctx->hwctx;
     VAAPIDevicePriv *priv;
     VADisplay display = NULL;
     const AVDictionaryEntry *ent;
@@ -1610,6 +1612,11 @@ static int vaapi_device_create(AVHWDeviceContext *ctx, const char *device,
                        "DRM device node.\n", device);
                 break;
             }
+
+            hwctx->device_name = av_strdup(device);
+
+            if (!hwctx->device_name)
+                return AVERROR(ENOMEM);
         } else {
             char path[64];
             int n, max_devices = 8;
@@ -1650,6 +1657,12 @@ static int vaapi_device_create(AVHWDeviceContext *ctx, const char *device,
                     av_log(ctx, AV_LOG_VERBOSE, "Trying to use "
                            "DRM render node for device %d.\n", n);
                 }
+
+                hwctx->device_name = av_strdup(path);
+
+                if (!hwctx->device_name)
+                    return AVERROR(ENOMEM);
+
                 break;
             }
             if (n >= max_devices)

@@ -431,6 +431,7 @@ static void dxva2_device_free(AVHWDeviceContext *ctx)
         dlclose(priv->dxva2lib);
 
     av_freep(&ctx->user_opaque);
+    av_free(hwctx->device_name);
 }
 
 static int dxva2_device_create9(AVHWDeviceContext *ctx, UINT adapter)
@@ -569,6 +570,13 @@ static int dxva2_device_create(AVHWDeviceContext *ctx, const char *device,
     if (FAILED(hr)) {
         av_log(ctx, AV_LOG_ERROR, "Failed to open device handle\n");
         return AVERROR_UNKNOWN;
+    }
+
+    if (device) {
+        hwctx->device_name = av_strdup(device);
+
+        if (!hwctx->device_name)
+            return AVERROR(ENOMEM);
     }
 
     return 0;

@@ -94,6 +94,11 @@ typedef struct AVD3D11VADeviceContext {
     void (*lock)(void *lock_ctx);
     void (*unlock)(void *lock_ctx);
     void *lock_ctx;
+
+    /**
+     * The string for the used adapter
+     */
+    char *device_name;
 } AVD3D11VADeviceContext;
 
 /**
