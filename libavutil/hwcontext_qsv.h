@@ -19,7 +19,22 @@
 #ifndef AVUTIL_HWCONTEXT_QSV_H
 #define AVUTIL_HWCONTEXT_QSV_H
 
+#include <mfxdefs.h>
 #include <mfxvideo.h>
+
+#if (MFX_VERSION_MAJOR < 2)
+
+typedef void * mfxLoader;
+
+static av_always_inline void MFXUnload (mfxLoader mfxloader)
+{
+}
+
+#else
+
+#include <mfxdispatcher.h>
+
+#endif
 
 /**
  * @file
@@ -33,6 +48,7 @@
  * This struct is allocated as AVHWDeviceContext.hwctx
  */
 typedef struct AVQSVDeviceContext {
+    mfxLoader loader;
     mfxSession session;
 } AVQSVDeviceContext;
 

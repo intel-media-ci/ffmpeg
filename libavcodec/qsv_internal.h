@@ -87,6 +87,7 @@ typedef struct QSVFrame {
 
 typedef struct QSVSession {
     mfxSession session;
+    mfxLoader loader;
 #ifdef AVCODEC_QSV_LINUX_SESSION_HANDLE
     AVBufferRef *va_device_ref;
     AVHWDeviceContext *va_device_ctx;

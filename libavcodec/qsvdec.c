@@ -161,7 +161,9 @@ static int qsv_init_session(AVCodecContext *avctx, QSVContext *q, mfxSession ses
     } else if (hw_frames_ref) {
         if (q->internal_qs.session) {
             MFXClose(q->internal_qs.session);
+            MFXUnload(q->internal_qs.loader);
             q->internal_qs.session = NULL;
+            q->internal_qs.loader = NULL;
         }
         av_buffer_unref(&q->frames_ctx.hw_frames_ctx);
 
@@ -186,7 +188,9 @@ static int qsv_init_session(AVCodecContext *avctx, QSVContext *q, mfxSession ses
     } else if (hw_device_ref) {
         if (q->internal_qs.session) {
             MFXClose(q->internal_qs.session);
+            MFXUnload(q->internal_qs.loader);
             q->internal_qs.session = NULL;
+            q->internal_qs.loader = NULL;
         }
 
         ret = ff_qsv_init_session_device(avctx, &q->internal_qs.session,

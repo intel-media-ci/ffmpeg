@@ -35,7 +35,6 @@
 #include "h2645_parse.h"
 #include "internal.h"
 #include "qsv.h"
-#include "qsv_internal.h"
 #include "qsvenc.h"
 
 enum LoadPlugin {
