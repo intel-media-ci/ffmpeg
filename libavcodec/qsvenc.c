@@ -295,6 +295,8 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
     av_log(avctx, AV_LOG_VERBOSE, "FrameRateExtD: %"PRIu32"; FrameRateExtN: %"PRIu32" \n",
            info->FrameInfo.FrameRateExtD, info->FrameInfo.FrameRateExtN);
 
+    av_log(avctx, AV_LOG_VERBOSE, "DisableDeblockingIdc: %"PRIu32" \n", co2->DisableDeblockingIdc);
+
 }
 
 static int select_rc_mode(AVCodecContext *avctx, QSVEncContext *q)
@@ -709,6 +711,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #if QSV_HAVE_MAX_SLICE_SIZE
             if (q->max_slice_size >= 0)
                 q->extco2.MaxSliceSize = q->max_slice_size;
+#endif
+#if QSV_HAVE_DISABLEDEBLOCKIDC
+            if(q->dblk_idc >= 0)
+                q->extco2.DisableDeblockingIdc = q->dblk_idc;
 #endif
 
 #if QSV_HAVE_TRELLIS
