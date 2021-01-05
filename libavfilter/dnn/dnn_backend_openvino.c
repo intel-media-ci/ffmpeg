@@ -217,6 +217,78 @@ static void infer_completion_callback(void *args)
     task->done = 1;
 }
 
+static DNNReturnType init_model_ov(OVModel *ov_model)
+{
+    OVContext *ctx = &ov_model->ctx;
+    IEStatusCode status;
+    ie_available_devices_t a_dev;
+    ie_config_t config = {NULL, NULL, NULL};
+    char *all_dev_names = NULL;
+
+    status = ie_core_load_network(ov_model->core, ov_model->network, ctx->options.device_type, &config, &ov_model->exe_network);
+    if (status != OK) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to load OpenVINO model network\n");
+        status = ie_core_get_available_devices(ov_model->core, &a_dev);
+        if (status != OK) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to get available devices\n");
+            goto err;
+        }
+        for (int i = 0; i < a_dev.num_devices; i++) {
+            APPEND_STRING(all_dev_names, a_dev.devices[i])
+        }
+        av_log(ctx, AV_LOG_ERROR,"device %s may not be supported, all available devices are: \"%s\"\n",
+               ctx->options.device_type, all_dev_names);
+        goto err;
+    }
+
+    // create infer_request for sync execution
+    status = ie_exec_network_create_infer_request(ov_model->exe_network, &ov_model->infer_request);
+    if (status != OK)
+        goto err;
+
+    // create infer_requests for async execution
+    if (ctx->options.nireq <= 0) {
+        // the default value is a rough estimation
+        ctx->options.nireq = av_cpu_count() / 2 + 1;
+    }
+
+    ov_model->request_queue = ff_safe_queue_create();
+    if (!ov_model->request_queue) {
+        goto err;
+    }
+
+    for (int i = 0; i < ctx->options.nireq; i++) {
+        ie_infer_request_t *request;
+        RequestItem *item = av_mallocz(sizeof(*item));
+        if (!item) {
+            goto err;
+        }
+        status = ie_exec_network_create_infer_request(ov_model->exe_network, &request);
+        if (status != OK) {
+            av_freep(&item);
+            goto err;
+        }
+        item->infer_request = request;
+        item->callback.completeCallBackFunc = infer_completion_callback;
+        item->callback.args = item;
+        if (ff_safe_queue_push_back(ov_model->request_queue, item) < 0) {
+            av_freep(&item);
+            goto err;
+        }
+    }
+
+    ov_model->task_queue = ff_queue_create();
+    if (!ov_model->task_queue) {
+        goto err;
+    }
+
+    return DNN_SUCCESS;
+
+err:
+    ff_dnn_free_model_ov(&ov_model->model);
+    return DNN_ERROR;
+}
+
 static DNNReturnType execute_model_ov(TaskItem *task, RequestItem *request)
 {
     IEStatusCode status;
@@ -325,6 +397,13 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
     in_frame->width = input_width;
     in_frame->height = input_height;
 
+    if (!ov_model->exe_network) {
+        if (init_model_ov(ov_model) != DNN_SUCCESS) {
+            av_log(ctx, AV_LOG_ERROR, "Failed init OpenVINO exectuable network or inference request\n");
+            return DNN_ERROR;
+        };
+    }
+
     task.done = 0;
     task.do_ioproc = 0;
     task.async = 0;
@@ -347,13 +426,10 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
 
 DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options, AVFilterContext *filter_ctx)
 {
-    char *all_dev_names = NULL;
     DNNModel *model = NULL;
     OVModel *ov_model = NULL;
     OVContext *ctx = NULL;
     IEStatusCode status;
-    ie_config_t config = {NULL, NULL, NULL};
-    ie_available_devices_t a_dev;
 
     model = av_mallocz(sizeof(DNNModel));
     if (!model){
@@ -384,63 +460,6 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, const char *options, 
     status = ie_core_read_network(ov_model->core, model_filename, NULL, &ov_model->network);
     if (status != OK)
         goto err;
-
-    status = ie_core_load_network(ov_model->core, ov_model->network, ctx->options.device_type, &config, &ov_model->exe_network);
-    if (status != OK) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to init OpenVINO model\n");
-        status = ie_core_get_available_devices(ov_model->core, &a_dev);
-        if (status != OK) {
-            av_log(ctx, AV_LOG_ERROR, "Failed to get available devices\n");
-            goto err;
-        }
-        for (int i = 0; i < a_dev.num_devices; i++) {
-            APPEND_STRING(all_dev_names, a_dev.devices[i])
-        }
-        av_log(ctx, AV_LOG_ERROR,"device %s may not be supported, all available devices are: \"%s\"\n",
-               ctx->options.device_type, all_dev_names);
-        goto err;
-    }
-
-    // create infer_request for sync execution
-    status = ie_exec_network_create_infer_request(ov_model->exe_network, &ov_model->infer_request);
-    if (status != OK)
-        goto err;
-
-    // create infer_requests for async execution
-    if (ctx->options.nireq <= 0) {
-        // the default value is a rough estimation
-        ctx->options.nireq = av_cpu_count() / 2 + 1;
-    }
-
-    ov_model->request_queue = ff_safe_queue_create();
-    if (!ov_model->request_queue) {
-        goto err;
-    }
-
-    for (int i = 0; i < ctx->options.nireq; i++) {
-        ie_infer_request_t *request;
-        RequestItem *item = av_mallocz(sizeof(*item));
-        if (!item) {
-            goto err;
-        }
-        status = ie_exec_network_create_infer_request(ov_model->exe_network, &request);
-        if (status != OK) {
-            av_freep(&item);
-            goto err;
-        }
-        item->infer_request = request;
-        item->callback.completeCallBackFunc = infer_completion_callback;
-        item->callback.args = item;
-        if (ff_safe_queue_push_back(ov_model->request_queue, item) < 0) {
-            av_freep(&item);
-            goto err;
-        }
-    }
-
-    ov_model->task_queue = ff_queue_create();
-    if (!ov_model->task_queue) {
-        goto err;
-    }
 
     model->get_input = &get_input_ov;
     model->get_output = &get_output_ov;
@@ -479,6 +498,13 @@ DNNReturnType ff_dnn_execute_model_ov(const DNNModel *model, const char *input_n
         return DNN_ERROR;
     }
 
+    if (!ov_model->exe_network) {
+        if (init_model_ov(ov_model) != DNN_SUCCESS) {
+            av_log(ctx, AV_LOG_ERROR, "Failed init OpenVINO exectuable network or inference request\n");
+            return DNN_ERROR;
+        };
+    }
+
     task.done = 0;
     task.do_ioproc = 1;
     task.async = 0;
@@ -515,6 +541,13 @@ DNNReturnType ff_dnn_execute_model_async_ov(const DNNModel *model, const char *i
     if (!task) {
         av_log(ctx, AV_LOG_ERROR, "unable to alloc memory for task item.\n");
         return DNN_ERROR;
+    }
+
+    if (!ov_model->exe_network) {
+        if (init_model_ov(ov_model) != DNN_SUCCESS) {
+            av_log(ctx, AV_LOG_ERROR, "Failed init OpenVINO exectuable network or inference request\n");
+            return DNN_ERROR;
+        };
     }
 
     task->done = 0;
