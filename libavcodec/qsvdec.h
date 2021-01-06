@@ -34,6 +34,7 @@
 
 #include "avcodec.h"
 #include "hwconfig.h"
+#include "h264_sei.h"
 #include "qsv_internal.h"
 
 typedef struct QSVContext {
@@ -70,8 +71,13 @@ typedef struct QSVContext {
 
     char *load_plugins;
 
+    mfxPayload payload;
+
     mfxExtBuffer **ext_buffers;
     int         nb_ext_buffers;
+
+    H264SEIContext sei;
+    H264ParamSets ps;
 } QSVContext;
 
 extern const AVCodecHWConfigInternal *const ff_qsv_hw_configs[];
