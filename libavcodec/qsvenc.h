@@ -53,6 +53,7 @@
 #define QSV_HAVE_VDENC  QSV_VERSION_ATLEAST(1, 15)
 
 #define QSV_HAVE_GPB    QSV_VERSION_ATLEAST(1, 18)
+#define QSV_HAVE_TRANSFORM_SKIP    QSV_VERSION_ATLEAST(1, 26)
 
 #if defined(_WIN32) || defined(__CYGWIN__)
 #define QSV_HAVE_AVBR   QSV_VERSION_ATLEAST(1, 3)
@@ -99,7 +100,8 @@
 { "b_strategy",     "Strategy to choose between I/P/B-frames", OFFSET(qsv.b_strategy),    AV_OPT_TYPE_INT, { .i64 = -1 }, -1,          1, VE },                         \
 { "forced_idr",     "Forcing I frames as IDR frames",         OFFSET(qsv.forced_idr),     AV_OPT_TYPE_BOOL,{ .i64 = 0  },  0,          1, VE },                         \
 { "low_power", "enable low power mode(experimental: many limitations by mfx version, BRC modes, etc.)", OFFSET(qsv.low_power), AV_OPT_TYPE_BOOL, { .i64 = 0}, 0, 1, VE},\
-{ "dblk_idc", "value of DisableDeblockingIdc (default is 0), in range [0,2]",   OFFSET(qsv.dblk_idc),   AV_OPT_TYPE_INT,    { .i64 = 0 },   0,  2,  VE},    \
+{ "dblk_idc", "value of DisableDeblockingIdc (default is 0), in range [0,2]",   OFFSET(qsv.dblk_idc),   AV_OPT_TYPE_INT,    { .i64 = 0 },   0,  2,  VE},                \
+{ "transform_skip", "Turn this option ON to enable transformskip",   OFFSET(qsv.transform_skip),          AV_OPT_TYPE_INT,    { .i64 = -1},   -1, 1,  VE},              \
 
 extern const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[];
 
@@ -197,6 +199,7 @@ typedef struct QSVEncContext {
     int repeat_pps;
     int low_power;
     int gpb;
+    int transform_skip;
 
     int a53_cc;
 
