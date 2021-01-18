@@ -719,6 +719,7 @@ int ff_qsv_process_data(AVCodecContext *avctx, QSVContext *q,
                         AVFrame *frame, int *got_frame, AVPacket *pkt)
 {
     int ret;
+    int first_init;
     mfxVideoParam param = { 0 };
     enum AVPixelFormat pix_fmt = AV_PIX_FMT_NV12;
 
@@ -737,12 +738,20 @@ int ff_qsv_process_data(AVCodecContext *avctx, QSVContext *q,
     if (!avctx->coded_height)
         avctx->coded_height = 720;
 
+    first_init = 0;
+    if (!q->session)
+        first_init = 1;
+
     ret = qsv_decode_header(avctx, q, pkt, pix_fmt, &param);
 
     if (ret >= 0 && (q->orig_pix_fmt != ff_qsv_map_fourcc(param.mfx.FrameInfo.FourCC) ||
         avctx->coded_width  != param.mfx.FrameInfo.Width ||
-        avctx->coded_height != param.mfx.FrameInfo.Height)) {
+        avctx->coded_height != param.mfx.FrameInfo.Height ||
+        first_init == 1)) {
         AVPacket zero_pkt = {0};
+        mfxFrameAllocRequest request;
+        AVHWFramesContext *hw_frames_ctx;
+        memset(&request, 0, sizeof(request));
 
         if (q->buffered_count) {
             q->reinit_flag = 1;
@@ -756,6 +765,21 @@ int ff_qsv_process_data(AVCodecContext *avctx, QSVContext *q,
 
         avctx->coded_width  = param.mfx.FrameInfo.Width;
         avctx->coded_height = param.mfx.FrameInfo.Height;
+
+        if (first_init == 0) {
+            hw_frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
+            hw_frames_ctx->initial_pool_size = 0;
+            ret = qsv_decode_preinit(avctx, q, pix_fmt, &param);
+            if (ret < 0)
+                goto reinit_fail;
+        }
+
+        ret = MFXVideoDECODE_QueryIOSurf(q->session, &param, &request);
+        if (ret < 0)
+            return ff_qsv_print_error(avctx, ret, "Error querying IO surface");
+
+        hw_frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
+        hw_frames_ctx->initial_pool_size = request.NumFrameSuggested;
 
         ret = qsv_decode_preinit(avctx, q, pix_fmt, &param);
         if (ret < 0)
