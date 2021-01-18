@@ -178,6 +178,8 @@ static int qsv_decode_preinit(AVCodecContext *avctx, QSVContext *q, enum AVPixel
         pix_fmt,        /* system memory format obtained from bitstream parser */
         AV_PIX_FMT_NONE };
 
+    av_buffer_unref(&q->frames_ctx.mids_buf);
+    av_buffer_unref(&q->frames_ctx.hw_frames_ctx);
     ret = ff_get_format(avctx, pix_fmts);
     if (ret < 0) {
         q->orig_pix_fmt = avctx->pix_fmt = AV_PIX_FMT_NONE;
