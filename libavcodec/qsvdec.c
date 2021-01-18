@@ -41,13 +41,16 @@
 #include "libavutil/time.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/film_grain_params.h"
+#include "libavutil/stereo3d.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "internal.h"
 #include "decode.h"
 #include "hwconfig.h"
+#include "get_bits.h"
 #include "qsv.h"
+#include "h264_sei.h"
 #include "qsv_internal.h"
 
 static const AVRational mfx_tb = { 1, 90000 };
@@ -64,6 +67,11 @@ typedef struct QSVAsyncFrame {
     mfxSyncPoint *sync;
     QSVFrame     *frame;
 } QSVAsyncFrame;
+
+typedef struct QSVPayload {
+    mfxU64 ts;
+    mfxPayload payload;
+} QSVPayload;
 
 typedef struct QSVContext {
     // the session used for decoding
@@ -101,6 +109,10 @@ typedef struct QSVContext {
 
     mfxExtBuffer **ext_buffers;
     int         nb_ext_buffers;
+
+    mfxPayload payload;
+    QSVPayload *payload_buffer;
+    int        payload_buffer_size;
 } QSVContext;
 
 static const AVCodecHWConfigInternal *const qsv_hw_configs[] = {
@@ -600,6 +612,166 @@ static int qsv_export_film_grain(AVCodecContext *avctx, mfxExtAV1FilmGrainParam 
 }
 #endif
 
+static int h264_add_sei_data(AVCodecContext *avctx, mfxPayload *payload,
+                             AVFrame *frame)
+{
+    GetBitContext gb_payload;
+    H264SEIContext sei;
+    int ret, sei_tail;
+
+    // Only fpa information will be added to avframe for now.
+    if (payload->Type != SEI_TYPE_FRAME_PACKING_ARRANGEMENT)
+        return 0;
+
+    // remove emulation prevention bytes
+    sei_tail = 0;
+    for (int i = 0; i < payload->NumBit / 8; i++) {
+        if (payload->Data[i] == 3)
+            i++;
+        payload->Data[sei_tail++] = payload->Data[i];
+    }
+    payload->NumBit = sei_tail * 8;
+
+    ret = init_get_bits8(&gb_payload, payload->Data, sei_tail);
+    if (ret < 0)
+        return ret;
+
+    ret = ff_h264_sei_decode(&sei, &gb_payload, NULL, avctx);
+    if (ret < 0)
+        return ret;
+
+    if (sei.frame_packing.present &&
+        sei.frame_packing.arrangement_type <= 6 &&
+        sei.frame_packing.content_interpretation_type > 0 &&
+        sei.frame_packing.content_interpretation_type < 3) {
+        H264SEIFramePacking *fp = &sei.frame_packing;
+        AVStereo3D *stereo = av_stereo3d_create_side_data(frame);
+        if (!stereo)
+            return AVERROR(ENOMEM);
+
+        switch (fp->arrangement_type) {
+        case H264_SEI_FPA_TYPE_CHECKERBOARD:
+            stereo->type = AV_STEREO3D_CHECKERBOARD;
+            break;
+        case H264_SEI_FPA_TYPE_INTERLEAVE_COLUMN:
+            stereo->type = AV_STEREO3D_COLUMNS;
+            break;
+        case H264_SEI_FPA_TYPE_INTERLEAVE_ROW:
+            stereo->type = AV_STEREO3D_LINES;
+            break;
+        case H264_SEI_FPA_TYPE_SIDE_BY_SIDE:
+            if (fp->quincunx_sampling_flag)
+                stereo->type = AV_STEREO3D_SIDEBYSIDE_QUINCUNX;
+            else
+                stereo->type = AV_STEREO3D_SIDEBYSIDE;
+            break;
+        case H264_SEI_FPA_TYPE_TOP_BOTTOM:
+            stereo->type = AV_STEREO3D_TOPBOTTOM;
+            break;
+        case H264_SEI_FPA_TYPE_INTERLEAVE_TEMPORAL:
+            stereo->type = AV_STEREO3D_FRAMESEQUENCE;
+            break;
+        case H264_SEI_FPA_TYPE_2D:
+            stereo->type = AV_STEREO3D_2D;
+            break;
+        }
+        if (fp->content_interpretation_type == 2)
+            stereo->flags = AV_STEREO3D_FLAG_INVERT;
+
+        if (fp->arrangement_type == H264_SEI_FPA_TYPE_INTERLEAVE_TEMPORAL) {
+            if (fp->current_frame_is_frame0_flag)
+                stereo->view = AV_STEREO3D_VIEW_LEFT;
+            else
+                stereo->view = AV_STEREO3D_VIEW_RIGHT;
+        }
+    }
+    return ret;
+}
+
+static int add_side_data_to_frame(AVCodecContext *avctx, QSVContext *q, AVFrame *frame)
+{
+    int index = 0, ret = 0;
+    uint64_t mfx_pts;
+
+    mfx_pts = PTS_TO_MFX_PTS(frame->pts, avctx->pkt_timebase);
+    for (index = 0; index < q->payload_buffer_size; index++) {
+        if (q->payload_buffer[index].ts != mfx_pts)
+            continue;
+
+        switch (avctx->codec_id) {
+        case AV_CODEC_ID_H264:
+            ret = h264_add_sei_data(avctx, &q->payload_buffer[index].payload,
+                                    frame);
+            break;
+        default:
+            break;
+        }
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Parse side data failed\n");
+            break;
+        }
+
+        av_freep(&q->payload_buffer[index].payload.Data);
+        memset(&q->payload_buffer[index], 0, sizeof(QSVPayload));
+    }
+    return ret;
+}
+
+static int get_payload(AVCodecContext *avctx, QSVContext *q)
+{
+    mfxU64 ts;
+    mfxStatus sts;
+    int ret = 0, index = 0;
+
+    sts = MFX_ERR_NONE;
+    while (sts == MFX_ERR_NONE) {
+        // Get payload data
+        sts = MFXVideoDECODE_GetPayload(q->session, &ts, &q->payload);
+        if (sts == MFX_ERR_NOT_ENOUGH_BUFFER) {
+            av_log(avctx, AV_LOG_WARNING, "Space for SEI is not enough."
+                                          "Realloc buffer\n");
+            if (q->payload.BufSize >= INT16_MAX / 2)
+                return AVERROR(ENOMEM);
+            q->payload.BufSize = q->payload.BufSize * 2;
+            av_freep(&q->payload.Data);
+            q->payload.Data = av_mallocz(q->payload.BufSize);
+            if (!q->payload.Data)
+                return AVERROR(ENOMEM);
+            continue;
+        } else if (sts != MFX_ERR_NONE || !q->payload.NumBit) {
+            break;
+        }
+        // Find empty buffer
+        for (index = 0; index < q->payload_buffer_size; index++) {
+            if (!q->payload_buffer[index].payload.Data)
+                break;
+        }
+        // Realloc buffer if buffer is full
+        if (index == q->payload_buffer_size) {
+            if (q->payload_buffer_size >= INT_MAX / 2)
+                return AVERROR(ENOMEM);
+            ret = av_reallocp(&q->payload_buffer,
+                              q->payload_buffer_size * 2 * sizeof(QSVPayload));
+            if (ret < 0)
+                return ret;
+            memset(q->payload_buffer + q->payload_buffer_size,
+                   0, q->payload_buffer_size * sizeof(QSVPayload));
+            q->payload_buffer_size = q->payload_buffer_size * 2;
+        }
+        // Copy payload to buffer
+        q->payload_buffer[index].ts = ts;
+        q->payload_buffer[index].payload = q->payload;
+        q->payload_buffer[index].payload.BufSize = q->payload.NumBit / 8 + 1;
+        q->payload_buffer[index].payload.Data =
+            av_malloc(q->payload_buffer[index].payload.BufSize);
+        if (!q->payload_buffer[index].payload.Data)
+            return AVERROR(ENOMEM);
+        memcpy(q->payload_buffer[index].payload.Data, q->payload.Data,
+               q->payload_buffer[index].payload.BufSize);
+    }
+    return ret;
+}
+
 static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
                       AVFrame *frame, int *got_frame,
                       const AVPacket *avpkt)
@@ -664,6 +836,13 @@ static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
             ff_qsv_print_warning(avctx, ret, "A decode call did not consume any data");
     } else {
         q->zero_consume_run = 0;
+    }
+
+    ret = get_payload(avctx, q);
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Error getting QSV payload\n");
+        av_freep(&sync);
+        return ret;
     }
 
     if (*sync) {
@@ -738,6 +917,14 @@ static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
         if (avctx->pix_fmt == AV_PIX_FMT_QSV)
             ((mfxFrameSurface1*)frame->data[3])->Info = outsurf->Info;
 
+        ret = add_side_data_to_frame(avctx, q, frame);
+        if (ret == AVERROR_INVALIDDATA) {
+            av_log(avctx, AV_LOG_WARNING, "Side data is invalid\n");
+        } else if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Error adding side data to frame\n");
+            return ret;
+        }
+
         *got_frame = 1;
     }
 
@@ -765,11 +952,16 @@ static void qsv_decode_close_qsvcontext(QSVContext *q)
         cur = q->work_frames;
     }
 
+    for (int i = 0; i < q->payload_buffer_size; i++)
+        av_freep(&q->payload_buffer[i].payload.Data);
+    av_freep(&q->payload_buffer);
+
     ff_qsv_close_internal_session(&q->internal_qs);
 
     av_buffer_unref(&q->frames_ctx.hw_frames_ctx);
     av_buffer_unref(&q->frames_ctx.mids_buf);
     av_buffer_pool_uninit(&q->pool);
+    av_freep(&q->payload.Data);
 }
 
 static int qsv_process_data(AVCodecContext *avctx, QSVContext *q,
@@ -927,6 +1119,20 @@ static av_cold int qsv_decode_init(AVCodecContext *avctx)
         ret = AVERROR(ENOMEM);
         goto fail;
     }
+
+    s->qsv.payload_buffer = av_mallocz(sizeof(QSVPayload));
+    if (!s->qsv.payload_buffer) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    s->qsv.payload_buffer_size = 1;
+
+    s->qsv.payload.Data = av_mallocz(QSV_PAYLOAD_SIZE);
+    if (!s->qsv.payload.Data) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    s->qsv.payload.BufSize = QSV_PAYLOAD_SIZE;
 
     if (!avctx->pkt_timebase.num)
         av_log(avctx, AV_LOG_WARNING, "Invalid pkt_timebase, passing timestamps as-is.\n");
