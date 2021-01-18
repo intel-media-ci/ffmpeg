@@ -217,8 +217,10 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
 
 #if QSV_HAVE_CO2
     av_log(avctx, AV_LOG_VERBOSE,
-           "RecoveryPointSEI: %s IntRefType: %"PRIu16"; IntRefCycleSize: %"PRIu16"; IntRefQPDelta: %"PRId16"\n",
-           print_threestate(co->RecoveryPointSEI), co2->IntRefType, co2->IntRefCycleSize, co2->IntRefQPDelta);
+           "RecoveryPointSEI: %s IntRefType: %"PRIu16"; IntRefCycleSize: %"PRIu16
+           "; IntRefQPDelta: %"PRId16"; IntRefCycleDist: %"PRId16"\n",
+           print_threestate(co->RecoveryPointSEI), co2->IntRefType, co2->IntRefCycleSize,
+           co2->IntRefQPDelta, co3->IntRefCycleDist);
 
     av_log(avctx, AV_LOG_VERBOSE, "MaxFrameSize: %d; ", co2->MaxFrameSize);
 #if QSV_HAVE_MAX_SLICE_SIZE
@@ -813,6 +815,11 @@ FF_ENABLE_DEPRECATION_WARNINGS
             q->extco3.PRefType == MFX_P_REF_PYRAMID) &&
             avctx->max_b_frames != 0) {
             av_log(avctx, AV_LOG_WARNING, "Please set max_b_frames(-bf) to 0 to enable P-pyramid\n");
+        }
+
+        if (avctx->codec_id == AV_CODEC_ID_H264) {
+            if (q->int_ref_cycle_dist)
+                q->extco3.IntRefCycleDist = q->int_ref_cycle_dist;
         }
 
         if (avctx->codec_id == AV_CODEC_ID_HEVC) {
