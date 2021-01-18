@@ -305,6 +305,8 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
 
     av_log(avctx, AV_LOG_VERBOSE, "DisableDeblockingIdc: %"PRIu32" \n", co2->DisableDeblockingIdc);
 
+    av_log(avctx, AV_LOG_VERBOSE, "TransformSkip: %s \n", print_threestate(co3->TransformSkip));
+
 }
 
 static int select_rc_mode(AVCodecContext *avctx, QSVEncContext *q)
@@ -813,10 +815,14 @@ FF_ENABLE_DEPRECATION_WARNINGS
             av_log(avctx, AV_LOG_WARNING, "Please set max_b_frames(-bf) to 0 to enable P-pyramid\n");
         }
 
+        if (avctx->codec_id == AV_CODEC_ID_HEVC) {
+#if QSV_HAVE_TRANSFORM_SKIP
+            q->extco3.TransformSkip  = q->transform_skip ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
+#endif
 #if QSV_HAVE_GPB
-        if (avctx->codec_id == AV_CODEC_ID_HEVC)
             q->extco3.GPB              = q->gpb ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
 #endif
+        }
         q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco3;
 #endif
     }
