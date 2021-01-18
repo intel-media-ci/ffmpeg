@@ -233,6 +233,12 @@ int ff_qsv_map_pixfmt(enum AVPixelFormat format, uint32_t *fourcc)
         return AV_PIX_FMT_Y210;
 #endif
 #endif
+    case AV_PIX_FMT_BGRA:
+        *fourcc = MFX_FOURCC_RGB4;
+        return AV_PIX_FMT_BGRA;
+    case AV_PIX_FMT_X2RGB10LE:
+        *fourcc = MFX_FOURCC_A2RGB10;
+        return AV_PIX_FMT_X2RGB10LE;
     default:
         return AVERROR(ENOSYS);
     }

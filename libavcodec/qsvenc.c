@@ -1421,8 +1421,15 @@ static int submit_frame(QSVEncContext *q, const AVFrame *frame,
             qf->surface.Info.PicStruct |= MFX_PICSTRUCT_FRAME_TRIPLING;
 
         qf->surface.Data.PitchLow  = qf->frame->linesize[0];
-        qf->surface.Data.Y         = qf->frame->data[0];
-        qf->surface.Data.UV        = qf->frame->data[1];
+        if (frame->format == AV_PIX_FMT_X2RGB10LE ||
+            frame->format == AV_PIX_FMT_BGRA) {
+            qf->surface.Data.B         = qf->frame->data[0];
+            qf->surface.Data.G         = qf->frame->data[0] + 1;
+            qf->surface.Data.R         = qf->frame->data[0] + 2;
+            qf->surface.Data.A         = qf->frame->data[0] + 3;
+        } else {
+            qf->surface.Data.Y         = qf->frame->data[0];
+            qf->surface.Data.UV        = qf->frame->data[1];
     }
 
     qf->surface.Data.TimeStamp = av_rescale_q(frame->pts, q->avctx->time_base, (AVRational){1, 90000});
