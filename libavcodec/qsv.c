@@ -196,6 +196,12 @@ int ff_qsv_print_warning(void *log_ctx, mfxStatus err,
 enum AVPixelFormat ff_qsv_map_fourcc(uint32_t fourcc)
 {
     switch (fourcc) {
+#if QSV_VERSION_ATLEAST(1, 9)
+    case MFX_FOURCC_A2RGB10: return AV_PIX_FMT_X2RGB10LE;
+#endif
+#if QSV_VERSION_ATLEAST(1, 17)
+    case MFX_FOURCC_RGB4: return AV_PIX_FMT_BGRA;
+#endif
     case MFX_FOURCC_NV12: return AV_PIX_FMT_NV12;
     case MFX_FOURCC_P010: return AV_PIX_FMT_P010;
     case MFX_FOURCC_P8:   return AV_PIX_FMT_PAL8;
@@ -222,6 +228,16 @@ int ff_qsv_map_pixfmt(enum AVPixelFormat format, uint32_t *fourcc)
         *fourcc = MFX_FOURCC_P010;
         return AV_PIX_FMT_P010;
 #if CONFIG_VAAPI
+#if QSV_VERSION_ATLEAST(1, 9)
+    case AV_PIX_FMT_BGRA:
+        *fourcc = MFX_FOURCC_RGB4;
+        return AV_PIX_FMT_BGRA;
+#endif
+#if QSV_VERSION_ATLEAST(1, 17)
+    case AV_PIX_FMT_X2RGB10LE:
+        *fourcc = MFX_FOURCC_A2RGB10;
+        return AV_PIX_FMT_X2RGB10LE;
+#endif
     case AV_PIX_FMT_YUV422P:
     case AV_PIX_FMT_YUYV422:
         *fourcc = MFX_FOURCC_YUY2;
