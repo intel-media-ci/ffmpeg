@@ -47,14 +47,6 @@ enum {
     QSVDEINT_MORE_INPUT,
 };
 
-typedef struct QSVFrame {
-    AVFrame *frame;
-    mfxFrameSurface1 surface;
-    int used;
-
-    struct QSVFrame *next;
-} QSVFrame;
-
 typedef struct QSVDeintContext {
     const AVClass *class;
 
