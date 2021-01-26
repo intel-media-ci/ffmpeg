@@ -52,10 +52,20 @@ static const AVOption dnn_detect_options[] = {
 
 AVFILTER_DEFINE_CLASS(dnn_detect);
 
+static int dnn_detect_post_proc(AVFrame *frame, DNNData *model, AVFilterContext *filter_ctx)
+{
+    // read from model output and fill the sidedata in AVFrame
+    return 0;
+}
+
 static av_cold int dnn_detect_init(AVFilterContext *context)
 {
     DnnDetectContext *ctx = context->priv;
-    return ff_dnn_init(&ctx->dnnctx, context);
+    int ret = ff_dnn_init(&ctx->dnnctx, context);
+    if (ret < 0)
+        return ret;
+    ff_dnn_set_proc(&ctx->dnnctx, NULL, dnn_detect_post_proc);
+    return 0;
 }
 
 static int dnn_detect_query_formats(AVFilterContext *context)
