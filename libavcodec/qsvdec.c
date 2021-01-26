@@ -643,17 +643,31 @@ static int qsv_process_data(AVCodecContext *avctx, QSVContext *q,
     }
 
     if (q->reinit_flag || !q->session) {
+        mfxFrameAllocRequest request;
+        AVHWFramesContext *hw_frames_ctx;
+        memset(&request, 0, sizeof(request));
+
         q->reinit_flag = 0;
         ret = qsv_decode_header(avctx, q, pkt, pix_fmt, &param);
         if (ret < 0) {
             av_log(avctx, AV_LOG_ERROR, "Error decoding header\n");
             goto reinit_fail;
         }
+        param.IOPattern = q->iopattern;
 
         q->orig_pix_fmt = avctx->pix_fmt = pix_fmt = ff_qsv_map_fourcc(param.mfx.FrameInfo.FourCC);
 
         avctx->coded_width  = param.mfx.FrameInfo.Width;
         avctx->coded_height = param.mfx.FrameInfo.Height;
+
+        ret = MFXVideoDECODE_QueryIOSurf(q->session, &param, &request);
+        if (ret < 0)
+            return ff_qsv_print_error(avctx, ret, "Error querying IO surface");
+
+        if (avctx->hw_frames_ctx) {
+            hw_frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
+            hw_frames_ctx->initial_pool_size = request.NumFrameSuggested;
+        }
 
         ret = qsv_decode_preinit(avctx, q, pix_fmt, &param);
         if (ret < 0)

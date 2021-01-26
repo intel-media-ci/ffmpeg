@@ -74,12 +74,19 @@ int qsv_init(AVCodecContext *s)
     InputStream *ist = s->opaque;
     AVHWFramesContext *frames_ctx;
     AVQSVFramesContext *frames_hwctx;
+    int suggest_pool_size;
     int ret;
 
     if (!hw_device_ctx) {
         ret = qsv_device_init(ist);
         if (ret < 0)
             return ret;
+    }
+
+    suggest_pool_size = 0;
+    if (ist->hw_frames_ctx) {
+        frames_ctx = (AVHWFramesContext *)ist->hw_frames_ctx->data;
+        suggest_pool_size = frames_ctx->initial_pool_size;
     }
 
     av_buffer_unref(&ist->hw_frames_ctx);
@@ -94,7 +101,7 @@ int qsv_init(AVCodecContext *s)
     frames_ctx->height            = FFALIGN(s->coded_height, 32);
     frames_ctx->format            = AV_PIX_FMT_QSV;
     frames_ctx->sw_format         = s->sw_pix_fmt;
-    frames_ctx->initial_pool_size = 64 + s->extra_hw_frames;
+    frames_ctx->initial_pool_size = suggest_pool_size + 16 + s->extra_hw_frames;
     frames_hwctx->frame_type      = MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET;
 
     ret = av_hwframe_ctx_init(ist->hw_frames_ctx);
