@@ -38,6 +38,7 @@
 #include "libavutil/timecode.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/video_enc_params.h"
+#include "libavutil/boundingbox.h"
 
 #include "avfilter.h"
 #include "internal.h"
@@ -150,6 +151,39 @@ static void dump_roi(AVFilterContext *ctx, const AVFrameSideData *sd)
         roi = (const AVRegionOfInterest *)(sd->data + roi_size * i);
         av_log(ctx, AV_LOG_INFO, "index: %d, region: (%d, %d)/(%d, %d), qp offset: %d/%d.\n",
                i, roi->left, roi->top, roi->right, roi->bottom, roi->qoffset.num, roi->qoffset.den);
+    }
+}
+
+static void dump_boundingbox(AVFilterContext *ctx, const AVFrameSideData *sd)
+{
+    int nb_bbox;
+    const AVBoundingBoxHeader *header;
+    const AVBoundingBox *bbox;
+    uint32_t array_size;
+
+    header = (const AVBoundingBoxHeader *)sd->data;
+    nb_bbox = header->nb_bbox;
+    array_size = sd->size - sizeof(*header);
+    if (!nb_bbox || array_size % nb_bbox != 0 || array_size / nb_bbox != sizeof(*bbox)) {
+        av_log(ctx, AV_LOG_ERROR, "Invalid AVBoundingBoxHeader.nb_bbox.\n");
+        return;
+    }
+
+    bbox = header->bboxes;
+
+    av_log(ctx, AV_LOG_INFO, "bounding boxes:\n");
+    av_log(ctx, AV_LOG_INFO, "source: %s\n", header->source);
+    for (int i = 0; i < nb_bbox; i++) {
+        av_log(ctx, AV_LOG_INFO, "index: %d,\tregion: (%d, %d) -> (%d, %d), label: %s, confidence: %d/%d.\n",
+                                 i, bbox->left, bbox->top, bbox->right, bbox->bottom,
+                                 bbox->detect_label, bbox->detect_confidence.num, bbox->detect_confidence.den);
+        if (bbox->classify_count > 0) {
+            for (int j = 0; j < bbox->classify_count; j++) {
+                av_log(ctx, AV_LOG_INFO, "\t\tclassify:  label: %s, confidence: %d/%d.\n",
+                       bbox->classify_labels[j], bbox->classify_confidences[j].num, bbox->classify_confidences[j].den);
+            }
+        }
+        bbox++;
     }
 }
 
@@ -493,6 +527,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             break;
         case AV_FRAME_DATA_REGIONS_OF_INTEREST:
             dump_roi(ctx, sd);
+            break;
+        case AV_FRAME_DATA_BOUNDING_BOXES:
+            dump_boundingbox(ctx, sd);
             break;
         case AV_FRAME_DATA_MASTERING_DISPLAY_METADATA:
             dump_mastering_display(ctx, sd);
