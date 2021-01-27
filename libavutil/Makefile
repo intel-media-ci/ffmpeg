@@ -23,6 +23,7 @@ HEADERS = adler32.h                                                     \
           des.h                                                         \
           dict.h                                                        \
           display.h                                                     \
+          dnn_bbox.h                                                    \
           dovi_meta.h                                                   \
           downmix_info.h                                                \
           encryption_info.h                                             \

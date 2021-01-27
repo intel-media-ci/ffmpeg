@@ -38,6 +38,7 @@
 #include "libavutil/timecode.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/video_enc_params.h"
+#include "libavutil/dnn_bbox.h"
 
 #include "avfilter.h"
 #include "internal.h"
@@ -150,6 +151,35 @@ static void dump_roi(AVFilterContext *ctx, const AVFrameSideData *sd)
         roi = (const AVRegionOfInterest *)(sd->data + roi_size * i);
         av_log(ctx, AV_LOG_INFO, "index: %d, region: (%d, %d)/(%d, %d), qp offset: %d/%d.\n",
                i, roi->left, roi->top, roi->right, roi->bottom, roi->qoffset.num, roi->qoffset.den);
+    }
+}
+
+static void dump_dnnbbox(AVFilterContext *ctx, const AVFrameSideData *sd)
+{
+    int nb_bbox;
+    const AVDnnBoundingBox *bbox;
+    uint32_t bbox_size;
+
+    bbox = (const AVDnnBoundingBox *)sd->data;
+    bbox_size = bbox->self_size;
+    if (!bbox_size || sd->size % bbox_size != 0) {
+        av_log(ctx, AV_LOG_ERROR, "Invalid AVDnnBoundingBox.self_size.\n");
+        return;
+    }
+    nb_bbox = sd->size / bbox_size;
+
+    av_log(ctx, AV_LOG_INFO, "Dnn bounding box information: ");
+    for (int i = 0; i < nb_bbox; i++) {
+        bbox = (const AVDnnBoundingBox *)(sd->data + bbox_size * i);
+        av_log(ctx, AV_LOG_INFO, "index: %d, region: (%d/%d, %d/%d) -> (%d/%d, %d/%d), label: %d, conf: %d/%d.\n",
+               i, bbox->left, bbox->width, bbox->top, bbox->height, bbox->right, bbox->width, bbox->bottom, bbox->height,
+               bbox->detect_label, bbox->confidence.num, bbox->confidence.den);
+        if (bbox->classify_count > 0) {
+            for (int j = 0; j < bbox->classify_count; j++) {
+                av_log(ctx, AV_LOG_INFO, "\t\tclassify:  label: %d, conf: %d/%d.\n",
+                       bbox->classify_labels[j], bbox->classify_confidences[j].num, bbox->classify_confidences[j].den);
+            }
+        }
     }
 }
 
@@ -493,6 +523,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             break;
         case AV_FRAME_DATA_REGIONS_OF_INTEREST:
             dump_roi(ctx, sd);
+            break;
+        case AV_FRAME_DATA_DNN_BBOXES:
+            dump_dnnbbox(ctx, sd);
             break;
         case AV_FRAME_DATA_MASTERING_DISPLAY_METADATA:
             dump_mastering_display(ctx, sd);
