@@ -876,6 +876,50 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
     return 0;
 }
 
+static int qsv_extend_data_for_realigned(AVFrame *dst, const AVFrame *src)
+{
+    int padx, pady, width, height;
+    int plane, offset, step, stride;
+    int i, r, x;
+    uint8_t *pData;
+
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(dst->format);
+    if (!desc)
+        return AVERROR(EINVAL);
+
+    for (i = 0; i < desc->nb_components; i++) {
+        step   = desc->comp[i].step;
+        plane  = desc->comp[i].plane;
+        offset = desc->comp[i].offset;
+        pData  = dst->data[plane];
+        stride = dst->linesize[plane];
+        if (i == 0) {
+            height = src->height;
+            width  = src->width;
+            pady   = dst->height - height;
+        }else {
+            height = src->height >> desc->log2_chroma_h;
+            width  = src->width >> desc->log2_chroma_w;
+            pady   = (dst->height >> desc->log2_chroma_h) - height;
+        }
+        padx = stride / step - width;
+        /* extend the right edge if width was realigned */
+        for (r = 0; r < height; r++)
+            for (x = 0; x < padx; x++) {
+                pData[offset + (width + x) * step + r * stride] = pData[offset + (width - 1) * step + r * stride];
+                if (desc->comp[i].depth > 8)
+                    pData[offset + 1 + (width + x) * step + r * stride] = pData[offset + 1 + (width - 1) * step + r * stride];
+            }
+        /* extend the bottom if height was realigned */
+        for (r = 0; r < pady; r++)
+	     memcpy(pData + (height + r) * stride,
+		    pData + (height - 1 + r) * stride,
+	            stride * sizeof(uint8_t));
+    }
+    return 0;
+}
+
+
 static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
                                 const AVFrame *src)
 {
@@ -931,6 +975,12 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
             av_frame_unref(&tmp_frame);
             return ret;
         }
+
+        ret = qsv_extend_data_for_realigned(&tmp_frame, src);
+        if (ret < 0) {
+            av_frame_unref(&tmp_frame);
+            return ret;
+	}
     }
 
     src_frame = realigned ? &tmp_frame : src;
