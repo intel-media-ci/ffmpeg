@@ -616,6 +616,13 @@ int ff_qsv_process_data(AVCodecContext *avctx, QSVContext *q,
     }
 
     if (!q->initialized) {
+        
+        /*  skip non-key frame when decoder is reinitialized. 
+        Adding before will skip all the non-key frames so add 
+        it here */
+        if (ret < 0)
+            return ret;
+
         ret = qsv_decode_init_context(avctx, q, &param);
         if (ret < 0)
             goto reinit_fail;
