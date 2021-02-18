@@ -11,6 +11,7 @@ HEADERS = adler32.h                                                     \
           avutil.h                                                      \
           base64.h                                                      \
           blowfish.h                                                    \
+          boundingbox.h                                                 \
           bprint.h                                                      \
           bswap.h                                                       \
           buffer.h                                                      \
