@@ -501,7 +501,8 @@ static int ism_flush(AVFormatContext *s, int final)
 
     for (i = 0; i < s->nb_streams; i++) {
         OutputStream *os = &c->streams[i];
-        char filename[1024], target_filename[1024], header_filename[1024], curr_dirname[1024];
+        char filename[sizeof(os->dirname) + 5], curr_dirname[1024];
+        char *target_filename, *header_filename;
         int64_t size;
         int64_t start_ts, duration, moof_size;
         if (!os->packets_written)
@@ -542,14 +543,24 @@ static int ism_flush(AVFormatContext *s, int final)
                 return ret;
         }
 
-        snprintf(header_filename, sizeof(header_filename), "%s/FragmentInfo(%s=%"PRIu64")", os->dirname, os->stream_type_tag, start_ts);
-        snprintf(target_filename, sizeof(target_filename), "%s/Fragments(%s=%"PRIu64")", os->dirname, os->stream_type_tag, start_ts);
+        header_filename = av_asprintf("%s/FragmentInfo(%s=%"PRIu64")", os->dirname, os->stream_type_tag, start_ts);
+        target_filename = av_asprintf("%s/Fragments(%s=%"PRIu64")", os->dirname, os->stream_type_tag, start_ts);
+        if (!header_filename || !target_filename) {
+            av_freep(&target_filename);
+            av_freep(&header_filename);
+            return AVERROR(ENOMEM);
+        }
         copy_moof(s, filename, header_filename, moof_size);
         ret = ff_rename(filename, target_filename, s);
-        if (ret < 0)
+        if (ret < 0) {
+            av_freep(&target_filename);
+            av_freep(&header_filename);
             break;
+        }
         add_fragment(os, target_filename, header_filename, start_ts, duration,
                      os->cur_start_pos, size);
+        av_freep(&target_filename);
+        av_freep(&header_filename);
     }
 
     if (c->window_size || (final && c->remove_at_exit)) {
