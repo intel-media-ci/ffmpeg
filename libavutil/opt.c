@@ -1735,7 +1735,7 @@ const AVClass *av_opt_child_class_iterate(const AVClass *parent, void **iter)
 #if FF_API_CHILD_CLASS_NEXT
 FF_DISABLE_DEPRECATION_WARNINGS
     if (parent->child_class_next) {
-        *iter = parent->child_class_next(*iter);
+        *iter = (void *)parent->child_class_next(*iter);
         return *iter;
     }
 FF_ENABLE_DEPRECATION_WARNINGS
