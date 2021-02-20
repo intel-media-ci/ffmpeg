@@ -1046,7 +1046,7 @@ static int v4l2_get_device_list(AVFormatContext *ctx, AVDeviceInfoList *device_l
         return ret;
     }
     while ((entry = readdir(dir))) {
-        char device_name[256];
+        char device_name[sizeof(entry->d_name) + 5];
 
         if (!v4l2_is_v4l_dev(entry->d_name))
             continue;
