@@ -126,7 +126,7 @@ typedef struct OutputStream {
     char codec_str[100];
     int written_len;
     char filename[1024];
-    char full_path[1024];
+    char full_path[2048];
     char temp_path[1024];
     double availability_time_offset;
     AVProducerReferenceTime producer_reference_time;
@@ -604,9 +604,11 @@ static int flush_init_segment(AVFormatContext *s, OutputStream *os)
 
     os->pos = os->init_range_length = range_length;
     if (!c->single_file) {
-        char filename[1024];
-        snprintf(filename, sizeof(filename), "%s%s", c->dirname, os->initfile);
+        char *filename = av_asprintf("%s%s", c->dirname, os->initfile);
+        if (!filename)
+            return AVERROR(ENOMEM);
         dashenc_io_close(s, &os->out, filename);
+        av_freep(&filename);
     }
     return 0;
 }
@@ -1480,7 +1482,7 @@ static int dash_init(AVFormatContext *s)
         AVFormatContext *ctx;
         AVStream *st;
         AVDictionary *opts = NULL;
-        char filename[1024];
+        char *filename;
 
         os->bit_rate = s->streams[i]->codecpar->bit_rate;
         if (!os->bit_rate) {
@@ -1569,16 +1571,21 @@ static int dash_init(AVFormatContext *s)
         } else {
             ff_dash_fill_tmpl_params(os->initfile, sizeof(os->initfile), os->init_seg_name, i, 0, os->bit_rate, 0);
         }
-        snprintf(filename, sizeof(filename), "%s%s", c->dirname, os->initfile);
+        filename = av_asprintf("%s%s", c->dirname, os->initfile);
+        if (!filename)
+            return AVERROR(ENOMEM);
         set_http_options(&opts, c);
         if (!c->single_file) {
-            if ((ret = avio_open_dyn_buf(&ctx->pb)) < 0)
+            if ((ret = avio_open_dyn_buf(&ctx->pb)) < 0) {
+                av_freep(&filename);
                 return ret;
+            }
             ret = s->io_open(s, &os->out, filename, AVIO_FLAG_WRITE, &opts);
         } else {
             ctx->url = av_strdup(filename);
             ret = avio_open2(&ctx->pb, filename, AVIO_FLAG_WRITE, NULL, &opts);
         }
+        av_freep(&filename);
         av_dict_free(&opts);
         if (ret < 0)
             return ret;
