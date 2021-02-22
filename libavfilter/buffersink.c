@@ -98,6 +98,7 @@ static int return_or_keep_frame(BufferSinkContext *buf, AVFrame *out, AVFrame *i
     } else {
         av_assert1(out);
         buf->peeked_frame = NULL;
+        av_buffer_unref(&in->private_ref);
         av_frame_move_ref(out, in);
         av_frame_free(&in);
         return 0;
