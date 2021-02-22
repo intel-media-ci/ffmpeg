@@ -64,6 +64,13 @@ int ff_dnn_init(DnnContext *ctx, DNNFunctionType func_type, AVFilterContext *fil
     return 0;
 }
 
+int ff_dnn_set_proc(DnnContext *ctx, PRE_POST_PROC pre_proc, PRE_POST_PROC post_proc)
+{
+    ctx->model->pre_proc = pre_proc;
+    ctx->model->post_proc = post_proc;
+    return 0;
+}
+
 DNNReturnType ff_dnn_get_input(DnnContext *ctx, DNNData *input)
 {
     return ctx->model->get_input(ctx->model->model, input, ctx->model_inputname);

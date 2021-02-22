@@ -621,6 +621,12 @@ DNNReturnType ff_dnn_execute_model_ov(const DNNModel *model, const char *input_n
         return DNN_ERROR;
     }
 
+    if (model->func_type != DFT_PROCESS_FRAME) {
+        if (!out_frame) {
+            out_frame = in_frame;
+        }
+    }
+
     if (nb_output != 1) {
         // currently, the filter does not need multiple outputs,
         // so we just pending the support until we really need it.
@@ -672,6 +678,12 @@ DNNReturnType ff_dnn_execute_model_async_ov(const DNNModel *model, const char *i
     if (!out_frame && model->func_type == DFT_PROCESS_FRAME) {
         av_log(ctx, AV_LOG_ERROR, "out frame is NULL when async execute model.\n");
         return DNN_ERROR;
+    }
+
+    if (model->func_type != DFT_PROCESS_FRAME) {
+        if (!out_frame) {
+            out_frame = in_frame;
+        }
     }
 
     task = av_malloc(sizeof(*task));

@@ -48,6 +48,7 @@ typedef struct DnnContext {
 
 
 int ff_dnn_init(DnnContext *ctx, DNNFunctionType func_type, AVFilterContext *filter_ctx);
+int ff_dnn_set_proc(DnnContext *ctx, PRE_POST_PROC pre_proc, PRE_POST_PROC post_proc);
 DNNReturnType ff_dnn_get_input(DnnContext *ctx, DNNData *input);
 DNNReturnType ff_dnn_get_output(DnnContext *ctx, int input_width, int input_height, int *output_width, int *output_height);
 DNNReturnType ff_dnn_execute_model(DnnContext *ctx, AVFrame *in_frame, AVFrame *out_frame);
