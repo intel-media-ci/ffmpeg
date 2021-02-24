@@ -35,6 +35,7 @@
 #include "formats.h"
 #include "internal.h"
 #include "video.h"
+#include "bbox.h"
 
 static const char *const var_names[] = {
     "dar",
@@ -81,6 +82,7 @@ typedef struct DrawBoxContext {
     char *t_expr;          ///< expression for thickness
     int have_alpha;
     int replace;
+    int side_data;
 } DrawBoxContext;
 
 static const int NUM_EXPR_EVALS = 5;
@@ -217,58 +219,85 @@ static av_pure av_always_inline int pixel_belongs_to_box(DrawBoxContext *s, int 
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     DrawBoxContext *s = inlink->dst->priv;
-    int plane, x, y, xb = s->x, yb = s->y;
+    int plane, x, y, xb, yb;
     unsigned char *row[4];
+    BoundingBox *bbox = NULL;
+    BoundingBoxHeader *header;
+    int loop = 1;
 
-    if (s->have_alpha && s->replace) {
-        for (y = FFMAX(yb, 0); y < frame->height && y < (yb + s->h); y++) {
-            row[0] = frame->data[0] + y * frame->linesize[0];
-            row[3] = frame->data[3] + y * frame->linesize[3];
+    if (s->side_data && frame->private_ref) {
+        header = (BoundingBoxHeader *)frame->private_ref->data;
+        bbox = (BoundingBox *)(header + 1);
 
-            for (plane = 1; plane < 3; plane++)
-                row[plane] = frame->data[plane] +
-                     frame->linesize[plane] * (y >> s->vsub);
-
-            if (s->invert_color) {
-                for (x = FFMAX(xb, 0); x < xb + s->w && x < frame->width; x++)
-                    if (pixel_belongs_to_box(s, x, y))
-                        row[0][x] = 0xff - row[0][x];
-            } else {
-                for (x = FFMAX(xb, 0); x < xb + s->w && x < frame->width; x++) {
-                    if (pixel_belongs_to_box(s, x, y)) {
-                        row[0][x           ] = s->yuv_color[Y];
-                        row[1][x >> s->hsub] = s->yuv_color[U];
-                        row[2][x >> s->hsub] = s->yuv_color[V];
-                        row[3][x           ] = s->yuv_color[A];
-                    }
-                }
-            }
+        if (!header->bbox_size || (frame->private_ref->size - sizeof(*header)) % header->bbox_size != 0) {
+            av_log(s, AV_LOG_ERROR, "invalid size of bounding box\n");
+            return ff_filter_frame(inlink->dst->outputs[0], frame);
         }
-    } else {
-        for (y = FFMAX(yb, 0); y < frame->height && y < (yb + s->h); y++) {
-            row[0] = frame->data[0] + y * frame->linesize[0];
-
-            for (plane = 1; plane < 3; plane++)
-                row[plane] = frame->data[plane] +
-                     frame->linesize[plane] * (y >> s->vsub);
-
-            if (s->invert_color) {
-                for (x = FFMAX(xb, 0); x < xb + s->w && x < frame->width; x++)
-                    if (pixel_belongs_to_box(s, x, y))
-                        row[0][x] = 0xff - row[0][x];
-            } else {
-                for (x = FFMAX(xb, 0); x < xb + s->w && x < frame->width; x++) {
-                    double alpha = (double)s->yuv_color[A] / 255;
-
-                    if (pixel_belongs_to_box(s, x, y)) {
-                        row[0][x                 ] = (1 - alpha) * row[0][x                 ] + alpha * s->yuv_color[Y];
-                        row[1][x >> s->hsub] = (1 - alpha) * row[1][x >> s->hsub] + alpha * s->yuv_color[U];
-                        row[2][x >> s->hsub] = (1 - alpha) * row[2][x >> s->hsub] + alpha * s->yuv_color[V];
-                    }
-                }
-            }
-        }
+        loop = (frame->private_ref->size - sizeof(*header)) / header->bbox_size;
     }
+
+    do {
+        if (bbox) {
+        s->y = bbox->top;
+        s->x = bbox->left;
+        s->h = bbox->bottom - bbox->top;
+        s->w = bbox->right - bbox->left;
+        xb = s->x;
+        yb = s->y;
+        }
+
+        if (s->have_alpha && s->replace) {
+            for (y = FFMAX(yb, 0); y < frame->height && y < (yb + s->h); y++) {
+                row[0] = frame->data[0] + y * frame->linesize[0];
+                row[3] = frame->data[3] + y * frame->linesize[3];
+
+                for (plane = 1; plane < 3; plane++)
+                    row[plane] = frame->data[plane] +
+                         frame->linesize[plane] * (y >> s->vsub);
+
+                if (s->invert_color) {
+                    for (x = FFMAX(xb, 0); x < xb + s->w && x < frame->width; x++)
+                        if (pixel_belongs_to_box(s, x, y))
+                            row[0][x] = 0xff - row[0][x];
+                } else {
+                    for (x = FFMAX(xb, 0); x < xb + s->w && x < frame->width; x++) {
+                        if (pixel_belongs_to_box(s, x, y)) {
+                            row[0][x           ] = s->yuv_color[Y];
+                            row[1][x >> s->hsub] = s->yuv_color[U];
+                            row[2][x >> s->hsub] = s->yuv_color[V];
+                            row[3][x           ] = s->yuv_color[A];
+                        }
+                    }
+                }
+            }
+        } else {
+            for (y = FFMAX(yb, 0); y < frame->height && y < (yb + s->h); y++) {
+                row[0] = frame->data[0] + y * frame->linesize[0];
+
+                for (plane = 1; plane < 3; plane++)
+                    row[plane] = frame->data[plane] +
+                         frame->linesize[plane] * (y >> s->vsub);
+
+                if (s->invert_color) {
+                    for (x = FFMAX(xb, 0); x < xb + s->w && x < frame->width; x++)
+                        if (pixel_belongs_to_box(s, x, y))
+                            row[0][x] = 0xff - row[0][x];
+                } else {
+                    for (x = FFMAX(xb, 0); x < xb + s->w && x < frame->width; x++) {
+                        double alpha = (double)s->yuv_color[A] / 255;
+
+                        if (pixel_belongs_to_box(s, x, y)) {
+                            row[0][x                 ] = (1 - alpha) * row[0][x                 ] + alpha * s->yuv_color[Y];
+                            row[1][x >> s->hsub] = (1 - alpha) * row[1][x >> s->hsub] + alpha * s->yuv_color[U];
+                            row[2][x >> s->hsub] = (1 - alpha) * row[2][x >> s->hsub] + alpha * s->yuv_color[V];
+                        }
+                    }
+                }
+            }
+        }
+        loop--;
+        bbox++;
+    } while (loop);
 
     return ff_filter_frame(inlink->dst->outputs[0], frame);
 }
@@ -323,6 +352,7 @@ static const AVOption drawbox_options[] = {
     { "thickness", "set the box thickness",                        OFFSET(t_expr),    AV_OPT_TYPE_STRING, { .str="3" },       0, 0, FLAGS },
     { "t",         "set the box thickness",                        OFFSET(t_expr),    AV_OPT_TYPE_STRING, { .str="3" },       0, 0, FLAGS },
     { "replace",   "replace color & alpha",                        OFFSET(replace),   AV_OPT_TYPE_BOOL,   { .i64=0   },       0, 1, FLAGS },
+    { "side_data", "use datas from bounding box in side data",     OFFSET(side_data), AV_OPT_TYPE_BOOL,   { .i64=0   },       0, 1, FLAGS },
     { NULL }
 };
 
