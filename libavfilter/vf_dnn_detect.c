@@ -80,15 +80,15 @@ static void dump_boundingbox(AVFilterContext *ctx, AVFrame *frame)
     }
 
     nb_bbox = (frame->private_ref->size - sizeof(*header)) / header->bbox_size;
-    av_log(ctx, AV_LOG_INFO, "frame->private_ref (bounding boxes):\n");
-    av_log(ctx, AV_LOG_INFO, "source: %s\n", header->source);
+    av_log(ctx, AV_LOG_DEBUG, "frame->private_ref (bounding boxes):\n");
+    av_log(ctx, AV_LOG_DEBUG, "source: %s\n", header->source);
     for (int i = 0; i < nb_bbox; i++) {
-        av_log(ctx, AV_LOG_INFO, "index: %d, region: (%d, %d) -> (%d, %d), label: %s, confidence: %d/%d.\n",
+        av_log(ctx, AV_LOG_DEBUG, "index: %d, region: (%d, %d) -> (%d, %d), label: %s, confidence: %d/%d.\n",
                                  i, bbox->left, bbox->top, bbox->right, bbox->bottom,
                                  bbox->detect_label, bbox->detect_confidence.num, bbox->detect_confidence.den);
         if (bbox->classify_count > 0) {
             for (int j = 0; j < bbox->classify_count; j++) {
-                av_log(ctx, AV_LOG_INFO, "\t\tclassify:  label: %s, confidence: %d/%d.\n",
+                av_log(ctx, AV_LOG_DEBUG, "\t\tclassify:  label: %s, confidence: %d/%d.\n",
                        bbox->classify_labels[j], bbox->classify_confidences[j].num, bbox->classify_confidences[j].den);
             }
         }
