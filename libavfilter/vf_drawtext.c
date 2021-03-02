@@ -60,6 +60,7 @@
 #include "formats.h"
 #include "internal.h"
 #include "video.h"
+#include "bbox.h"
 
 #if CONFIG_LIBFRIBIDI
 #include <fribidi.h>
@@ -199,6 +200,7 @@ typedef struct DrawTextContext {
     int tc24hmax;                   ///< 1 if timecode is wrapped to 24 hours, 0 otherwise
     int reload;                     ///< reload text file for each frame
     int start_number;               ///< starting frame number for n/frame_num var
+    int side_data;                  ///< use text in side_data of frame or not
 #if CONFIG_LIBFRIBIDI
     int text_shaping;               ///< 1 to shape the text before drawing it
 #endif
@@ -246,6 +248,7 @@ static const AVOption drawtext_options[]= {
     { "alpha",       "apply alpha while rendering", OFFSET(a_expr),      AV_OPT_TYPE_STRING, { .str = "1"     },          .flags = FLAGS },
     {"fix_bounds", "check and fix text coords to avoid clipping", OFFSET(fix_bounds), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS},
     {"start_number", "start frame number for n/frame_num variable", OFFSET(start_number), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS},
+    {"side_data", "use datas from bounding box in side data", OFFSET(side_data), AV_OPT_TYPE_BOOL, { .i64=0   }, 0, 1, FLAGS },
 
 #if CONFIG_LIBFRIBIDI
     {"text_shaping", "attempt to shape text before drawing", OFFSET(text_shaping), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1, FLAGS},
@@ -731,7 +734,7 @@ static av_cold int init(AVFilterContext *ctx)
             s->text = av_strdup("");
     }
 
-    if (!s->text) {
+    if (!s->text && !s->side_data) {
         av_log(ctx, AV_LOG_ERROR,
                "Either text, a valid file or a timecode must be provided\n");
         return AVERROR(EINVAL);
@@ -1440,10 +1443,10 @@ continue_on_invalid2:
 
     s->var_values[VAR_LINE_H] = s->var_values[VAR_LH] = s->max_glyph_h;
 
-    s->x = s->var_values[VAR_X] = av_expr_eval(s->x_pexpr, s->var_values, &s->prng);
-    s->y = s->var_values[VAR_Y] = av_expr_eval(s->y_pexpr, s->var_values, &s->prng);
+    s->x = s->var_values[VAR_X] = s->side_data ? s->x : av_expr_eval(s->x_pexpr, s->var_values, &s->prng);
+    s->y = s->var_values[VAR_Y] = s->side_data ? s->y : av_expr_eval(s->y_pexpr, s->var_values, &s->prng);
     /* It is necessary if x is expressed from y  */
-    s->x = s->var_values[VAR_X] = av_expr_eval(s->x_pexpr, s->var_values, &s->prng);
+    s->x = s->var_values[VAR_X] = s->side_data ? s->x : av_expr_eval(s->x_pexpr, s->var_values, &s->prng);
 
     update_alpha(s);
     update_color_with_alpha(s, &fontcolor  , s->fontcolor  );
@@ -1511,6 +1514,22 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     AVFilterLink *outlink = ctx->outputs[0];
     DrawTextContext *s = ctx->priv;
     int ret;
+    BoundingBox *bbox = NULL;
+    BoundingBoxHeader *header;
+    int loop = 1;
+
+    if (s->side_data && frame->private_ref) {
+        header = (BoundingBoxHeader *)frame->private_ref->data;
+        bbox = (BoundingBox *)(header + 1);
+
+        if (!header->bbox_size || (frame->private_ref->size - sizeof(*header)) % header->bbox_size != 0) {
+            av_log(s, AV_LOG_ERROR, "invalid size of bounding box\n");
+            return ff_filter_frame(inlink->dst->outputs[0], frame);
+        }
+        loop = (frame->private_ref->size - sizeof(*header)) / header->bbox_size;
+        if (!(s->text = av_mallocz(BBOX_LABEL_NAME_MAX_LENGTH)))
+            return AVERROR(ENOMEM);
+    }
 
     if (s->reload) {
         if ((ret = load_textfile(ctx)) < 0) {
@@ -1536,7 +1555,16 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     s->var_values[VAR_PKT_SIZE] = frame->pkt_size;
     s->metadata = frame->metadata;
 
-    draw_text(ctx, frame, frame->width, frame->height);
+    do {
+        if (bbox) {
+            strcpy(s->text, bbox->detect_label);
+            s->x = bbox->left;
+            s->y = bbox->top - s->fontsize;
+            draw_text(ctx, frame, frame->width, frame->height);
+        }
+        loop--;
+        bbox++;
+    } while (loop);
 
     av_log(ctx, AV_LOG_DEBUG, "n:%d t:%f text_w:%d text_h:%d x:%d y:%d\n",
            (int)s->var_values[VAR_N], s->var_values[VAR_T],
