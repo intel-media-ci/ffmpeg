@@ -950,8 +950,10 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
     if (!pic && ctx->end_of_stream) {
         --b_counter;
         pic = ctx->pic_end;
-        if (pic->encode_issued)
+        if (pic->encode_complete)
             return AVERROR_EOF;
+        else if (pic->encode_issued)
+            return AVERROR(EAGAIN);
     }
 
     if (!pic) {
@@ -1176,19 +1178,33 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
             return AVERROR(EAGAIN);
     }
 
-    pic = NULL;
-    err = vaapi_encode_pick_next(avctx, &pic);
-    if (err < 0)
-        return err;
-    av_assert0(pic);
+    if (av_fifo_size(ctx->encode_fifo) == 0) {
+        while (!err) {
+            pic = NULL;
+            err = vaapi_encode_pick_next(avctx, &pic);
+            if (err == AVERROR(EAGAIN))
+                break;
+            else if (err < 0)
+                return err;
+            av_assert0(pic);
 
-    pic->encode_order = ctx->encode_order++;
+            pic->encode_order = ctx->encode_order++;
 
-    err = vaapi_encode_issue(avctx, pic);
-    if (err < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Encode failed: %d.\n", err);
-        return err;
+            err = vaapi_encode_issue(avctx, pic);
+            if (err < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Encode failed: %d.\n", err);
+                return err;
+            }
+
+            av_fifo_generic_write(ctx->encode_fifo, &pic, sizeof(pic), NULL);
+        }
     }
+
+    if (av_fifo_size(ctx->encode_fifo) == 0)
+        return err;
+
+    av_fifo_generic_read(ctx->encode_fifo, &pic, sizeof(pic), NULL);
+    ctx->encode_order = pic->encode_order+1;
 
     err = vaapi_encode_output(avctx, pic, pkt);
     if (err < 0) {
@@ -2518,6 +2534,10 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
             memcpy(avctx->extradata, data, avctx->extradata_size);
         }
     }
+
+    ctx->encode_fifo = av_fifo_alloc((MAX_PICTURE_REFERENCES+1)* sizeof(VAAPIEncodePicture *));
+    if (!ctx->encode_fifo)
+        return AVERROR(ENOMEM);
 
     return 0;
 
