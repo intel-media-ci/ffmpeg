@@ -984,8 +984,10 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
     if (!pic && ctx->end_of_stream) {
         --b_counter;
         pic = ctx->pic_end;
-        if (pic->encode_issued)
+        if (pic->encode_complete)
             return AVERROR_EOF;
+        else if (pic->encode_issued)
+            return AVERROR(EAGAIN);
     }
 
     if (!pic) {
@@ -1210,18 +1212,45 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
             return AVERROR(EAGAIN);
     }
 
-    pic = NULL;
-    err = vaapi_encode_pick_next(avctx, &pic);
-    if (err < 0)
-        return err;
-    av_assert0(pic);
+#if VA_CHECK_VERSION(1, 9, 0)
+    if (ctx->has_sync_buffer_func) {
+        while (av_fifo_size(ctx->encode_fifo) <=
+               MAX_PICTURE_REFERENCES * sizeof(VAAPIEncodePicture *)) {
+            pic = NULL;
+            err = vaapi_encode_pick_next(avctx, &pic);
+            if (err < 0)
+                break;
 
-    pic->encode_order = ctx->encode_order++;
+            av_assert0(pic);
+            pic->encode_order = ctx->encode_order +
+                (av_fifo_size(ctx->encode_fifo) / sizeof(VAAPIEncodePicture *));
+            err = vaapi_encode_issue(avctx, pic);
+            if (err < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Encode failed: %d.\n", err);
+                return err;
+            }
+            av_fifo_generic_write(ctx->encode_fifo, &pic, sizeof(pic), NULL);
+        }
+        if (!av_fifo_size(ctx->encode_fifo))
+            return err;
+        av_fifo_generic_read(ctx->encode_fifo, &pic, sizeof(pic), NULL);
+        ctx->encode_order = pic->encode_order + 1;
+    } else
+#endif
+    {
+        pic = NULL;
+        err = vaapi_encode_pick_next(avctx, &pic);
+        if (err < 0)
+            return err;
+        av_assert0(pic);
 
-    err = vaapi_encode_issue(avctx, pic);
-    if (err < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Encode failed: %d.\n", err);
-        return err;
+        pic->encode_order = ctx->encode_order++;
+
+        err = vaapi_encode_issue(avctx, pic);
+        if (err < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Encode failed: %d.\n", err);
+            return err;
+        }
     }
 
     err = vaapi_encode_output(avctx, pic, pkt);
@@ -2555,6 +2584,18 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
         }
     }
 
+#if VA_CHECK_VERSION(1, 9, 0)
+    //check vaSyncBuffer function
+    vas = vaSyncBuffer(ctx->hwctx->display, 0, 0);
+    if (vas != VA_STATUS_ERROR_UNIMPLEMENTED) {
+        ctx->has_sync_buffer_func = 1;
+        ctx->encode_fifo = av_fifo_alloc((MAX_PICTURE_REFERENCES + 1) *
+                                        sizeof(VAAPIEncodePicture *));
+        if (!ctx->encode_fifo)
+            return AVERROR(ENOMEM);
+    }
+#endif
+
     return 0;
 
 fail:
@@ -2592,6 +2633,7 @@ av_cold int ff_vaapi_encode_close(AVCodecContext *avctx)
 
     av_freep(&ctx->codec_sequence_params);
     av_freep(&ctx->codec_picture_params);
+    av_fifo_freep(&ctx->encode_fifo);
 
     av_buffer_unref(&ctx->recon_frames_ref);
     av_buffer_unref(&ctx->input_frames_ref);
