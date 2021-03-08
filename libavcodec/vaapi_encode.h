@@ -29,6 +29,7 @@
 
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_vaapi.h"
+#include "libavutil/fifo.h"
 
 #include "avcodec.h"
 #include "hwconfig.h"
@@ -345,6 +346,10 @@ typedef struct VAAPIEncodeContext {
     int             roi_warned;
 
     AVFrame         *frame;
+    //Store buffered pic
+    AVFifoBuffer *encode_fifo;
+    //Whether the driver support vaSyncBuffer
+    int has_sync_buffer_func;
 } VAAPIEncodeContext;
 
 enum {
