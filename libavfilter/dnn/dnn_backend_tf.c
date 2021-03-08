@@ -154,7 +154,7 @@ static DNNReturnType get_input_tf(void *model, DNNData *input, const char *input
     TF_DeleteStatus(status);
 
     // currently only NHWC is supported
-    av_assert0(dims[0] == 1);
+    av_assert0(dims[0] == 1 || dims[0] == -1);
     input->height = dims[1];
     input->width = dims[2];
     input->channels = dims[3];
@@ -718,7 +718,7 @@ static DNNReturnType execute_model_tf(const DNNModel *model, const char *input_n
     TF_Output *tf_outputs;
     TFModel *tf_model = model->model;
     TFContext *ctx = &tf_model->ctx;
-    DNNData input, output;
+    DNNData input, *output;
     TF_Tensor **output_tensors;
     TF_Output tf_input;
     TF_Tensor *input_tensor;
@@ -747,13 +747,6 @@ static DNNReturnType execute_model_tf(const DNNModel *model, const char *input_n
         } else {
             ff_proc_from_frame_to_dnn(in_frame, &input, tf_model->model->func_type, ctx);
         }
-    }
-
-    if (nb_output != 1) {
-        // currently, the filter does not need multiple outputs,
-        // so we just pending the support until we really need it.
-        avpriv_report_missing_feature(ctx, "multiple outputs");
-        return DNN_ERROR;
     }
 
     tf_outputs = av_malloc_array(nb_output, sizeof(*tf_outputs));
@@ -791,23 +784,31 @@ static DNNReturnType execute_model_tf(const DNNModel *model, const char *input_n
         return DNN_ERROR;
     }
 
+    output = av_malloc_array(nb_output, sizeof(*output));
     for (uint32_t i = 0; i < nb_output; ++i) {
-        output.height = TF_Dim(output_tensors[i], 1);
-        output.width = TF_Dim(output_tensors[i], 2);
-        output.channels = TF_Dim(output_tensors[i], 3);
-        output.data = TF_TensorData(output_tensors[i]);
-        output.dt = TF_TensorType(output_tensors[i]);
-
+        output[i].height = TF_Dim(output_tensors[i], 1);
+        output[i].width = TF_Dim(output_tensors[i], 2);
+        output[i].channels = TF_Dim(output_tensors[i], 3);
+        output[i].data = TF_TensorData(output_tensors[i]);
+        output[i].dt = TF_TensorType(output_tensors[i]);
+    }
+    switch (model->func_type) {
+    case DFT_PROCESS_FRAME:
+        //it only support 1 output if it's frame in & frame out
         if (do_ioproc) {
             if (tf_model->model->frame_post_proc != NULL) {
-                tf_model->model->frame_post_proc(out_frame, &output, tf_model->model->filter_ctx);
+                tf_model->model->frame_post_proc(out_frame, output, tf_model->model->filter_ctx);
             } else {
-                ff_proc_from_dnn_to_frame(out_frame, &output, ctx);
+                ff_proc_from_dnn_to_frame(out_frame, &output[0], ctx);
             }
         } else {
-            out_frame->width = output.width;
-            out_frame->height = output.height;
+            out_frame->width = output[0].width;
+            out_frame->height = output[0].height;
         }
+        break;
+    default:
+        av_log(ctx, AV_LOG_ERROR, "Tensorflow backend does not support this kind of dnn filter now\n");
+        return DNN_ERROR;
     }
 
     for (uint32_t i = 0; i < nb_output; ++i) {
@@ -832,9 +833,13 @@ DNNReturnType ff_dnn_execute_model_tf(const DNNModel *model, const char *input_n
         return DNN_ERROR;
     }
 
-    if (!out_frame) {
+    if (!out_frame && model->func_type == DFT_PROCESS_FRAME) {
         av_log(ctx, AV_LOG_ERROR, "out frame is NULL when execute model.\n");
         return DNN_ERROR;
+    }
+
+    if (model->func_type != DFT_PROCESS_FRAME && !out_frame) {
+        out_frame = in_frame;
     }
 
     return execute_model_tf(model, input_name, in_frame, output_names, nb_output, out_frame, 1);

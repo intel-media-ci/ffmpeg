@@ -17,6 +17,37 @@
  */
 
 #include "dnn_filter_common.h"
+#include "libavutil/avstring.h"
+
+static char **separate_expression(DnnContext *ctx, const char *expr, const char *val_sep, int *separated_nb)
+{
+    char *val, **parsed_vals = NULL;
+    int val_num = 0;
+    if (!expr || !val_sep) {
+        av_log(ctx, AV_LOG_ERROR, "could not parse string for model\n");
+        return NULL;
+    }
+
+    if (!parsed_vals)
+        parsed_vals = av_mallocz(sizeof(*parsed_vals));
+
+    do {
+        val = av_get_token(&expr, val_sep);
+        if(strlen(val)) {
+            parsed_vals[val_num] = val;
+            val_num++;
+            parsed_vals = av_realloc_f(parsed_vals, val_num + 1, sizeof(*parsed_vals));
+        }
+        if (*expr) {
+            expr++;
+        }
+    } while(*expr);
+
+    parsed_vals[val_num] = NULL;
+    *separated_nb = val_num;
+
+    return parsed_vals;
+}
 
 int ff_dnn_init(DnnContext *ctx, DNNFunctionType func_type, AVFilterContext *filter_ctx)
 {
@@ -28,7 +59,9 @@ int ff_dnn_init(DnnContext *ctx, DNNFunctionType func_type, AVFilterContext *fil
         av_log(filter_ctx, AV_LOG_ERROR, "input name of the model network is not specified\n");
         return AVERROR(EINVAL);
     }
-    if (!ctx->model_outputname) {
+
+    ctx->model_outputnames = separate_expression(ctx, ctx->outputnames_expr, "&", &ctx->nb_output);
+    if (!ctx->model_outputnames) {
         av_log(filter_ctx, AV_LOG_ERROR, "output name of the model network is not specified\n");
         return AVERROR(EINVAL);
     }
@@ -85,19 +118,19 @@ DNNReturnType ff_dnn_get_input(DnnContext *ctx, DNNData *input)
 DNNReturnType ff_dnn_get_output(DnnContext *ctx, int input_width, int input_height, int *output_width, int *output_height)
 {
     return ctx->model->get_output(ctx->model->model, ctx->model_inputname, input_width, input_height,
-                                    ctx->model_outputname, output_width, output_height);
+                                    (const char *)ctx->model_outputnames[0], output_width, output_height);
 }
 
 DNNReturnType ff_dnn_execute_model(DnnContext *ctx, AVFrame *in_frame, AVFrame *out_frame)
 {
     return (ctx->dnn_module->execute_model)(ctx->model, ctx->model_inputname, in_frame,
-                                            (const char **)&ctx->model_outputname, 1, out_frame);
+                                            (const char **)ctx->model_outputnames, (uint32_t)ctx->nb_output, out_frame);
 }
 
 DNNReturnType ff_dnn_execute_model_async(DnnContext *ctx, AVFrame *in_frame, AVFrame *out_frame)
 {
     return (ctx->dnn_module->execute_model_async)(ctx->model, ctx->model_inputname, in_frame,
-                                                  (const char **)&ctx->model_outputname, 1, out_frame);
+                                                  (const char **)ctx->model_outputnames, 1, out_frame);
 }
 
 DNNAsyncStatusType ff_dnn_get_async_result(DnnContext *ctx, AVFrame **in_frame, AVFrame **out_frame)

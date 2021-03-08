@@ -30,7 +30,9 @@ typedef struct DnnContext {
     char *model_filename;
     DNNBackendType backend_type;
     char *model_inputname;
-    char *model_outputname;
+    char **model_outputnames;
+    char *outputnames_expr;
+    int nb_output;
     char *backend_options;
     int async;
 
@@ -41,7 +43,7 @@ typedef struct DnnContext {
 #define DNN_COMMON_OPTIONS \
     { "model",              "path to model file",         OFFSET(model_filename),   AV_OPT_TYPE_STRING,    { .str = NULL }, 0, 0, FLAGS },\
     { "input",              "input name of the model",    OFFSET(model_inputname),  AV_OPT_TYPE_STRING,    { .str = NULL }, 0, 0, FLAGS },\
-    { "output",             "output name of the model",   OFFSET(model_outputname), AV_OPT_TYPE_STRING,    { .str = NULL }, 0, 0, FLAGS },\
+    { "output",             "output name of the model",   OFFSET(outputnames_expr), AV_OPT_TYPE_STRING,    { .str = NULL }, 0, 0, FLAGS },\
     { "backend_configs",    "backend configs",            OFFSET(backend_options),  AV_OPT_TYPE_STRING,    { .str = NULL }, 0, 0, FLAGS },\
     { "options",            "backend configs",            OFFSET(backend_options),  AV_OPT_TYPE_STRING,    { .str = NULL }, 0, 0, FLAGS },\
     { "async",              "use DNN async inference",    OFFSET(async),            AV_OPT_TYPE_BOOL,      { .i64 = 1},     0, 1, FLAGS},
