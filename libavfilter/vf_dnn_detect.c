@@ -48,6 +48,9 @@ typedef struct DnnDetectContext {
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_VIDEO_PARAM
 static const AVOption dnn_detect_options[] = {
     { "dnn_backend", "DNN backend",                OFFSET(backend_type),     AV_OPT_TYPE_INT,       { .i64 = 2 },    INT_MIN, INT_MAX, FLAGS, "backend" },
+#if (CONFIG_LIBTENSORFLOW == 1)
+    { "tensorflow",  "tensorflow backend flag",    0,                        AV_OPT_TYPE_CONST,     { .i64 = 1 },    0, 0, FLAGS, "backend" },
+#endif
 #if (CONFIG_LIBOPENVINO == 1)
     { "openvino",    "openvino backend flag",      0,                        AV_OPT_TYPE_CONST,     { .i64 = 2 },    0, 0, FLAGS, "backend" },
 #endif
@@ -59,7 +62,7 @@ static const AVOption dnn_detect_options[] = {
 
 AVFILTER_DEFINE_CLASS(dnn_detect);
 
-static int dnn_detect_post_proc(AVFrame *frame, DNNData *output, uint32_t nb, AVFilterContext *filter_ctx)
+static int dnn_detect_post_proc_ov(AVFrame *frame, DNNData *output, AVFilterContext *filter_ctx)
 {
     DnnDetectContext *ctx = filter_ctx->priv;
     float conf_threshold = ctx->confidence;
@@ -139,6 +142,102 @@ static int dnn_detect_post_proc(AVFrame *frame, DNNData *output, uint32_t nb, AV
     }
 
     return 0;
+}
+
+static int dnn_detect_post_proc_tf(AVFrame *frame, DNNData *output, AVFilterContext *filter_ctx)
+{
+    DnnDetectContext *ctx = filter_ctx->priv;
+    int proposal_count;
+    float conf_threshold = ctx->confidence;
+    float *conf_p, *position_p, *label_id_p, x0, y0, x1, y1;
+    int nb_bbox = 0;
+    AVFrameSideData *sd;
+    AVBoundingBox *bbox;
+    AVBoundingBoxHeader *header;
+
+    proposal_count = *(float *)(output[0].data);
+    conf_p         = output[1].data;
+    position_p     = output[3].data;
+    label_id_p     = output[2].data;
+
+    sd = av_frame_get_side_data(frame, AV_FRAME_DATA_BOUNDING_BOXES);
+    if (sd) {
+        av_log(filter_ctx, AV_LOG_ERROR, "already have dnn bounding boxes in side data.\n");
+        return -1;
+    }
+
+    for (int i = 0; i < proposal_count; ++i) {
+        if (conf_p[i] < conf_threshold)
+            continue;
+        nb_bbox++;
+    }
+
+    if (nb_bbox == 0) {
+        av_log(filter_ctx, AV_LOG_VERBOSE, "nothing detected in this frame.\n");
+        return 0;
+    }
+
+    sd = av_frame_new_side_data(frame, AV_FRAME_DATA_BOUNDING_BOXES,
+                                sizeof(*header) + sizeof(*bbox) * nb_bbox);
+
+    if (!sd) {
+        av_log(filter_ctx, AV_LOG_ERROR, "failed to allocate side data for AV_FRAME_DATA_BOUNDING_BOXES with %d bboxes\n", nb_bbox);
+        return AVERROR(ENOMEM);
+    }
+
+    header = (AVBoundingBoxHeader *)sd->data;
+    av_strlcpy(header->source, ctx->dnnctx.model_filename, sizeof(header->source));
+    header->nb_bbox = nb_bbox;
+    header->frame_width = frame->width;
+    header->frame_height = frame->height;
+
+    bbox = header->bboxes;
+    for (int i = 0; i < proposal_count; ++i) {
+        y0 = position_p[i * 4];
+        x0 = position_p[i * 4 + 1];
+        y1 = position_p[i * 4 + 2];
+        x1 = position_p[i * 4 + 3];
+
+        if (conf_p[i] < conf_threshold) {
+            continue;
+        }
+
+        bbox->left      = (int)(x0 * frame->width);
+        bbox->right     = (int)(x1 * frame->width);
+        bbox->top       = (int)(y0 * frame->height);
+        bbox->bottom    = (int)(y1 * frame->height);
+
+        bbox->detect_confidence = av_make_q((int)(conf_p[i] * 10000), 10000);
+        bbox->classify_count = 0;
+
+        if (ctx->labels && label_id_p[i] < ctx->label_count) {
+            av_strlcpy(bbox->detect_label, ctx->labels[(int)label_id_p[i]], sizeof(bbox->detect_label));
+        } else {
+            snprintf(bbox->detect_label, sizeof(bbox->detect_label), "%d", (int)label_id_p[i]);
+        }
+
+        nb_bbox--;
+        if (nb_bbox == 0) {
+            break;
+        }
+        bbox++;
+    }
+    return 0;
+}
+
+static int dnn_detect_post_proc(AVFrame *frame, DNNData *output, uint32_t nb, AVFilterContext *filter_ctx)
+{
+    DnnDetectContext *ctx = filter_ctx->priv;
+    DnnContext *dnn_ctx = &ctx->dnnctx;
+    switch (dnn_ctx->backend_type) {
+    case DNN_OV:
+        return dnn_detect_post_proc_ov(frame, output, filter_ctx);
+    case DNN_TF:
+        return dnn_detect_post_proc_tf(frame, output, filter_ctx);
+    default:
+        av_log(filter_ctx, AV_LOG_ERROR, "Current dnn backend do not support detect filter\n");
+        return AVERROR(EINVAL);
+    }
 }
 
 static void free_detect_labels(DnnDetectContext *ctx)

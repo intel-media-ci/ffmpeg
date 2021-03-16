@@ -806,6 +806,13 @@ static DNNReturnType execute_model_tf(const DNNModel *model, const char *input_n
             out_frame->height = output[0].height;
         }
         break;
+    case DFT_ANALYTICS_DETECT:
+        if (!model->detect_post_proc) {
+            av_log(ctx, AV_LOG_ERROR, "Detect filter needs provide post proc\n");
+            return DNN_ERROR;
+        }
+        model->detect_post_proc(out_frame, output, nb_output, model->filter_ctx);
+        break;
     default:
         av_log(ctx, AV_LOG_ERROR, "Tensorflow backend does not support this kind of dnn filter now\n");
         return DNN_ERROR;
