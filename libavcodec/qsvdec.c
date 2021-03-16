@@ -309,8 +309,6 @@ static int qsv_decode_header(AVCodecContext *avctx, QSVContext *q,
         bs.DataLength = avpkt->size;
         bs.MaxLength  = bs.DataLength;
         bs.TimeStamp  = avpkt->pts;
-        if (avctx->field_order == AV_FIELD_PROGRESSIVE)
-            bs.DataFlag   |= MFX_BITSTREAM_COMPLETE_FRAME;
     } else
         return AVERROR_INVALIDDATA;
 
@@ -457,8 +455,6 @@ static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
         bs.DataLength = avpkt->size;
         bs.MaxLength  = bs.DataLength;
         bs.TimeStamp  = avpkt->pts;
-        if (avctx->field_order == AV_FIELD_PROGRESSIVE)
-            bs.DataFlag   |= MFX_BITSTREAM_COMPLETE_FRAME;
     }
 
     sync = av_mallocz(sizeof(*sync));
