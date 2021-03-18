@@ -476,6 +476,9 @@ static QSVFrame *query_frame(QSVVPPContext *s, AVFilterLink *outlink)
             return NULL;
         }
 
+        out_frame->frame->width  = outlink->w;
+        out_frame->frame->height = outlink->h;
+
         out_frame->surface = (mfxFrameSurface1 *)out_frame->frame->data[3];
     } else {
         /* Get a frame with aligned dimensions.
