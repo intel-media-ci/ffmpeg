@@ -62,6 +62,8 @@ static float get_expected(float f, DNNMathUnaryOperation op)
         return floor(f);
     case DMUO_ROUND:
         return round(f);
+    case DMUO_EXP:
+	return exp(f);
     default:
         av_assert0(!"not supported yet");
         return 0.f;
@@ -140,5 +142,7 @@ int main(int agrc, char **argv)
         return 1;
     if (test(DMUO_ROUND))
         return 1;
+    if (test(DMUO_EXP))
+	return 1;
     return 0;
 }
