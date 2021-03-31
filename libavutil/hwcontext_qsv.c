@@ -456,8 +456,25 @@ static int qsv_init_internal_session(AVHWFramesContext *ctx,
 
     mfxVideoParam par;
     mfxStatus err;
+    mfxInitParam init_par = { MFX_IMPL_AUTO_ANY };
 
-    err = MFXInit(device_priv->impl, &device_priv->ver, session);
+#if QSV_VERSION_ATLEAST(1, 15)
+    mfxExtBuffer *ext_params[1];
+    mfxExtThreadsParam thread_param;
+
+    memset(&thread_param, 0, sizeof(thread_param));
+    thread_param.Header.BufferId = MFX_EXTBUFF_THREADS_PARAM;
+    thread_param.Header.BufferSz = sizeof(thread_param);
+    thread_param.NumThread       = 2;
+    ext_params[0]                = (mfxExtBuffer *)&thread_param;
+    init_par.ExtParam            = (mfxExtBuffer **)&ext_params;
+    init_par.NumExtParam         = 1;
+#endif
+
+    init_par.Implementation      = device_priv->impl;
+    init_par.Version             = device_priv->ver;
+
+    err = MFXInitEx(init_par, session);
     if (err != MFX_ERR_NONE) {
         av_log(ctx, AV_LOG_ERROR, "Error initializing an internal session\n");
         return AVERROR_UNKNOWN;
