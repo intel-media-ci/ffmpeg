@@ -390,11 +390,27 @@ int ff_qsv_init_internal_session(AVCodecContext *avctx, QSVSession *qs,
     const char *desc;
     int ret;
 
+#if QSV_VERSION_ATLEAST(1, 15)
+    mfxExtBuffer *ext_params[1];
+    mfxExtThreadsParam thread_param;
+#endif
+
 #if QSV_VERSION_ATLEAST(1, 16)
     init_par.GPUCopy        = gpu_copy;
 #endif
     init_par.Implementation = impl;
     init_par.Version        = ver;
+
+#if QSV_VERSION_ATLEAST(1, 15)
+    memset(&thread_param, 0, sizeof(thread_param));
+    thread_param.Header.BufferId = MFX_EXTBUFF_THREADS_PARAM;
+    thread_param.Header.BufferSz = sizeof(thread_param);
+    thread_param.NumThread       = FFMAX(2, avctx->thread_count);
+    ext_params[0]                = (mfxExtBuffer *)&thread_param;
+    init_par.ExtParam            = (mfxExtBuffer **)&ext_params;
+    init_par.NumExtParam         = 1;
+#endif
+
     ret = MFXInitEx(init_par, &qs->session);
     if (ret < 0)
         return ff_qsv_print_error(avctx, ret,
@@ -709,6 +725,11 @@ int ff_qsv_init_session_device(AVCodecContext *avctx, mfxSession *psession,
 
     int i, ret;
 
+#if QSV_VERSION_ATLEAST(1, 15)
+    mfxExtBuffer *ext_params[1];
+    mfxExtThreadsParam thread_param;
+#endif
+
     err = MFXQueryIMPL(parent_session, &impl);
     if (err == MFX_ERR_NONE)
         err = MFXQueryVersion(parent_session, &ver);
@@ -734,6 +755,17 @@ int ff_qsv_init_session_device(AVCodecContext *avctx, mfxSession *psession,
 #endif
     init_par.Implementation = impl;
     init_par.Version        = ver;
+
+#if QSV_VERSION_ATLEAST(1, 15)
+    memset(&thread_param, 0, sizeof(thread_param));
+    thread_param.Header.BufferId = MFX_EXTBUFF_THREADS_PARAM;
+    thread_param.Header.BufferSz = sizeof(thread_param);
+    thread_param.NumThread       = FFMAX(2, avctx->thread_count);
+    ext_params[0]                = (mfxExtBuffer *)&thread_param;
+    init_par.ExtParam            = (mfxExtBuffer **)&ext_params;
+    init_par.NumExtParam         = 1;
+#endif
+
     err = MFXInitEx(init_par, &session);
     if (err != MFX_ERR_NONE)
         return ff_qsv_print_error(avctx, err,

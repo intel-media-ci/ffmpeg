@@ -846,6 +846,7 @@ AVCodec ff_##x##_qsv_decoder = { \
     .close          = qsv_decode_close, \
     .bsfs           = bsf_name, \
     .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_DR1 | AV_CODEC_CAP_AVOID_PROBING | AV_CODEC_CAP_HYBRID, \
+    .caps_internal  = FF_CODEC_CAP_AUTO_THREADS, \
     .priv_class     = &x##_qsv_class, \
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12, \
                                                     AV_PIX_FMT_P010, \
