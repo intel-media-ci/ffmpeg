@@ -1142,6 +1142,12 @@ static int qsv_device_derive_from_child(AVHWDeviceContext *ctx,
     mfxHandleType handle_type;
     mfxStatus     err;
     int ret;
+    mfxInitParam  init_par = { MFX_IMPL_AUTO_ANY };
+
+#if QSV_VERSION_ATLEAST(1, 15)
+    mfxExtBuffer *ext_params[1];
+    mfxExtThreadsParam thread_param;
+#endif
 
     switch (child_device_ctx->type) {
 #if CONFIG_VAAPI
@@ -1167,7 +1173,20 @@ static int qsv_device_derive_from_child(AVHWDeviceContext *ctx,
         goto fail;
     }
 
-    err = MFXInit(implementation, &ver, &hwctx->session);
+    init_par.Implementation = implementation;
+    init_par.Version        = ver;
+
+#if QSV_VERSION_ATLEAST(1, 15)
+    memset(&thread_param, 0, sizeof(thread_param));
+    thread_param.Header.BufferId = MFX_EXTBUFF_THREADS_PARAM;
+    thread_param.Header.BufferSz = sizeof(thread_param);
+    thread_param.NumThread       = 2;
+    ext_params[0]                = (mfxExtBuffer *)&thread_param;
+    init_par.ExtParam            = (mfxExtBuffer **)&ext_params;
+    init_par.NumExtParam         = 1;
+#endif
+
+    err = MFXInitEx(init_par, &hwctx->session);
     if (err != MFX_ERR_NONE) {
         av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
                "%d.\n", err);
@@ -1188,7 +1207,8 @@ static int qsv_device_derive_from_child(AVHWDeviceContext *ctx,
 
     MFXClose(hwctx->session);
 
-    err = MFXInit(implementation, &ver, &hwctx->session);
+    init_par.Version = ver;
+    err = MFXInitEx(init_par, &hwctx->session);
     if (err != MFX_ERR_NONE) {
         av_log(ctx, AV_LOG_ERROR,
                "Error initializing an MFX session: %d.\n", err);
