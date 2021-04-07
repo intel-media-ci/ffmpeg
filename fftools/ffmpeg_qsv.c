@@ -90,8 +90,8 @@ int qsv_init(AVCodecContext *s)
     frames_ctx   = (AVHWFramesContext*)ist->hw_frames_ctx->data;
     frames_hwctx = frames_ctx->hwctx;
 
-    frames_ctx->width             = FFALIGN(s->coded_width,  32);
-    frames_ctx->height            = FFALIGN(s->coded_height, 32);
+    frames_ctx->width             = s->width;
+    frames_ctx->height            = s->height;
     frames_ctx->format            = AV_PIX_FMT_QSV;
     frames_ctx->sw_format         = s->sw_pix_fmt;
     frames_ctx->initial_pool_size = 64 + s->extra_hw_frames;
