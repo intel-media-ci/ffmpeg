@@ -882,6 +882,17 @@ static int qsv_new_mfx_loader(void *ctx,
         goto fail;
     }
 
+    impl_value.Type = MFX_VARIANT_TYPE_U32;
+    impl_value.Data.U32 = 4;
+    sts = MFXSetConfigFilterProperty(cfg,
+                                     (const mfxU8 *)"NumThread", impl_value);
+
+    if (sts != MFX_ERR_NONE) {
+        av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration"
+               "AccelerationMode property: %d.\n", sts);
+        goto fail;
+    }
+
     *ploader = loader;
 
     return 0;
@@ -1009,6 +1020,11 @@ static int qsv_create_mfx_session(void *ctx,
     mfxVersion ver;
     mfxStatus sts;
     mfxSession session = NULL;
+    mfxInitParam  init_par = {
+        .Implementation = MFX_IMPL_AUTO_ANY,
+    };
+    mfxExtBuffer *ext_params[1];
+    mfxExtThreadsParam thread_param;
 
     av_log(ctx, AV_LOG_VERBOSE,
            "Use Intel(R) Media SDK to create MFX session, API version is "
@@ -1018,7 +1034,17 @@ static int qsv_create_mfx_session(void *ctx,
     *ploader = NULL;
     *psession = NULL;
     ver = *pver;
-    sts = MFXInit(implementation, &ver, &session);
+    memset(&thread_param, 0, sizeof(thread_param));
+    thread_param.Header.BufferId = MFX_EXTBUFF_THREADS_PARAM;
+    thread_param.Header.BufferSz = sizeof(thread_param);
+    thread_param.NumThread       = 4;
+    ext_params[0]                = (mfxExtBuffer *)&thread_param;
+    init_par.ExtParam            = (mfxExtBuffer **)&ext_params;
+    init_par.NumExtParam         = 1;
+    init_par.Implementation      = implementation;
+    init_par.Version             = ver;
+
+    sts = MFXInitEx(init_par, &session);
     if (sts != MFX_ERR_NONE) {
         av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
                "%d.\n", sts);
@@ -1037,7 +1063,8 @@ static int qsv_create_mfx_session(void *ctx,
 
     MFXClose(session);
 
-    sts = MFXInit(implementation, &ver, &session);
+    init_par.Version = ver;
+    sts = MFXInitEx(init_par, &session);
     if (sts != MFX_ERR_NONE) {
         av_log(ctx, AV_LOG_ERROR, "Error initializing an MFX session: "
                "%d.\n", sts);
