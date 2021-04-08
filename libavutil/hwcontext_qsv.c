@@ -264,8 +264,8 @@ static int qsv_init_child_ctx(AVHWFramesContext *ctx)
     child_frames_ctx->format            = device_priv->child_pix_fmt;
     child_frames_ctx->sw_format         = ctx->sw_format;
     child_frames_ctx->initial_pool_size = ctx->initial_pool_size;
-    child_frames_ctx->width             = FFALIGN(ctx->width, 16);
-    child_frames_ctx->height            = FFALIGN(ctx->height, 16);
+    child_frames_ctx->width             = FFALIGN(ctx->width, 64);
+    child_frames_ctx->height            = FFALIGN(ctx->height, 64);
 
 #if CONFIG_DXVA2
     if (child_device_ctx->type == AV_HWDEVICE_TYPE_DXVA2) {
@@ -337,9 +337,9 @@ static int qsv_init_surface(AVHWFramesContext *ctx, mfxFrameSurface1 *surf)
         surf->Info.ChromaFormat   = MFX_CHROMAFORMAT_YUV444;
 
     surf->Info.FourCC         = fourcc;
-    surf->Info.Width          = FFALIGN(ctx->width, 16);
+    surf->Info.Width          = FFALIGN(ctx->width, 64);
     surf->Info.CropW          = ctx->width;
-    surf->Info.Height         = FFALIGN(ctx->height, 16);
+    surf->Info.Height         = FFALIGN(ctx->height, 64);
     surf->Info.CropH          = ctx->height;
     surf->Info.FrameRateExtN  = 25;
     surf->Info.FrameRateExtD  = 1;
@@ -816,7 +816,12 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
 
     mfxSyncPoint sync = NULL;
     mfxStatus err;
+    int ori_width;
+    int ori_height;
     int ret = 0;
+
+    ori_width = dst->width;
+    ori_height = dst->height;
 
     while (!s->session_download_init && !s->session_download && !ret) {
 #if HAVE_PTHREADS
@@ -852,6 +857,13 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
     }
 
     out.Info = in->Info;
+    if (dst->height & 63 || dst->linesize[0] & 63) {
+        dst->width          = FFALIGN(dst->width, 64);
+        dst->height         = FFALIGN(dst->height, 64);
+        ret = av_frame_get_buffer(dst, 64);
+        if (ret < 0)
+            return ret;
+    }
     map_frame_to_surface(dst, &out);
 
     do {
@@ -872,6 +884,9 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
         av_log(ctx, AV_LOG_ERROR, "Error synchronizing the operation: %d\n", err);
         return AVERROR_UNKNOWN;
     }
+
+    dst->width = ori_width;
+    dst->height = ori_height;
 
     return 0;
 }
@@ -916,12 +931,12 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
     if (ret < 0)
         return ret;
 
-    if (src->height & 15 || src->linesize[0] & 15) {
+    if (src->height & 63 || src->linesize[0] & 63) {
         realigned = 1;
         memset(&tmp_frame, 0, sizeof(tmp_frame));
         tmp_frame.format         = src->format;
-        tmp_frame.width          = FFALIGN(src->width, 16);
-        tmp_frame.height         = FFALIGN(src->height, 16);
+        tmp_frame.width          = FFALIGN(src->width, 64);
+        tmp_frame.height         = FFALIGN(src->height, 64);
         ret = av_frame_get_buffer(&tmp_frame, 0);
         if (ret < 0)
             return ret;

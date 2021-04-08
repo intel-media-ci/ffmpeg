@@ -561,8 +561,8 @@ static int init_vpp_session(AVFilterContext *avctx, QSVVPPContext *s)
         out_frames_hwctx = out_frames_ctx->hwctx;
 
         out_frames_ctx->format            = AV_PIX_FMT_QSV;
-        out_frames_ctx->width             = FFALIGN(outlink->w, 32);
-        out_frames_ctx->height            = FFALIGN(outlink->h, 32);
+        out_frames_ctx->width             = outlink->w;
+        out_frames_ctx->height            = outlink->h;
         out_frames_ctx->sw_format         = s->out_sw_format;
         out_frames_ctx->initial_pool_size = 64;
         if (avctx->extra_hw_frames > 0)
