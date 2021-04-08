@@ -3258,6 +3258,8 @@ vp9_qsv_encoder_select="qsvenc"
 vp9_v4l2m2m_decoder_deps="v4l2_m2m vp9_v4l2_m2m"
 wmv3_crystalhd_decoder_select="crystalhd"
 av1_qsv_decoder_select="qsvdec"
+av1_qsv_encoder_select="qsvenc"
+av1_qsv_encoder_deps="libvpl MFX_EXTBUFF_AV1_BITSTREAM_PARAM"
 
 # parsers
 aac_parser_select="adts_header mpeg4audio"
@@ -6606,6 +6608,8 @@ elif enabled libvpl; then
 # is extracted from "vpl >= 2.6"
     check_pkg_config libmfx "vpl >= 2.6" "mfxvideo.h mfxdispatcher.h" MFXLoad || \
             die "ERROR: libvpl >= 2.6 not found"
+
+    check_cc MFX_EXTBUFF_AV1_BITSTREAM_PARAM "mfxdefs.h mfxstructures.h" "MFX_EXTBUFF_AV1_BITSTREAM_PARAM"
 fi
 
 if enabled libmfx; then
