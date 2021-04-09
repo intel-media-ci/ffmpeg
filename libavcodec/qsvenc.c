@@ -701,8 +701,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
             if (q->bitrate_limit >= 0)
                 q->extco2.BitrateLimit = q->bitrate_limit ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
-            if (q->mbbrc >= 0)
-                q->extco2.MBBRC = q->mbbrc ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
 
             if (q->max_frame_size >= 0)
                 q->extco2.MaxFrameSize = q->max_frame_size;
@@ -754,6 +752,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
                 q->extco2.MaxQPI = avctx->qmax > 51 ? 51 : avctx->qmax;
                 q->extco2.MaxQPP = q->extco2.MaxQPB = q->extco2.MaxQPI;
             }
+
+            if (q->mbbrc >= 0)
+                q->extco2.MBBRC = q->mbbrc ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
 #endif
             q->extco2.Header.BufferId = MFX_EXTBUFF_CODING_OPTION2;
             q->extco2.Header.BufferSz = sizeof(q->extco2);
