@@ -42,6 +42,8 @@ typedef struct AVQSVDeviceContext {
 typedef struct AVQSVFramesContext {
     mfxFrameSurface1 *surfaces;
     int            nb_surfaces;
+    int            aligned_width;
+    int            aligned_height;
 
     /**
      * A combination of MFX_MEMTYPE_* describing the frame pool.

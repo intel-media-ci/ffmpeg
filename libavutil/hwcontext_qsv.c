@@ -264,8 +264,8 @@ static int qsv_init_child_ctx(AVHWFramesContext *ctx)
     child_frames_ctx->format            = device_priv->child_pix_fmt;
     child_frames_ctx->sw_format         = ctx->sw_format;
     child_frames_ctx->initial_pool_size = ctx->initial_pool_size;
-    child_frames_ctx->width             = FFALIGN(ctx->width, 16);
-    child_frames_ctx->height            = FFALIGN(ctx->height, 16);
+    child_frames_ctx->width             = FFALIGN(hwctx->aligned_width, 16);
+    child_frames_ctx->height            = FFALIGN(hwctx->aligned_height, 16);
 
 #if CONFIG_DXVA2
     if (child_device_ctx->type == AV_HWDEVICE_TYPE_DXVA2) {
@@ -315,6 +315,7 @@ fail:
 static int qsv_init_surface(AVHWFramesContext *ctx, mfxFrameSurface1 *surf)
 {
     const AVPixFmtDescriptor *desc;
+    AVQSVFramesContext *hwctx = ctx->hwctx;
     uint32_t fourcc;
 
     desc = av_pix_fmt_desc_get(ctx->sw_format);
@@ -337,9 +338,9 @@ static int qsv_init_surface(AVHWFramesContext *ctx, mfxFrameSurface1 *surf)
         surf->Info.ChromaFormat   = MFX_CHROMAFORMAT_YUV444;
 
     surf->Info.FourCC         = fourcc;
-    surf->Info.Width          = FFALIGN(ctx->width, 16);
+    surf->Info.Width          = FFALIGN(hwctx->aligned_width, 16);
     surf->Info.CropW          = ctx->width;
-    surf->Info.Height         = FFALIGN(ctx->height, 16);
+    surf->Info.Height         = FFALIGN(hwctx->aligned_height, 16);
     surf->Info.CropH          = ctx->height;
     surf->Info.FrameRateExtN  = 25;
     surf->Info.FrameRateExtD  = 1;
@@ -816,7 +817,13 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
 
     mfxSyncPoint sync = NULL;
     mfxStatus err;
+    int ori_width;
+    int ori_height;
     int ret = 0;
+
+    ori_width = dst->width;
+    ori_height = dst->height;
+
 
     while (!s->session_download_init && !s->session_download && !ret) {
 #if HAVE_PTHREADS
@@ -843,6 +850,17 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
     if (ret < 0)
         return ret;
 
+    out.Info = in->Info;
+    if (dst->height < out.Info.Height || dst->linesize[0] < out.Info.Width ||
+        dst->height & 15 || dst->width & 15) {
+        memset(&dst->linesize, 0, AV_NUM_DATA_POINTERS * sizeof(dst->linesize[0]));
+        dst->width          = FFALIGN(out.Info.Width, 16);
+        dst->height         = FFALIGN(out.Info.Height, 16);
+        ret = av_frame_get_buffer(dst, 16);
+        if (ret < 0)
+            return ret;
+    }
+
     if (!s->session_download) {
         if (s->child_frames_ref)
             return qsv_transfer_data_child(ctx, dst, src);
@@ -851,7 +869,6 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
         return AVERROR(ENOSYS);
     }
 
-    out.Info = in->Info;
     map_frame_to_surface(dst, &out);
 
     do {
@@ -872,6 +889,9 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
         av_log(ctx, AV_LOG_ERROR, "Error synchronizing the operation: %d\n", err);
         return AVERROR_UNKNOWN;
     }
+
+    dst->width = ori_width;
+    dst->height = ori_height;
 
     return 0;
 }
@@ -916,12 +936,14 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
     if (ret < 0)
         return ret;
 
-    if (src->height & 15 || src->linesize[0] & 15) {
+    in.Info = out->Info;
+    if (src->height < in.Info.Height || src->linesize[0] < in.Info.Width ||
+        src->height & 15 || src->linesize[0] & 15) {
         realigned = 1;
         memset(&tmp_frame, 0, sizeof(tmp_frame));
         tmp_frame.format         = src->format;
-        tmp_frame.width          = FFALIGN(src->width, 16);
-        tmp_frame.height         = FFALIGN(src->height, 16);
+        tmp_frame.width          = FFALIGN(in.Info.Width, 16);
+        tmp_frame.height         = FFALIGN(in.Info.Height, 16);
         ret = av_frame_get_buffer(&tmp_frame, 0);
         if (ret < 0)
             return ret;
@@ -943,7 +965,6 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
         return AVERROR(ENOSYS);
     }
 
-    in.Info = out->Info;
     map_frame_to_surface(src_frame, &in);
 
     do {
