@@ -281,7 +281,7 @@ static int vaapi_av1_decode_slice(AVCodecContext *avctx,
 
         slice_param = (VASliceParameterBufferAV1) {
             .slice_data_size   = s->tile_group_info[i].tile_size,
-            .slice_data_offset = s->tile_group_info[i].tile_offset,
+            .slice_data_offset = 0,
             .slice_data_flag   = VA_SLICE_DATA_FLAG_ALL,
             .tile_row          = s->tile_group_info[i].tile_row,
             .tile_column       = s->tile_group_info[i].tile_column,
@@ -291,7 +291,7 @@ static int vaapi_av1_decode_slice(AVCodecContext *avctx,
 
         err = ff_vaapi_decode_make_slice_buffer(avctx, pic, &slice_param,
                                                 sizeof(VASliceParameterBufferAV1),
-                                                buffer,
+                                                buffer + s->tile_group_info[i].tile_offset,
                                                 s->tile_group_info[i].tile_size);
         if (err) {
             ff_vaapi_decode_cancel(avctx, pic);
