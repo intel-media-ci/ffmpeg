@@ -49,9 +49,7 @@
 #define QSV_HAVE_SCALING_CONFIG QSV_VERSION_ATLEAST(1, 19)
 
 typedef struct VPPContext{
-    const AVClass *class;
-
-    QSVVPPContext *qsv;
+    QSVVPPContext qsv;
 
     /* Video Enhancement Algorithms */
     mfxExtVPPDeinterlacing  deinterlace_conf;
@@ -100,9 +98,6 @@ typedef struct VPPContext{
     char *cx, *cy, *cw, *ch;
     char *ow, *oh;
     char *output_format_str;
-
-    int async_depth;
-    int eof;
 } VPPContext;
 
 static const AVOption options[] = {
@@ -138,7 +133,7 @@ static const AVOption options[] = {
     { "h",      "Output video height", OFFSET(oh), AV_OPT_TYPE_STRING, { .str="w*ch/cw" }, 0, 255, .flags = FLAGS },
     { "height", "Output video height", OFFSET(oh), AV_OPT_TYPE_STRING, { .str="w*ch/cw" }, 0, 255, .flags = FLAGS },
     { "format", "Output pixel format", OFFSET(output_format_str), AV_OPT_TYPE_STRING, { .str = "same" }, .flags = FLAGS },
-    { "async_depth", "Internal parallelization depth, the higher the value the higher the latency.", OFFSET(async_depth), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
+    { "async_depth", "Internal parallelization depth, the higher the value the higher the latency.", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
     { "scale_mode", "scale mode: 0=auto, 1=low power, 2=high quality", OFFSET(scale_mode), AV_OPT_TYPE_INT, { .i64 = MFX_SCALING_MODE_DEFAULT }, MFX_SCALING_MODE_DEFAULT, MFX_SCALING_MODE_QUALITY, .flags = FLAGS, "scale mode" },
 
     { NULL }
@@ -315,7 +310,6 @@ static int config_output(AVFilterLink *outlink)
     param.filter_frame  = NULL;
     param.num_ext_buf   = 0;
     param.ext_buf       = ext_buf;
-    param.async_depth   = vpp->async_depth;
 
     if (inlink->format == AV_PIX_FMT_QSV) {
          if (!inlink->hw_frames_ctx || !inlink->hw_frames_ctx->data)
@@ -484,8 +478,9 @@ static int config_output(AVFilterLink *outlink)
     if (vpp->use_frc || vpp->use_crop || vpp->deinterlace || vpp->denoise ||
         vpp->detail || vpp->procamp || vpp->rotate || vpp->hflip ||
         inlink->w != outlink->w || inlink->h != outlink->h || in_format != vpp->out_format)
-        return ff_qsvvpp_create(ctx, &vpp->qsv, &param);
+        return ff_qsvvpp_init(ctx, &param);
     else {
+        /* No MFX session is created in this case */
         av_log(ctx, AV_LOG_VERBOSE, "qsv vpp pass through mode.\n");
         if (inlink->hw_frames_ctx)
             outlink->hw_frames_ctx = av_buffer_ref(inlink->hw_frames_ctx);
@@ -498,33 +493,31 @@ static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
-    VPPContext *s =ctx->priv;
-    QSVVPPContext *qsv = s->qsv;
+    QSVVPPContext *qsv = ctx->priv;
     AVFrame *in = NULL;
     int ret, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    if (!s->eof) {
+    if (!qsv->eof) {
         ret = ff_inlink_consume_frame(inlink, &in);
         if (ret < 0)
             return ret;
 
         if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
             if (status == AVERROR_EOF) {
-                s->eof = 1;
+                qsv->eof = 1;
             }
         }
     }
 
-    if (qsv) {
-        if (in || s->eof) {
-            qsv->eof = s->eof;
+    if (qsv->session) {
+        if (in || qsv->eof) {
             ret = ff_qsvvpp_filter_frame(qsv, inlink, in);
             av_frame_free(&in);
 
-            if (s->eof) {
+            if (qsv->eof) {
                 ff_outlink_set_status(outlink, status, pts);
                 return 0;
             }
@@ -535,6 +528,7 @@ static int activate(AVFilterContext *ctx)
             }
         }
     } else {
+        /* No MFX session is created in pass-through mode */
         if (in) {
             if (in->pts != AV_NOPTS_VALUE)
                 in->pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base);
@@ -544,7 +538,7 @@ static int activate(AVFilterContext *ctx)
         }
     }
 
-    if (s->eof) {
+    if (qsv->eof) {
         ff_outlink_set_status(outlink, status, pts);
         return 0;
     } else {
@@ -582,9 +576,7 @@ static int query_formats(AVFilterContext *ctx)
 
 static av_cold void vpp_uninit(AVFilterContext *ctx)
 {
-    VPPContext *vpp = ctx->priv;
-
-    ff_qsvvpp_free(&vpp->qsv);
+    ff_qsvvpp_close(ctx);
 }
 
 static const AVClass vpp_class = {
