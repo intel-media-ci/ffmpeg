@@ -318,6 +318,14 @@ static int fill_frameinfo_by_link(mfxFrameInfo *frameinfo, AVFilterLink *link)
     frameinfo->CropH          = link->h;
     frameinfo->FrameRateExtN  = link->frame_rate.num;
     frameinfo->FrameRateExtD  = link->frame_rate.den;
+
+    /* Apparently VPP in the SDK requires the frame rate to be set to some value, otherwise
+     * init will fail */
+    if (frameinfo->FrameRateExtD == 0 || frameinfo->FrameRateExtN == 0) {
+        frameinfo->FrameRateExtN = 25;
+        frameinfo->FrameRateExtD = 1;
+    }
+
     frameinfo->AspectRatioW   = link->sample_aspect_ratio.num ? link->sample_aspect_ratio.num : 1;
     frameinfo->AspectRatioH   = link->sample_aspect_ratio.den ? link->sample_aspect_ratio.den : 1;
 
@@ -667,16 +675,13 @@ static int init_vpp_session(AVFilterContext *avctx, QSVVPPContext *s)
     return 0;
 }
 
-int ff_qsvvpp_create(AVFilterContext *avctx, QSVVPPContext **vpp, QSVVPPParam *param)
+int ff_qsvvpp_init(AVFilterContext *avctx, QSVVPPParam *param)
 {
     int i;
     int ret;
-    QSVVPPContext *s;
+    QSVVPPContext *s = avctx->priv;
 
-    s = av_mallocz(sizeof(*s));
-    if (!s)
-        return AVERROR(ENOMEM);
-
+    s->last_in_pts   = AV_NOPTS_VALUE;
     s->filter_frame  = param->filter_frame;
     if (!s->filter_frame)
         s->filter_frame = ff_filter_frame;
@@ -747,14 +752,13 @@ int ff_qsvvpp_create(AVFilterContext *avctx, QSVVPPContext **vpp, QSVVPPParam *p
     s->got_frame = 0;
 
     /** keep fifo size at least 1. Even when async_depth is 0, fifo is used. */
-    s->async_fifo  = av_fifo_alloc2(param->async_depth + 1, sizeof(QSVAsyncFrame), 0);
-    s->async_depth = param->async_depth;
+    s->async_fifo  = av_fifo_alloc2(s->async_depth + 1, sizeof(QSVAsyncFrame), 0);
     if (!s->async_fifo) {
         ret = AVERROR(ENOMEM);
         goto failed;
     }
 
-    s->vpp_param.AsyncDepth = param->async_depth;
+    s->vpp_param.AsyncDepth = s->async_depth;
 
     if (IS_SYSTEM_MEMORY(s->in_mem_mode))
         s->vpp_param.IOPattern |= MFX_IOPATTERN_IN_SYSTEM_MEMORY;
@@ -785,26 +789,25 @@ int ff_qsvvpp_create(AVFilterContext *avctx, QSVVPPContext **vpp, QSVVPPParam *p
     } else if (ret > 0)
         ff_qsvvpp_print_warning(avctx, ret, "Warning When creating qsvvpp");
 
-    *vpp = s;
     return 0;
 
 failed:
-    ff_qsvvpp_free(&s);
+    ff_qsvvpp_close(avctx);
 
     return ret;
 }
 
-int ff_qsvvpp_free(QSVVPPContext **vpp)
+int ff_qsvvpp_close(AVFilterContext *avctx)
 {
-    QSVVPPContext *s = *vpp;
-
-    if (!s)
-        return 0;
+    QSVVPPContext *s = avctx->priv;
 
     if (s->session) {
         MFXVideoVPP_Close(s->session);
         MFXClose(s->session);
+        s->session = NULL;
     }
+
+    s->last_in_pts = AV_NOPTS_VALUE;
 
     /* release all the resources */
     clear_frame_list(&s->in_frame_list);
@@ -816,7 +819,6 @@ int ff_qsvvpp_free(QSVVPPContext **vpp)
 #endif
     av_freep(&s->frame_infos);
     av_fifo_freep2(&s->async_fifo);
-    av_freep(vpp);
 
     return 0;
 }
@@ -828,7 +830,8 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
     QSVAsyncFrame     aframe;
     mfxSyncPoint      sync;
     QSVFrame         *in_frame, *out_frame;
-    int               ret, filter_ret;
+    int               ret, ret1, filter_ret;
+    int64_t           dpts = 0;
 
     while (s->eof && av_fifo_read(s->async_fifo, &aframe, 1) >= 0) {
         if (MFXVideoCORE_SyncOperation(s->session, aframe.sync, 1000) < 0)
@@ -874,8 +877,19 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
                 return AVERROR(EAGAIN);
             break;
         }
-        out_frame->frame->pts = av_rescale_q(out_frame->surface.Data.TimeStamp,
-                                             default_tb, outlink->time_base);
+
+        /* TODO: calculate the PTS for other cases */
+        if (s->deinterlace_enabled &&
+            s->last_in_pts != AV_NOPTS_VALUE &&
+            ret == MFX_ERR_MORE_SURFACE &&
+            out_frame->surface.Data.TimeStamp == MFX_TIMESTAMP_UNKNOWN)
+            dpts = (in_frame->frame->pts - s->last_in_pts) / 2;
+        else
+            dpts = 0;
+
+        out_frame->frame->pts = av_rescale_q(in_frame->frame->pts - dpts,
+                                             inlink->time_base,
+                                             outlink->time_base);
 
         out_frame->queued++;
         aframe = (QSVAsyncFrame){ sync, out_frame };
@@ -885,8 +899,13 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
             av_fifo_read(s->async_fifo, &aframe, 1);
 
             do {
-                ret = MFXVideoCORE_SyncOperation(s->session, aframe.sync, 1000);
-            } while (ret == MFX_WRN_IN_EXECUTION);
+                ret1 = MFXVideoCORE_SyncOperation(s->session, aframe.sync, 1000);
+            } while (ret1 == MFX_WRN_IN_EXECUTION);
+
+            if (ret1 < 0) {
+                ret = ret1;
+                break;
+            }
 
             filter_ret = s->filter_frame(outlink, aframe.frame->frame);
             if (filter_ret < 0) {
@@ -899,6 +918,8 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
             aframe.frame->frame = NULL;
         }
     } while(ret == MFX_ERR_MORE_SURFACE);
+
+    s->last_in_pts = in_frame->frame->pts;
 
     if (ret < 0)
         return ff_qsvvpp_print_error(ctx, ret, "Error running VPP");

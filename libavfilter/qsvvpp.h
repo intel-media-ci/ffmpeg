@@ -53,6 +53,8 @@ typedef struct QSVFrame {
 } QSVFrame;
 
 typedef struct QSVVPPContext {
+    const AVClass      *class;
+
     mfxSession          session;
     int (*filter_frame) (AVFilterLink *outlink, AVFrame *frame); /**< callback */
     enum AVPixelFormat  out_sw_format;   /**< Real output format */
@@ -79,8 +81,11 @@ typedef struct QSVVPPContext {
     int got_frame;
     int async_depth;
     int eof;
+    int deinterlace_enabled;
     /** order with frame_out, sync */
     AVFifo *async_fifo;
+
+    int64_t last_in_pts;
 } QSVVPPContext;
 
 typedef struct QSVVPPCrop {
@@ -102,15 +107,13 @@ typedef struct QSVVPPParam {
     /* Crop information for each input, if needed */
     int num_crop;
     QSVVPPCrop *crop;
-
-   int async_depth;
 } QSVVPPParam;
 
 /* create and initialize the QSV session */
-int ff_qsvvpp_create(AVFilterContext *avctx, QSVVPPContext **vpp, QSVVPPParam *param);
+int ff_qsvvpp_init(AVFilterContext *avctx, QSVVPPParam *param);
 
 /* release the resources (eg.surfaces) */
-int ff_qsvvpp_free(QSVVPPContext **vpp);
+int ff_qsvvpp_close(AVFilterContext *avctx);
 
 /* vpp filter frame and call the cb if needed */
 int ff_qsvvpp_filter_frame(QSVVPPContext *vpp, AVFilterLink *inlink, AVFrame *frame);

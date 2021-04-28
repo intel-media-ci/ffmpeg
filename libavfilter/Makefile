@@ -249,7 +249,7 @@ OBJS-$(CONFIG_DECONVOLVE_FILTER)             += vf_convolve.o framesync.o
 OBJS-$(CONFIG_DEDOT_FILTER)                  += vf_dedot.o
 OBJS-$(CONFIG_DEFLATE_FILTER)                += vf_neighbor.o
 OBJS-$(CONFIG_DEFLICKER_FILTER)              += vf_deflicker.o
-OBJS-$(CONFIG_DEINTERLACE_QSV_FILTER)        += vf_deinterlace_qsv.o
+OBJS-$(CONFIG_DEINTERLACE_QSV_FILTER)        += vf_vpp_qsv.o
 OBJS-$(CONFIG_DEINTERLACE_VAAPI_FILTER)      += vf_deinterlace_vaapi.o vaapi_vpp.o
 OBJS-$(CONFIG_DEJUDDER_FILTER)               += vf_dejudder.o
 OBJS-$(CONFIG_DELOGO_FILTER)                 += vf_delogo.o
@@ -433,7 +433,7 @@ OBJS-$(CONFIG_SCALE_FILTER)                  += vf_scale.o scale_eval.o
 OBJS-$(CONFIG_SCALE_CUDA_FILTER)             += vf_scale_cuda.o scale_eval.o \
                                                 vf_scale_cuda.ptx.o cuda/load_helper.o
 OBJS-$(CONFIG_SCALE_NPP_FILTER)              += vf_scale_npp.o scale_eval.o
-OBJS-$(CONFIG_SCALE_QSV_FILTER)              += vf_scale_qsv.o
+OBJS-$(CONFIG_SCALE_QSV_FILTER)              += vf_vpp_qsv.o
 OBJS-$(CONFIG_SCALE_VAAPI_FILTER)            += vf_scale_vaapi.o scale_eval.o vaapi_vpp.o
 OBJS-$(CONFIG_SCALE_VULKAN_FILTER)           += vf_scale_vulkan.o vulkan.o vulkan_filter.o
 OBJS-$(CONFIG_SCALE2REF_FILTER)              += vf_scale.o scale_eval.o
