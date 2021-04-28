@@ -735,7 +735,9 @@ static const AVOption qsvdeint_options[] = {
 static int qsvdeint_query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat pixel_formats[] = {
-        AV_PIX_FMT_QSV, AV_PIX_FMT_NONE,
+        AV_PIX_FMT_NV12,
+        AV_PIX_FMT_QSV,
+        AV_PIX_FMT_NONE,
     };
 
     return ff_set_common_formats_from_list(ctx, pixel_formats);
