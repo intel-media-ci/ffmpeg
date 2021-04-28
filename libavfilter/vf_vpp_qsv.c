@@ -728,6 +728,7 @@ static const AVOption qsvdeint_options[] = {
     { "field", "Output at field rate (one frame of output for each field)",
       0, AV_OPT_TYPE_CONST, { .i64 = 2 }, 0, 0, FLAGS, "rate" },
 
+    { "async_depth", "Internal parallelization depth, the higher the value the higher the latency.", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
     { NULL },
 };
 
