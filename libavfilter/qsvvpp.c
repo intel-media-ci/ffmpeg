@@ -653,6 +653,7 @@ int ff_qsvvpp_init(AVFilterContext *avctx, QSVVPPParam *param)
     int ret;
     QSVVPPContext *s = avctx->priv;
 
+    s->last_in_pts   = AV_NOPTS_VALUE;
     s->filter_frame  = param->filter_frame;
     if (!s->filter_frame)
         s->filter_frame = ff_filter_frame;
@@ -769,6 +770,8 @@ int ff_qsvvpp_close(AVFilterContext *avctx)
         s->session = NULL;
     }
 
+    s->last_in_pts = AV_NOPTS_VALUE;
+
     /* release all the resources */
     clear_frame_list(&s->in_frame_list);
     clear_frame_list(&s->out_frame_list);
@@ -788,6 +791,7 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
     mfxSyncPoint      sync;
     QSVFrame         *in_frame, *out_frame, *tmp;
     int               ret, ret1, filter_ret;
+    int64_t           dpts = 0;
 
     while (s->eof && qsv_fifo_size(s->async_fifo)) {
         av_fifo_generic_read(s->async_fifo, &tmp, sizeof(tmp), NULL);
@@ -836,8 +840,19 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
                 ret = AVERROR(EAGAIN);
             break;
         }
-        out_frame->frame->pts = av_rescale_q(out_frame->surface.Data.TimeStamp,
-                                             default_tb, outlink->time_base);
+
+        /* TODO: calculate the PTS for other cases */
+        if (s->deinterlace_enabled &&
+            s->last_in_pts != AV_NOPTS_VALUE &&
+            ret == MFX_ERR_MORE_SURFACE &&
+            out_frame->surface.Data.TimeStamp == MFX_TIMESTAMP_UNKNOWN)
+            dpts = (in_frame->frame->pts - s->last_in_pts) / 2;
+        else
+            dpts = 0;
+
+        out_frame->frame->pts = av_rescale_q(in_frame->frame->pts - dpts,
+                                             inlink->time_base,
+                                             outlink->time_base);
 
         out_frame->queued++;
         av_fifo_generic_write(s->async_fifo, &out_frame, sizeof(out_frame), NULL);
@@ -869,6 +884,8 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
             tmp->frame = NULL;
         }
     } while(ret == MFX_ERR_MORE_SURFACE);
+
+    s->last_in_pts = in_frame->frame->pts;
 
     return ret;
 }
