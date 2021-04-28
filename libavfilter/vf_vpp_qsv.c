@@ -706,3 +706,22 @@ static const AVOption qsvscale_options[] = {
 };
 
 DEFINE_QSV_FILTER(qsvscale, scale, "scaling and format conversion")
+
+static const AVOption qsvdeint_options[] = {
+    { "mode", "set deinterlace mode", OFFSET(deinterlace),   AV_OPT_TYPE_INT, {.i64 = MFX_DEINTERLACING_ADVANCED}, MFX_DEINTERLACING_BOB, MFX_DEINTERLACING_ADVANCED, FLAGS, "mode"},
+    { "bob",   "bob algorithm",                  0, AV_OPT_TYPE_CONST,      {.i64 = MFX_DEINTERLACING_BOB}, MFX_DEINTERLACING_BOB, MFX_DEINTERLACING_ADVANCED, FLAGS, "mode"},
+    { "advanced", "Motion adaptive algorithm",   0, AV_OPT_TYPE_CONST, {.i64 = MFX_DEINTERLACING_ADVANCED}, MFX_DEINTERLACING_BOB, MFX_DEINTERLACING_ADVANCED, FLAGS, "mode"},
+    { NULL },
+};
+
+static int qsvdeint_query_formats(AVFilterContext *ctx)
+{
+    static const enum AVPixelFormat pixel_formats[] = {
+        AV_PIX_FMT_QSV, AV_PIX_FMT_NONE,
+    };
+    AVFilterFormats *pix_fmts  = ff_make_format_list(pixel_formats);
+
+    return ff_set_common_formats(ctx, pix_fmts);
+}
+
+DEFINE_QSV_FILTER(qsvdeint, deinterlace, "deinterlacing")
