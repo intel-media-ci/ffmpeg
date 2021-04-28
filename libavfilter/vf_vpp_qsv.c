@@ -673,7 +673,10 @@ DEFINE_QSV_FILTER(vpp, vpp, "VPP");
 static int qsvscale_query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat pixel_formats[] = {
-        AV_PIX_FMT_QSV, AV_PIX_FMT_NONE,
+        AV_PIX_FMT_NV12,
+        AV_PIX_FMT_P010,
+        AV_PIX_FMT_QSV,
+        AV_PIX_FMT_NONE,
     };
 
     return ff_set_common_formats_from_list(ctx, pixel_formats);
