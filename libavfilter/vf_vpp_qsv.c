@@ -255,10 +255,14 @@ static int config_input(AVFilterLink *inlink)
     int              ret;
     int64_t          ow, oh;
 
-    if (vpp->framerate.den == 0 || vpp->framerate.num == 0)
+    /* Ignore user's setting for framerate when deinterlacing is used */
+    if (vpp->deinterlace)
+        vpp->framerate = av_mul_q(inlink->frame_rate,
+                                  (AVRational){ 2, 1 });
+    else if (vpp->framerate.den == 0 || vpp->framerate.num == 0)
         vpp->framerate = inlink->frame_rate;
 
-    if (av_cmp_q(vpp->framerate, inlink->frame_rate))
+    if (!vpp->deinterlace && av_cmp_q(vpp->framerate, inlink->frame_rate))
         vpp->use_frc = 1;
 
     ret = eval_expr(ctx);
