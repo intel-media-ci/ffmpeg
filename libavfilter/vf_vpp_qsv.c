@@ -667,3 +667,57 @@ const AVFilter ff_vf_vpp_qsv = {
     .priv_class    = &vpp_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };
+
+static int qsvscale_query_formats(AVFilterContext *ctx)
+{
+    static const enum AVPixelFormat pixel_formats[] = {
+        AV_PIX_FMT_QSV, AV_PIX_FMT_NONE,
+    };
+
+    return ff_set_common_formats_from_list(ctx, pixel_formats);
+}
+
+static const AVOption qsvscale_options[] = {
+    { "w",      "Output video width(0=input video width, -1=keep input video aspect)",  OFFSET(ow), AV_OPT_TYPE_STRING, { .str = "iw"   }, .flags = FLAGS },
+    { "h",      "Output video height(0=input video height, -1=keep input video aspect)", OFFSET(oh), AV_OPT_TYPE_STRING, { .str = "ih"   }, .flags = FLAGS },
+    { "format", "Output pixel format", OFFSET(output_format_str), AV_OPT_TYPE_STRING, { .str = "same" }, .flags = FLAGS },
+
+#if QSV_HAVE_SCALING_CONFIG
+    { "mode",      "set scaling mode",    OFFSET(scale_mode),    AV_OPT_TYPE_INT,    { .i64 = MFX_SCALING_MODE_DEFAULT}, MFX_SCALING_MODE_DEFAULT, MFX_SCALING_MODE_QUALITY, FLAGS, "mode"},
+    { "low_power", "low power mode",        0,             AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_LOWPOWER}, INT_MIN, INT_MAX, FLAGS, "mode"},
+    { "hq",        "high quality mode",     0,             AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_QUALITY},  INT_MIN, INT_MAX, FLAGS, "mode"},
+#else
+    { "mode",      "(not supported)",     OFFSET(scale_mode),    AV_OPT_TYPE_INT,    { .i64 = 0}, 0, INT_MAX, FLAGS, "mode"},
+    { "low_power", "",                      0,             AV_OPT_TYPE_CONST,  { .i64 = 1}, 0,   0,     FLAGS, "mode"},
+    { "hq",        "",                      0,             AV_OPT_TYPE_CONST,  { .i64 = 2}, 0,   0,     FLAGS, "mode"},
+#endif
+
+    { NULL },
+};
+
+static const AVClass qsvscale_class = {
+    .class_name = "scale_qsv",
+    .item_name  = av_default_item_name,
+    .option     = qsvscale_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+const AVFilter ff_vf_scale_qsv = {
+    .name               = "scale_qsv",
+    .description        = NULL_IF_CONFIG_SMALL("Quick Sync Video scaling and format conversion"),
+
+    .preinit            = vpp_preinit,
+    .init               = vpp_init,
+    .uninit             = vpp_uninit,
+    .query_formats      = qsvscale_query_formats,
+
+    .priv_size          = sizeof(VPPContext),
+    .priv_class         = &qsvscale_class,
+
+    FILTER_INPUTS(vpp_inputs),
+    FILTER_OUTPUTS(vpp_outputs),
+
+    .activate           = activate,
+
+    .flags_internal     = FF_FILTER_FLAG_HWFRAME_AWARE,
+};
