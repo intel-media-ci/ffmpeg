@@ -105,55 +105,6 @@ typedef struct VPPContext{
     char *output_format_str;
 } VPPContext;
 
-static const AVOption options[] = {
-    { "deinterlace", "deinterlace mode: 0=off, 1=bob, 2=advanced", OFFSET(deinterlace), AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, MFX_DEINTERLACING_ADVANCED, .flags = FLAGS, "deinterlace" },
-    { "bob",         "Bob deinterlace mode.",                      0,                   AV_OPT_TYPE_CONST,    { .i64 = MFX_DEINTERLACING_BOB },            .flags = FLAGS, "deinterlace" },
-    { "advanced",    "Advanced deinterlace mode. ",                0,                   AV_OPT_TYPE_CONST,    { .i64 = MFX_DEINTERLACING_ADVANCED },       .flags = FLAGS, "deinterlace" },
-
-    { "denoise",     "denoise level [0, 100]",       OFFSET(denoise),     AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, 100, .flags = FLAGS },
-    { "detail",      "enhancement level [0, 100]",   OFFSET(detail),      AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, 100, .flags = FLAGS },
-    { "framerate",   "output framerate",             OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, { .dbl = 0.0 },0, DBL_MAX, .flags = FLAGS },
-    { "procamp",     "Enable ProcAmp",               OFFSET(procamp),     AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, 1, .flags = FLAGS},
-    { "hue",         "ProcAmp hue",                  OFFSET(hue),         AV_OPT_TYPE_FLOAT,    { .dbl = 0.0 }, -180.0, 180.0, .flags = FLAGS},
-    { "saturation",  "ProcAmp saturation",           OFFSET(saturation),  AV_OPT_TYPE_FLOAT,    { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS},
-    { "contrast",    "ProcAmp contrast",             OFFSET(contrast),    AV_OPT_TYPE_FLOAT,    { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS},
-    { "brightness",  "ProcAmp brightness",           OFFSET(brightness),  AV_OPT_TYPE_FLOAT,    { .dbl = 0.0 }, -100.0, 100.0, .flags = FLAGS},
-
-    { "transpose",  "set transpose direction",       OFFSET(transpose),   AV_OPT_TYPE_INT,      { .i64 = -1 }, -1, 6, FLAGS, "transpose"},
-        { "cclock_hflip",  "rotate counter-clockwise with horizontal flip",  0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_CCLOCK_FLIP }, .flags=FLAGS, .unit = "transpose" },
-        { "clock",         "rotate clockwise",                               0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_CLOCK       }, .flags=FLAGS, .unit = "transpose" },
-        { "cclock",        "rotate counter-clockwise",                       0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_CCLOCK      }, .flags=FLAGS, .unit = "transpose" },
-        { "clock_hflip",   "rotate clockwise with horizontal flip",          0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_CLOCK_FLIP  }, .flags=FLAGS, .unit = "transpose" },
-        { "reversal",      "rotate by half-turn",                            0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_REVERSAL    }, .flags=FLAGS, .unit = "transpose" },
-        { "hflip",         "flip horizontally",                              0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_HFLIP       }, .flags=FLAGS, .unit = "transpose" },
-        { "vflip",         "flip vertically",                                0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_VFLIP       }, .flags=FLAGS, .unit = "transpose" },
-
-    { "cw",   "set the width crop area expression",   OFFSET(cw), AV_OPT_TYPE_STRING, { .str = "iw" }, 0, 0, FLAGS },
-    { "ch",   "set the height crop area expression",  OFFSET(ch), AV_OPT_TYPE_STRING, { .str = "ih" }, 0, 0, FLAGS },
-    { "cx",   "set the x crop area expression",       OFFSET(cx), AV_OPT_TYPE_STRING, { .str = "(in_w-out_w)/2" }, 0, 0, FLAGS },
-    { "cy",   "set the y crop area expression",       OFFSET(cy), AV_OPT_TYPE_STRING, { .str = "(in_h-out_h)/2" }, 0, 0, FLAGS },
-
-    { "w",      "Output video width(0=input video width, -1=keep input video aspect)",  OFFSET(ow), AV_OPT_TYPE_STRING, { .str="cw" }, 0, 255, .flags = FLAGS },
-    { "width",  "Output video width(0=input video width, -1=keep input video aspect)",  OFFSET(ow), AV_OPT_TYPE_STRING, { .str="cw" }, 0, 255, .flags = FLAGS },
-    { "h",      "Output video height(0=input video height, -1=keep input video aspect)", OFFSET(oh), AV_OPT_TYPE_STRING, { .str="w*ch/cw" }, 0, 255, .flags = FLAGS },
-    { "height", "Output video height(0=input video height, -1=keep input video aspect)", OFFSET(oh), AV_OPT_TYPE_STRING, { .str="w*ch/cw" }, 0, 255, .flags = FLAGS },
-    { "format", "Output pixel format", OFFSET(output_format_str), AV_OPT_TYPE_STRING, { .str = "same" }, .flags = FLAGS },
-    { "async_depth", "Internal parallelization depth, the higher the value the higher the latency.", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
-#if QSV_HAVE_SCALING_CONFIG
-    { "scale_mode", "scale mode", OFFSET(scale_mode), AV_OPT_TYPE_INT, { .i64 = MFX_SCALING_MODE_DEFAULT }, MFX_SCALING_MODE_DEFAULT, MFX_SCALING_MODE_QUALITY, .flags = FLAGS, "scale mode" },
-    { "auto",      "auto mode",             0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_DEFAULT},  INT_MIN, INT_MAX, FLAGS, "scale mode"},
-    { "low_power", "low power mode",        0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_LOWPOWER}, INT_MIN, INT_MAX, FLAGS, "scale mode"},
-    { "hq",        "high quality mode",     0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_QUALITY},  INT_MIN, INT_MAX, FLAGS, "scale mode"},
-#else
-    { "scale_mode", "(not supported)",        OFFSET(scale_mode), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS, "scale mode" },
-    { "auto",      "",                      0,    AV_OPT_TYPE_CONST,  { .i64 = 0}, 0,   0,     FLAGS, "scale mode"},
-    { "low_power", "",                      0,    AV_OPT_TYPE_CONST,  { .i64 = 1}, 0,   0,     FLAGS, "scale mode"},
-    { "hq",        "",                      0,    AV_OPT_TYPE_CONST,  { .i64 = 2}, 0,   0,     FLAGS, "scale mode"},
-#endif
-
-    { NULL }
-};
-
 static const char *const var_names[] = {
     "iw", "in_w",
     "ih", "in_h",
@@ -599,7 +550,99 @@ static int activate(AVFilterContext *ctx)
     return FFERROR_NOT_READY;
 }
 
-static int query_formats(AVFilterContext *ctx)
+static av_cold void vpp_uninit(AVFilterContext *ctx)
+{
+    ff_qsvvpp_close(ctx);
+}
+
+static const AVFilterPad vpp_inputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_VIDEO,
+        .config_props  = config_input,
+    },
+};
+
+static const AVFilterPad vpp_outputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_VIDEO,
+        .config_props  = config_output,
+    },
+};
+
+#define DEFINE_QSV_FILTER(x, sn, ln) \
+static const AVClass x##_class = { \
+    .class_name = #sn "_qsv", \
+    .item_name  = av_default_item_name, \
+    .option     = x##_options, \
+    .version    = LIBAVUTIL_VERSION_INT, \
+}; \
+const AVFilter ff_vf_##sn##_qsv = { \
+    .name           = #sn "_qsv", \
+    .description    = NULL_IF_CONFIG_SMALL("Quick Sync Video " #ln), \
+    .preinit        = vpp_preinit, \
+    .init           = vpp_init, \
+    .uninit         = vpp_uninit, \
+    .query_formats  = x##_query_formats, \
+    .priv_size      = sizeof(VPPContext), \
+    .priv_class     = &x##_class, \
+    FILTER_INPUTS(vpp_inputs), \
+    FILTER_OUTPUTS(vpp_outputs), \
+    .activate       = activate, \
+    .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE, \
+};
+
+static const AVOption vpp_options[] = {
+    { "deinterlace", "deinterlace mode: 0=off, 1=bob, 2=advanced", OFFSET(deinterlace), AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, MFX_DEINTERLACING_ADVANCED, .flags = FLAGS, "deinterlace" },
+    { "bob",         "Bob deinterlace mode.",                      0,                   AV_OPT_TYPE_CONST,    { .i64 = MFX_DEINTERLACING_BOB },            .flags = FLAGS, "deinterlace" },
+    { "advanced",    "Advanced deinterlace mode. ",                0,                   AV_OPT_TYPE_CONST,    { .i64 = MFX_DEINTERLACING_ADVANCED },       .flags = FLAGS, "deinterlace" },
+
+    { "denoise",     "denoise level [0, 100]",       OFFSET(denoise),     AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, 100, .flags = FLAGS },
+    { "detail",      "enhancement level [0, 100]",   OFFSET(detail),      AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, 100, .flags = FLAGS },
+    { "framerate",   "output framerate",             OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, { .dbl = 0.0 },0, DBL_MAX, .flags = FLAGS },
+    { "procamp",     "Enable ProcAmp",               OFFSET(procamp),     AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, 1, .flags = FLAGS},
+    { "hue",         "ProcAmp hue",                  OFFSET(hue),         AV_OPT_TYPE_FLOAT,    { .dbl = 0.0 }, -180.0, 180.0, .flags = FLAGS},
+    { "saturation",  "ProcAmp saturation",           OFFSET(saturation),  AV_OPT_TYPE_FLOAT,    { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS},
+    { "contrast",    "ProcAmp contrast",             OFFSET(contrast),    AV_OPT_TYPE_FLOAT,    { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS},
+    { "brightness",  "ProcAmp brightness",           OFFSET(brightness),  AV_OPT_TYPE_FLOAT,    { .dbl = 0.0 }, -100.0, 100.0, .flags = FLAGS},
+
+    { "transpose",  "set transpose direction",       OFFSET(transpose),   AV_OPT_TYPE_INT,      { .i64 = -1 }, -1, 6, FLAGS, "transpose"},
+        { "cclock_hflip",  "rotate counter-clockwise with horizontal flip",  0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_CCLOCK_FLIP }, .flags=FLAGS, .unit = "transpose" },
+        { "clock",         "rotate clockwise",                               0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_CLOCK       }, .flags=FLAGS, .unit = "transpose" },
+        { "cclock",        "rotate counter-clockwise",                       0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_CCLOCK      }, .flags=FLAGS, .unit = "transpose" },
+        { "clock_hflip",   "rotate clockwise with horizontal flip",          0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_CLOCK_FLIP  }, .flags=FLAGS, .unit = "transpose" },
+        { "reversal",      "rotate by half-turn",                            0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_REVERSAL    }, .flags=FLAGS, .unit = "transpose" },
+        { "hflip",         "flip horizontally",                              0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_HFLIP       }, .flags=FLAGS, .unit = "transpose" },
+        { "vflip",         "flip vertically",                                0, AV_OPT_TYPE_CONST, { .i64 = TRANSPOSE_VFLIP       }, .flags=FLAGS, .unit = "transpose" },
+
+    { "cw",   "set the width crop area expression",   OFFSET(cw), AV_OPT_TYPE_STRING, { .str = "iw" }, 0, 0, FLAGS },
+    { "ch",   "set the height crop area expression",  OFFSET(ch), AV_OPT_TYPE_STRING, { .str = "ih" }, 0, 0, FLAGS },
+    { "cx",   "set the x crop area expression",       OFFSET(cx), AV_OPT_TYPE_STRING, { .str = "(in_w-out_w)/2" }, 0, 0, FLAGS },
+    { "cy",   "set the y crop area expression",       OFFSET(cy), AV_OPT_TYPE_STRING, { .str = "(in_h-out_h)/2" }, 0, 0, FLAGS },
+
+    { "w",      "Output video width(0=input video width, -1=keep input video aspect)",  OFFSET(ow), AV_OPT_TYPE_STRING, { .str="cw" }, 0, 255, .flags = FLAGS },
+    { "width",  "Output video width(0=input video width, -1=keep input video aspect)",  OFFSET(ow), AV_OPT_TYPE_STRING, { .str="cw" }, 0, 255, .flags = FLAGS },
+    { "h",      "Output video height(0=input video height, -1=keep input video aspect)", OFFSET(oh), AV_OPT_TYPE_STRING, { .str="w*ch/cw" }, 0, 255, .flags = FLAGS },
+    { "height", "Output video height(0=input video height, -1=keep input video aspect)", OFFSET(oh), AV_OPT_TYPE_STRING, { .str="w*ch/cw" }, 0, 255, .flags = FLAGS },
+    { "format", "Output pixel format", OFFSET(output_format_str), AV_OPT_TYPE_STRING, { .str = "same" }, .flags = FLAGS },
+    { "async_depth", "Internal parallelization depth, the higher the value the higher the latency.", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
+#if QSV_HAVE_SCALING_CONFIG
+    { "scale_mode", "scale mode", OFFSET(scale_mode), AV_OPT_TYPE_INT, { .i64 = MFX_SCALING_MODE_DEFAULT }, MFX_SCALING_MODE_DEFAULT, MFX_SCALING_MODE_QUALITY, .flags = FLAGS, "scale mode" },
+    { "auto",      "auto mode",             0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_DEFAULT},  INT_MIN, INT_MAX, FLAGS, "scale mode"},
+    { "low_power", "low power mode",        0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_LOWPOWER}, INT_MIN, INT_MAX, FLAGS, "scale mode"},
+    { "hq",        "high quality mode",     0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_QUALITY},  INT_MIN, INT_MAX, FLAGS, "scale mode"},
+#else
+    { "scale_mode", "(not supported)",        OFFSET(scale_mode), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS, "scale mode" },
+    { "auto",      "",                      0,    AV_OPT_TYPE_CONST,  { .i64 = 0}, 0,   0,     FLAGS, "scale mode"},
+    { "low_power", "",                      0,    AV_OPT_TYPE_CONST,  { .i64 = 1}, 0,   0,     FLAGS, "scale mode"},
+    { "hq",        "",                      0,    AV_OPT_TYPE_CONST,  { .i64 = 2}, 0,   0,     FLAGS, "scale mode"},
+#endif
+
+    { NULL }
+};
+
+static int vpp_query_formats(AVFilterContext *ctx)
 {
     int ret;
     static const enum AVPixelFormat in_pix_fmts[] = {
@@ -625,48 +668,7 @@ static int query_formats(AVFilterContext *ctx)
                           &ctx->outputs[0]->incfg.formats);
 }
 
-static av_cold void vpp_uninit(AVFilterContext *ctx)
-{
-    ff_qsvvpp_close(ctx);
-}
-
-static const AVClass vpp_class = {
-    .class_name = "vpp_qsv",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
-static const AVFilterPad vpp_inputs[] = {
-    {
-        .name          = "default",
-        .type          = AVMEDIA_TYPE_VIDEO,
-        .config_props  = config_input,
-    },
-};
-
-static const AVFilterPad vpp_outputs[] = {
-    {
-        .name          = "default",
-        .type          = AVMEDIA_TYPE_VIDEO,
-        .config_props  = config_output,
-    },
-};
-
-const AVFilter ff_vf_vpp_qsv = {
-    .name          = "vpp_qsv",
-    .description   = NULL_IF_CONFIG_SMALL("Quick Sync Video VPP."),
-    .priv_size     = sizeof(VPPContext),
-    .query_formats = query_formats,
-    .preinit       = vpp_preinit,
-    .init          = vpp_init,
-    .uninit        = vpp_uninit,
-    FILTER_INPUTS(vpp_inputs),
-    FILTER_OUTPUTS(vpp_outputs),
-    .activate      = activate,
-    .priv_class    = &vpp_class,
-    .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
-};
+DEFINE_QSV_FILTER(vpp, vpp, "VPP");
 
 static int qsvscale_query_formats(AVFilterContext *ctx)
 {
@@ -695,29 +697,4 @@ static const AVOption qsvscale_options[] = {
     { NULL },
 };
 
-static const AVClass qsvscale_class = {
-    .class_name = "scale_qsv",
-    .item_name  = av_default_item_name,
-    .option     = qsvscale_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
-const AVFilter ff_vf_scale_qsv = {
-    .name               = "scale_qsv",
-    .description        = NULL_IF_CONFIG_SMALL("Quick Sync Video scaling and format conversion"),
-
-    .preinit            = vpp_preinit,
-    .init               = vpp_init,
-    .uninit             = vpp_uninit,
-    .query_formats      = qsvscale_query_formats,
-
-    .priv_size          = sizeof(VPPContext),
-    .priv_class         = &qsvscale_class,
-
-    FILTER_INPUTS(vpp_inputs),
-    FILTER_OUTPUTS(vpp_outputs),
-
-    .activate           = activate,
-
-    .flags_internal     = FF_FILTER_FLAG_HWFRAME_AWARE,
-};
+DEFINE_QSV_FILTER(qsvscale, scale, "scaling and format conversion")
