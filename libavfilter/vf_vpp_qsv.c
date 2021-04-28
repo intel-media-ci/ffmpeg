@@ -365,6 +365,8 @@ static int config_output(AVFilterLink *outlink)
         vpp->extbuf.field = value; \
     } while (0)
 
+    vpp->qsv.deinterlace_enabled = !!vpp->deinterlace;
+
     if (vpp->deinterlace) {
         INIT_MFX_EXTBUF(deinterlace_conf, MFX_EXTBUFF_VPP_DEINTERLACING);
         SET_MFX_PARAM_FIELD(deinterlace_conf, Mode, (vpp->deinterlace == 1 ?
