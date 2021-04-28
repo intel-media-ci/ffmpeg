@@ -43,9 +43,10 @@
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM)
 
 /* number of video enhancement filters */
-#define ENH_FILTERS_COUNT (7)
+#define ENH_FILTERS_COUNT (8)
 #define QSV_HAVE_ROTATION  QSV_VERSION_ATLEAST(1, 17)
 #define QSV_HAVE_MIRRORING QSV_VERSION_ATLEAST(1, 19)
+#define QSV_HAVE_SCALING   QSV_VERSION_ATLEAST(1, 19)
 
 typedef struct VPPContext{
     QSVVPPContext qsv;
@@ -58,6 +59,9 @@ typedef struct VPPContext{
     mfxExtVPPProcAmp procamp_conf;
     mfxExtVPPRotation rotation_conf;
     mfxExtVPPMirroring mirroring_conf;
+#if QSV_HAVE_SCALING
+    mfxExtVPPScaling scaling_conf;
+#endif
 
     /**
      * New dimensions. Special values are:
@@ -97,6 +101,8 @@ typedef struct VPPContext{
     char *cx, *cy, *cw, *ch;
     char *ow, *oh;
     char *output_format_str;
+
+    int scaling_mode;
 } VPPContext;
 
 static const AVOption options[] = {
@@ -480,6 +486,17 @@ static int config_output(AVFilterLink *outlink)
         av_log(ctx, AV_LOG_WARNING, "The QSV VPP hflip option is "
             "not supported with this MSDK version.\n");
         vpp->hflip = 0;
+#endif
+    }
+
+    if (vpp->scaling_mode) {
+#ifdef QSV_HAVE_SCALING
+        INIT_MFX_EXTBUF(scaling_conf, MFX_EXTBUFF_VPP_SCALING);
+        SET_MFX_PARAM_FIELD(scaling_conf, ScalingMode, vpp->scaling_mode);
+#else
+        av_log(ctx, AV_LOG_WARNING, "The scaling_mode option is "
+            "not supported with this MSDK version.\n");
+        vpp->scaling_mode = 0;
 #endif
     }
 
