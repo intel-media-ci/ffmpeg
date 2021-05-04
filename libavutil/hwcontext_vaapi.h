@@ -58,6 +58,12 @@ enum {
      * and the results of the vaQuerySurfaceAttributes() call will be faked.
      */
     AV_VAAPI_DRIVER_QUIRK_SURFACE_ATTRIBUTES = (1 << 3),
+
+    /**
+     * The driver does not support dynamically frame pool resizing.
+     * We need to provide all va surfaces at vaCreateContext
+     */
+    AV_VAAPI_DRIVER_QUIRK_FRAME_POOL_RESIZING = (1 << 4),
 };
 
 /**
