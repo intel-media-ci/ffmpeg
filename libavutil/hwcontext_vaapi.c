@@ -331,23 +331,26 @@ static const struct {
     const char *match_string;
     unsigned int quirks;
 } vaapi_driver_quirks_table[] = {
-#if !VA_CHECK_VERSION(1, 0, 0)
-    // The i965 driver did not conform before version 2.0.
+    // The i965 driver did not conform RENDER_PARAM_BUFFERS before version 2.0.
     {
         "Intel i965 (Quick Sync)",
         "i965",
-        AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS,
-    },
+#if !VA_CHECK_VERSION(1, 0, 0)
+        AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS | AV_VAAPI_DRIVER_QUIRK_FRAME_POOL_RESIZING,
+#else
+        AV_VAAPI_DRIVER_QUIRK_FRAME_POOL_RESIZING,
 #endif
+    },
+
     {
         "Intel iHD",
         "ubit",
-        AV_VAAPI_DRIVER_QUIRK_ATTRIB_MEMTYPE,
+        AV_VAAPI_DRIVER_QUIRK_ATTRIB_MEMTYPE | AV_VAAPI_DRIVER_QUIRK_FRAME_POOL_RESIZING,
     },
     {
         "VDPAU wrapper",
         "Splitted-Desktop Systems VDPAU backend for VA-API",
-        AV_VAAPI_DRIVER_QUIRK_SURFACE_ATTRIBUTES,
+        AV_VAAPI_DRIVER_QUIRK_SURFACE_ATTRIBUTES | AV_VAAPI_DRIVER_QUIRK_FRAME_POOL_RESIZING,
     },
 };
 
