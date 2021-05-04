@@ -475,8 +475,11 @@ static AVBufferRef *vaapi_pool_alloc(void *opaque, size_t size)
     AVBufferRef *ref;
 
     if (hwfc->initial_pool_size > 0 &&
-        avfc->nb_surfaces >= hwfc->initial_pool_size)
+        avfc->nb_surfaces >= hwfc->initial_pool_size) {
+        av_log(hwfc, AV_LOG_ERROR, "allocated surfaces count(%d) > pool_size(%d)\n",
+               avfc->nb_surfaces,  hwfc->initial_pool_size);
         return NULL;
+    }
 
     vas = vaCreateSurfaces(hwctx->display, ctx->rt_format,
                            hwfc->width, hwfc->height,
