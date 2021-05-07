@@ -6,6 +6,7 @@ DNNTESTPROGS += dnn-layer-mathbinary
 DNNTESTPROGS += dnn-layer-maximum
 DNNTESTPROGS += dnn-layer-mathunary
 DNNTESTPROGS += dnn-layer-avgpool
+DNNTESTPROGS += dnn-layer-batchnormalization
 
 DNNTESTOBJS  := $(DNNTESTOBJS:%=$(DNNTESTSDIR)%) $(DNNTESTPROGS:%=$(DNNTESTSDIR)/%-test.o)
 DNNTESTPROGS := $(DNNTESTPROGS:%=$(DNNTESTSDIR)/%-test$(EXESUF))

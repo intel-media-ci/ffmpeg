@@ -38,6 +38,11 @@ fate-dnn-layer-avgpool: $(DNNTESTSDIR)/dnn-layer-avgpool-test$(EXESUF)
 fate-dnn-layer-avgpool: CMD = run $(DNNTESTSDIR)/dnn-layer-avgpool-test$(EXESUF)
 fate-dnn-layer-avgpool: CMP = null
 
+FATE_DNN += fate-dnn-layer-batchnormalization
+fate-dnn-layer-batchnormalization: $(DNNTESTSDIR)/dnn-layer-batchnormalization-test$(EXESUF)
+fate-dnn-layer-batchnormalization: CMD = run $(DNNTESTSDIR)/dnn-layer-batchnormalization-test$(EXESUF)
+fate-dnn-layer-batchnormalization: CMP = null
+
 FATE-$(CONFIG_DNN) += $(FATE_DNN)
 
 fate-dnn: $(FATE_DNN)

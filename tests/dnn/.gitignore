@@ -6,3 +6,4 @@
 /dnn-layer-mathunary-test
 /dnn-layer-avgpool-test
 /dnn-layer-dense-test
+/dnn-layer-batchnormalization-test
