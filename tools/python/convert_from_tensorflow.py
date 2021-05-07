@@ -74,7 +74,8 @@ class TFConverter:
         self.dense_scope_names = set()
         self.dense_scopename_inputname_dict = {}
         self.op2code = {'Conv2D':1, 'DepthToSpace':2, 'MirrorPad':3, 'Maximum':4,
-                        'MathBinary':5, 'MathUnary':6, 'AvgPool':7, 'MatMul':8}
+                        'MathBinary':5, 'MathUnary':6, 'AvgPool':7, 'MatMul':8,
+                        'BatchNormalization':9}
         self.mathbin2code = {'Sub':0, 'Add':1, 'Mul':2, 'RealDiv':3, 'Minimum':4, 'FloorMod':5}
         self.mathun2code  = {'Abs':0, 'Sin':1, 'Cos':2, 'Tan':3, 'Asin':4,
                 'Acos':5, 'Atan':6, 'Sinh':7, 'Cosh':8, 'Tanh':9, 'Asinh':10,
@@ -82,6 +83,8 @@ class TFConverter:
                 'Exp':16}
         self.mirrorpad_mode = {'CONSTANT':0, 'REFLECT':1, 'SYMMETRIC':2}
         self.name_operand_dict = {}
+        self.batchnorm_scope_names = set()
+        self.batchnorm_scopename_inputname_dict = {}
 
 
     def add_operand(self, name, type):
@@ -143,6 +146,29 @@ class TFConverter:
         else:
             anode = None
         return knode, bnode, anode
+
+
+    def get_batchnorm_params(self, batchnorm_scope_name):
+        variance_node_name = self.name_node_dict[batchnorm_scope_name + '/add'].input[0]
+        variance_eps_node_name = self.name_node_dict[batchnorm_scope_name + '/add'].input[1]
+        scale_node_name = self.name_node_dict[batchnorm_scope_name + '/mul'].input[1]
+        mean_node_name = self.name_node_dict[batchnorm_scope_name + '/mul_2'].input[0]
+        offset_node_name = self.name_node_dict[batchnorm_scope_name + '/sub'].input[0]
+
+        variance_node = self.name_node_dict[variance_node_name]
+        variance_eps_node = self.name_node_dict[variance_eps_node_name]
+        scale_node = self.name_node_dict[scale_node_name]
+        mean_node = self.name_node_dict[mean_node_name]
+        offset_node = self.name_node_dict[offset_node_name]
+        # the add_1 name is possible be changed into the output name,
+        # if the add_1 name is not in self.name_node_dict, and sub.next is the last op which is Identity
+        if batchnorm_scope_name + '/add_1' in self.name_node_dict:
+            output_node = self.name_node_dict[batchnorm_scope_name + '/add_1']
+        elif batchnorm_scope_name + '/sub' in self.edges:
+            output_node = self.edges[batchnorm_scope_name + '/sub'][0]
+        else:
+            output_node = None
+        return variance_node, variance_eps_node, scale_node, mean_node, offset_node, output_node
 
 
     def dump_complex_conv2d_to_file(self, node, f):
@@ -372,6 +398,38 @@ class TFConverter:
         np.array([output_operand_index],dtype=np.uint32).tofile(f)
 
 
+    def dump_batchnormalization_to_file(self, node, f):
+        self.layer_number = self.layer_number + 1
+        self.converted_nodes.add(node.name)
+        scope_name = TFConverter.get_scope_name(node.name)
+        variance_node, variance_eps_node, scale_node, mean_node, offset_node, output_node = self.get_batchnorm_params(scope_name.split('/')[0])
+
+        bn_tensor_mean = mean_node.attr['value']
+        channel_mean = bn_tensor_mean.tensor.tensor_shape.dim[0].size
+        mean = np.frombuffer(bn_tensor_mean.tensor.tensor_content, np.float32)
+        bn_tensor_variance = variance_node.attr['value']
+        channel_variance = bn_tensor_variance.tensor.tensor_shape.dim[0].size
+        variance = np.frombuffer(bn_tensor_variance.tensor.tensor_content, np.float32)
+
+        offset = offset_node.attr['value'].tensor.float_val
+        scale = scale_node.attr['value'].tensor.float_val
+        variance_eps = variance_eps_node.attr['value'].tensor.float_val
+
+        channel = channel_mean
+        np.array([self.op2code['BatchNormalization'], channel], dtype=np.uint32).tofile(f)
+        np.array([mean], dtype=np.float32).tofile(f)
+        np.array([variance], dtype=np.float32).tofile(f)
+        np.array([variance_eps, scale, offset], dtype=np.float32).tofile(f)
+
+        input_name = self.batchnorm_scopename_inputname_dict[scope_name.split('/')[0]]
+        input_operand_index = self.add_operand(input_name, Operand.IOTYPE_INPUT)
+        if output_node is not None:
+            output_operand_index = self.add_operand(output_node.name, Operand.IOTYPE_OUTPUT)
+            np.array([input_operand_index, output_operand_index],dtype=np.uint32).tofile(f)
+        else:
+            print('batchnormazalition node is error')
+
+
     def dump_avg_pool_to_file(self, node, f):
         assert(node.op == 'AvgPool')
         self.layer_number = self.layer_number + 1
@@ -417,7 +475,10 @@ class TFConverter:
                 if node.op == 'MatMul':
                     self.dump_dense_to_file(node, f)
                 continue
-
+            if self.in_batchnorm_scope(node.name):
+                if node.op == 'Sub':
+                    self.dump_batchnormalization_to_file(node,f)
+                continue
 
             if node.op == 'Conv2D':
                 self.dump_simple_conv2d_to_file(node, f)
@@ -541,8 +602,20 @@ class TFConverter:
                 return True
         return False
 
+
+    def in_batchnorm_scope(self, name):
+        inner_scope = TFConverter.get_scope_name(name)
+        if inner_scope == "":
+            return False
+        for scope in self.batchnorm_scope_names:
+            index = inner_scope.find(scope)
+            if index == 0:
+                return True
+        return False
+
+
     def generate_sub_block_op_scope_info(self):
-        # mostly, conv2d/dense is a sub block in graph, get the scope name
+        # mostly, conv2d/dense/batchnorm is a sub block in graph, get the scope name
         for node in self.nodes:
             if node.op == 'Conv2D':
                 scope = TFConverter.get_scope_name(node.name)
@@ -562,8 +635,17 @@ class TFConverter:
                 if scope + '/kernel' not in self.name_node_dict and scope.split('/Tensordot')[0] + '/kernel' not in self.name_node_dict:
                     continue
                 self.dense_scope_names.add(scope.split('/Tensordot')[0])
+            elif node.op == 'Sub':
+                scope = TFConverter.get_scope_name(node.name)
+                # for the case tf.nn.batchnormalization is called directly
+                if scope == '':
+                    continue
+                # for the case tf.nn.batchnormalization is called with a scope
+                if scope + '/Rsqrt' not in self.name_node_dict and scope + '/add' not in self.name_node_dict and scope + '/mul' not in self.name_node_dict and scope + '/mul_1' not in self.name_node_dict and scope + '/sub' not in self.name_node_dict and scope + '/mul_2' not in self.name_node_dict:
+                    continue
+                self.batchnorm_scope_names.add(scope)
 
-        # get the input name to the conv2d/dense sub block
+        # get the input name to the conv2d/dense/batchnorm sub block
         for node in self.nodes:
             scope = TFConverter.get_scope_name(node.name)
             if scope in self.conv2d_scope_names:
@@ -581,6 +663,11 @@ class TFConverter:
                     for inp in node.input:
                         if TFConverter.get_scope_name(inp).find(scope)<0 and TFConverter.get_scope_name(inp).find(scope.split('/')[0])<0:
                             self.dense_scopename_inputname_dict[scope.split('/Tensordot')[0]] = inp
+            elif scope in self.batchnorm_scope_names:
+                if node.op == 'Mul' and scope + '/mul_1' == node.name:
+                    for inp in node.input:
+                        if TFConverter.get_scope_name(inp) != scope:
+                             self.batchnorm_scopename_inputname_dict[scope] = inp
 
 
     def run(self):

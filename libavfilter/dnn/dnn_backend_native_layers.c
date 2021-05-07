@@ -28,6 +28,7 @@
 #include "dnn_backend_native_layer_mathunary.h"
 #include "dnn_backend_native_layer_avgpool.h"
 #include "dnn_backend_native_layer_dense.h"
+#include "dnn_backend_native_layer_batchnormalization.h"
 
 const LayerFunc ff_layer_funcs[DLT_COUNT] = {
     {NULL, NULL},
@@ -39,4 +40,5 @@ const LayerFunc ff_layer_funcs[DLT_COUNT] = {
     {ff_dnn_execute_layer_math_unary,  ff_dnn_load_layer_math_unary},
     {ff_dnn_execute_layer_avg_pool,    ff_dnn_load_layer_avg_pool},
     {ff_dnn_execute_layer_dense,       ff_dnn_load_layer_dense},
+    {ff_dnn_execute_layer_batchnormalization, ff_dnn_load_layer_batchnormalization},
 };

@@ -46,6 +46,7 @@ typedef enum {
     DLT_MATH_UNARY = 6,
     DLT_AVG_POOL = 7,
     DLT_DENSE = 8,
+    DLT_BATCHNORMALIZATION = 9,
     DLT_COUNT
 } DNNLayerType;
 
