@@ -34,7 +34,35 @@ typedef struct DepthToSpaceParams{
     int block_size;
 } DepthToSpaceParams;
 
+/**
+ * @brief Load the Depth to Space Layer.
+ *
+ * It assigns the layer parameters to the block size
+ * hyperparameter from the model file context.
+ *
+ * @param layer pointer to the DNN layer instance
+ * @param model_file_context pointer to model file context
+ * @param file_size model file size
+ * @param operands_num number of operands for the layer
+ * @return Size of DNN Layer
+ * @retval 0 if model file context contains invalid hyperparameters.
+ */
 int ff_dnn_load_layer_depth2space(Layer *layer, AVIOContext *model_file_context, int file_size, int operands_num);
+
+/**
+ * @brief Execute the Depth to Space Layer.
+ *
+ * It rearranges the input data from depth into spatial
+ * form by applying Depth to Space transformation.
+ *
+ * @param operands input operands
+ * @param input_operand_indexes input operand indexes
+ * @param output_operand_index output operand index
+ * @param parameters layer parameters
+ * @param ctx pointer to Native model context
+ * @retval DNN_SUCCESS if the execution succeeds
+ * @retval DNN_ERROR if the execution fails
+ */
 int ff_dnn_execute_layer_depth2space(DnnOperand *operands, const int32_t *input_operand_indexes,
                                      int32_t output_operand_index, const void *parameters, NativeContext *ctx);
 
