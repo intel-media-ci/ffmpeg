@@ -33,7 +33,34 @@ typedef struct AvgPoolParams{
     DNNPaddingParam padding_method;
 } AvgPoolParams;
 
+/**
+ * @brief Load Average Pooling Layer.
+ *
+ * It assigns the layer parameters to the hyperparameters 
+ * like strides, padding method, and kernel size after 
+ * parsing from the model file context.
+ * 
+ * @param layer pointer to the DNN layer instance
+ * @param model_file_context pointer to model file context
+ * @param file_size model file size
+ * @param operands_num number of operands for the layer
+ * @return Size of DNN Layer
+ * @retval 0 if model file context contains invalid hyperparameters.
+ */
 int ff_dnn_load_layer_avg_pool(Layer *layer, AVIOContext *model_file_context, int file_size, int operands_num);
+
+/**
+ * @brief Execute the Average Pooling Layer.
+ * Padding in channel dimensions is currently not supported.
+ * 
+ * @param operands input operands
+ * @param input_operand_indexes input operand indexes
+ * @param output_operand_index output operand index
+ * @param parameters average pooling parameters
+ * @param ctx pointer to Native model context
+ * @retval 0 if the execution succeeds
+ * @retval DNN_ERROR if the execution fails
+ */
 int ff_dnn_execute_layer_avg_pool(DnnOperand *operands, const int32_t *input_operand_indexes,
                                   int32_t output_operand_index, const void *parameters, NativeContext *ctx);
 
