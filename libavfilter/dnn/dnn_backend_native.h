@@ -130,7 +130,7 @@ typedef struct NativeModel{
 
 DNNModel *ff_dnn_load_model_native(const char *model_filename, DNNFunctionType func_type, const char *options, AVFilterContext *filter_ctx);
 
-DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, DNNExecBaseParams *exec_params);
+int ff_dnn_execute_model_native(const DNNModel *model, DNNExecBaseParams *exec_params);
 
 void ff_dnn_free_model_native(DNNModel **model);
 

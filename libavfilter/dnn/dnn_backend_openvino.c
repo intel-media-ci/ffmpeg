@@ -130,7 +130,7 @@ static int get_datatype_size(DNNDataType dt)
     }
 }
 
-static DNNReturnType fill_model_input_ov(OVModel *ov_model, RequestItem *request)
+static int fill_model_input_ov(OVModel *ov_model, RequestItem *request)
 {
     dimensions_t dims;
     precision_e precision;
@@ -149,7 +149,7 @@ static DNNReturnType fill_model_input_ov(OVModel *ov_model, RequestItem *request
     status = ie_infer_request_get_blob(request->infer_request, task->input_name, &input_blob);
     if (status != OK) {
         av_log(ctx, AV_LOG_ERROR, "Failed to get input blob with name %s\n", task->input_name);
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     status |= ie_blob_get_dims(input_blob, &dims);
@@ -157,14 +157,14 @@ static DNNReturnType fill_model_input_ov(OVModel *ov_model, RequestItem *request
     if (status != OK) {
         ie_blob_free(&input_blob);
         av_log(ctx, AV_LOG_ERROR, "Failed to get input blob dims/precision\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     status = ie_blob_get_buffer(input_blob, &blob_buffer);
     if (status != OK) {
         ie_blob_free(&input_blob);
         av_log(ctx, AV_LOG_ERROR, "Failed to get input blob buffer\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     input.height = dims.dims[2];
@@ -314,7 +314,7 @@ static void infer_completion_callback(void *args)
     }
 }
 
-static DNNReturnType init_model_ov(OVModel *ov_model, const char *input_name, const char *output_name)
+static int init_model_ov(OVModel *ov_model, const char *input_name, const char *output_name)
 {
     OVContext *ctx = &ov_model->ctx;
     IEStatusCode status;
@@ -391,20 +391,20 @@ static DNNReturnType init_model_ov(OVModel *ov_model, const char *input_name, co
 
     ov_model->request_queue = ff_safe_queue_create();
     if (!ov_model->request_queue) {
-        goto err;
+        goto errmem;
     }
 
     for (int i = 0; i < ctx->options.nireq; i++) {
         RequestItem *item = av_mallocz(sizeof(*item));
         if (!item) {
-            goto err;
+            goto errmem;
         }
 
         item->callback.completeCallBackFunc = infer_completion_callback;
         item->callback.args = item;
         if (ff_safe_queue_push_back(ov_model->request_queue, item) < 0) {
             av_freep(&item);
-            goto err;
+            goto errmem;
         }
 
         status = ie_exec_network_create_infer_request(ov_model->exe_network, &item->infer_request);
@@ -414,32 +414,35 @@ static DNNReturnType init_model_ov(OVModel *ov_model, const char *input_name, co
 
         item->inferences = av_malloc_array(ctx->options.batch_size, sizeof(*item->inferences));
         if (!item->inferences) {
-            goto err;
+            goto errmem;
         }
         item->inference_count = 0;
     }
 
     ov_model->task_queue = ff_queue_create();
     if (!ov_model->task_queue) {
-        goto err;
+        goto errmem;
     }
 
     ov_model->inference_queue = ff_queue_create();
     if (!ov_model->inference_queue) {
-        goto err;
+        goto errmem;
     }
 
     return DNN_SUCCESS;
 
 err:
     ff_dnn_free_model_ov(&ov_model->model);
-    return DNN_ERROR;
+    return AVERROR(EINVAL);
+errmem:
+    ff_dnn_free_model_ov(&ov_model->model);
+    return AVERROR(ENOMEM);
 }
 
-static DNNReturnType execute_model_ov(RequestItem *request, Queue *inferenceq)
+static int execute_model_ov(RequestItem *request, Queue *inferenceq)
 {
     IEStatusCode status;
-    DNNReturnType ret;
+    int ret;
     InferenceItem *inference;
     TaskItem *task;
     OVContext *ctx;
@@ -460,12 +463,12 @@ static DNNReturnType execute_model_ov(RequestItem *request, Queue *inferenceq)
         status = ie_infer_set_completion_callback(request->infer_request, &request->callback);
         if (status != OK) {
             av_log(ctx, AV_LOG_ERROR, "Failed to set completion callback for inference\n");
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
         status = ie_infer_request_infer_async(request->infer_request);
         if (status != OK) {
             av_log(ctx, AV_LOG_ERROR, "Failed to start async inference\n");
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
         return DNN_SUCCESS;
     } else {
@@ -476,14 +479,14 @@ static DNNReturnType execute_model_ov(RequestItem *request, Queue *inferenceq)
         status = ie_infer_request_infer(request->infer_request);
         if (status != OK) {
             av_log(ctx, AV_LOG_ERROR, "Failed to start synchronous model inference\n");
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
         infer_completion_callback(request);
-        return (task->inference_done == task->inference_todo) ? DNN_SUCCESS : DNN_ERROR;
+        return (task->inference_done == task->inference_todo) ? DNN_SUCCESS : DNN_GENERIC_ERROR;
     }
 }
 
-static DNNReturnType get_input_ov(void *model, DNNData *input, const char *input_name)
+static int get_input_ov(void *model, DNNData *input, const char *input_name)
 {
     OVModel *ov_model = model;
     OVContext *ctx = &ov_model->ctx;
@@ -498,14 +501,14 @@ static DNNReturnType get_input_ov(void *model, DNNData *input, const char *input
     status = ie_network_get_inputs_number(ov_model->network, &model_input_count);
     if (status != OK) {
         av_log(ctx, AV_LOG_ERROR, "Failed to get input count\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     for (size_t i = 0; i < model_input_count; i++) {
         status = ie_network_get_input_name(ov_model->network, i, &model_input_name);
         if (status != OK) {
             av_log(ctx, AV_LOG_ERROR, "Failed to get No.%d input's name\n", (int)i);
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
         if (strcmp(model_input_name, input_name) == 0) {
             ie_network_name_free(&model_input_name);
@@ -513,7 +516,7 @@ static DNNReturnType get_input_ov(void *model, DNNData *input, const char *input
             status |= ie_network_get_input_precision(ov_model->network, input_name, &precision);
             if (status != OK) {
                 av_log(ctx, AV_LOG_ERROR, "Failed to get No.%d input's dims or precision\n", (int)i);
-                return DNN_ERROR;
+                return AVERROR(EINVAL);
             }
 
             input->channels = dims.dims[1];
@@ -530,7 +533,7 @@ static DNNReturnType get_input_ov(void *model, DNNData *input, const char *input
     }
 
     av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model, all input(s) are: \"%s\"\n", input_name, all_input_names);
-    return DNN_ERROR;
+    return AVERROR(EINVAL);
 }
 
 static int contain_valid_detection_bbox(AVFrame *frame)
@@ -570,7 +573,7 @@ static int contain_valid_detection_bbox(AVFrame *frame)
     return 1;
 }
 
-static DNNReturnType extract_inference_from_task(DNNFunctionType func_type, TaskItem *task, Queue *inference_queue, DNNExecBaseParams *exec_params)
+static int extract_inference_from_task(DNNFunctionType func_type, TaskItem *task, Queue *inference_queue, DNNExecBaseParams *exec_params)
 {
     switch (func_type) {
     case DFT_PROCESS_FRAME:
@@ -578,14 +581,14 @@ static DNNReturnType extract_inference_from_task(DNNFunctionType func_type, Task
     {
         InferenceItem *inference = av_malloc(sizeof(*inference));
         if (!inference) {
-            return DNN_ERROR;
+            return AVERROR(ENOMEM);
         }
         task->inference_todo = 1;
         task->inference_done = 0;
         inference->task = task;
         if (ff_queue_push_back(inference_queue, inference) < 0) {
             av_freep(&inference);
-            return DNN_ERROR;
+            return AVERROR(ENOMEM);
         }
         return DNN_SUCCESS;
     }
@@ -616,28 +619,28 @@ static DNNReturnType extract_inference_from_task(DNNFunctionType func_type, Task
 
             inference = av_malloc(sizeof(*inference));
             if (!inference) {
-                return DNN_ERROR;
+                return AVERROR(ENOMEM);
             }
             task->inference_todo++;
             inference->task = task;
             inference->bbox_index = i;
             if (ff_queue_push_back(inference_queue, inference) < 0) {
                 av_freep(&inference);
-                return DNN_ERROR;
+                return AVERROR(ENOMEM);
             }
         }
         return DNN_SUCCESS;
     }
     default:
         av_assert0(!"should not reach here");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 }
 
-static DNNReturnType get_output_ov(void *model, const char *input_name, int input_width, int input_height,
+static int get_output_ov(void *model, const char *input_name, int input_width, int input_height,
                                    const char *output_name, int *output_width, int *output_height)
 {
-    DNNReturnType ret;
+    int ret;
     OVModel *ov_model = model;
     OVContext *ctx = &ov_model->ctx;
     TaskItem task;
@@ -649,7 +652,7 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
 
     if (ov_model->model->func_type != DFT_PROCESS_FRAME) {
         av_log(ctx, AV_LOG_ERROR, "Get output dim only when processing frame.\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     if (ctx->options.input_resizable) {
@@ -660,21 +663,21 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
         ie_network_input_shapes_free(&input_shapes);
         if (status != OK) {
             av_log(ctx, AV_LOG_ERROR, "Failed to reshape input size for %s\n", input_name);
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
     }
 
     if (!ov_model->exe_network) {
         if (init_model_ov(ov_model, input_name, output_name) != DNN_SUCCESS) {
             av_log(ctx, AV_LOG_ERROR, "Failed init OpenVINO exectuable network or inference request\n");
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
     }
 
     in_frame = av_frame_alloc();
     if (!in_frame) {
         av_log(ctx, AV_LOG_ERROR, "Failed to allocate memory for input frame\n");
-        return DNN_ERROR;
+        return AVERROR(ENOMEM);
     }
     in_frame->width = input_width;
     in_frame->height = input_height;
@@ -683,7 +686,7 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
     if (!out_frame) {
         av_log(ctx, AV_LOG_ERROR, "Failed to allocate memory for output frame\n");
         av_frame_free(&in_frame);
-        return DNN_ERROR;
+        return AVERROR(ENOMEM);
     }
 
     task.do_ioproc = 0;
@@ -698,7 +701,7 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
         av_frame_free(&out_frame);
         av_frame_free(&in_frame);
         av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     request = ff_safe_queue_pop_front(ov_model->request_queue);
@@ -706,7 +709,7 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
         av_frame_free(&out_frame);
         av_frame_free(&in_frame);
         av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     ret = execute_model_ov(request, ov_model->inference_queue);
@@ -775,7 +778,7 @@ err:
     return NULL;
 }
 
-DNNReturnType ff_dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *exec_params)
+int ff_dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *exec_params)
 {
     OVModel *ov_model = model->model;
     OVContext *ctx = &ov_model->ctx;
@@ -783,7 +786,7 @@ DNNReturnType ff_dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *
     RequestItem *request;
 
     if (ff_check_exec_params(ctx, DNN_OV, model->func_type, exec_params) != 0) {
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     if (model->func_type == DFT_ANALYTICS_CLASSIFY) {
@@ -791,18 +794,18 @@ DNNReturnType ff_dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *
         // we'll combine the two sync/async functions in dnn_interface.h to
         // simplify the code in filter, and async will be an option within backends.
         // so, do not support now, and classify filter will not call this function.
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     if (ctx->options.batch_size > 1) {
         avpriv_report_missing_feature(ctx, "batch mode for sync execution");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     if (!ov_model->exe_network) {
         if (init_model_ov(ov_model, exec_params->input_name, exec_params->output_names[0]) != DNN_SUCCESS) {
             av_log(ctx, AV_LOG_ERROR, "Failed init OpenVINO exectuable network or inference request\n");
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
     }
 
@@ -816,41 +819,41 @@ DNNReturnType ff_dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *
 
     if (extract_inference_from_task(ov_model->model->func_type, &task, ov_model->inference_queue, exec_params) != DNN_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     request = ff_safe_queue_pop_front(ov_model->request_queue);
     if (!request) {
         av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     return execute_model_ov(request, ov_model->inference_queue);
 }
 
-DNNReturnType ff_dnn_execute_model_async_ov(const DNNModel *model, DNNExecBaseParams *exec_params)
+int ff_dnn_execute_model_async_ov(const DNNModel *model, DNNExecBaseParams *exec_params)
 {
     OVModel *ov_model = model->model;
     OVContext *ctx = &ov_model->ctx;
     RequestItem *request;
     TaskItem *task;
-    DNNReturnType ret;
+    int ret;
 
     if (ff_check_exec_params(ctx, DNN_OV, model->func_type, exec_params) != 0) {
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     if (!ov_model->exe_network) {
         if (init_model_ov(ov_model, exec_params->input_name, exec_params->output_names[0]) != DNN_SUCCESS) {
             av_log(ctx, AV_LOG_ERROR, "Failed init OpenVINO exectuable network or inference request\n");
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
     }
 
     task = av_malloc(sizeof(*task));
     if (!task) {
         av_log(ctx, AV_LOG_ERROR, "unable to alloc memory for task item.\n");
-        return DNN_ERROR;
+        return AVERROR(ENOMEM);
     }
 
     task->do_ioproc = 1;
@@ -863,19 +866,19 @@ DNNReturnType ff_dnn_execute_model_async_ov(const DNNModel *model, DNNExecBasePa
     if (ff_queue_push_back(ov_model->task_queue, task) < 0) {
         av_freep(&task);
         av_log(ctx, AV_LOG_ERROR, "unable to push back task_queue.\n");
-        return DNN_ERROR;
+        return AVERROR(ENOMEM);
     }
 
     if (extract_inference_from_task(model->func_type, task, ov_model->inference_queue, exec_params) != DNN_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     while (ff_queue_size(ov_model->inference_queue) >= ctx->options.batch_size) {
         request = ff_safe_queue_pop_front(ov_model->request_queue);
         if (!request) {
             av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
 
         ret = execute_model_ov(request, ov_model->inference_queue);
@@ -908,13 +911,13 @@ DNNAsyncStatusType ff_dnn_get_async_result_ov(const DNNModel *model, AVFrame **i
     return DAST_SUCCESS;
 }
 
-DNNReturnType ff_dnn_flush_ov(const DNNModel *model)
+int ff_dnn_flush_ov(const DNNModel *model)
 {
     OVModel *ov_model = model->model;
     OVContext *ctx = &ov_model->ctx;
     RequestItem *request;
     IEStatusCode status;
-    DNNReturnType ret;
+    int ret;
 
     if (ff_queue_size(ov_model->inference_queue) == 0) {
         // no pending task need to flush
@@ -924,7 +927,7 @@ DNNReturnType ff_dnn_flush_ov(const DNNModel *model)
     request = ff_safe_queue_pop_front(ov_model->request_queue);
     if (!request) {
         av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     ret = fill_model_input_ov(ov_model, request);
@@ -935,12 +938,12 @@ DNNReturnType ff_dnn_flush_ov(const DNNModel *model)
     status = ie_infer_set_completion_callback(request->infer_request, &request->callback);
     if (status != OK) {
         av_log(ctx, AV_LOG_ERROR, "Failed to set completion callback for inference\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
     status = ie_infer_request_infer_async(request->infer_request);
     if (status != OK) {
         av_log(ctx, AV_LOG_ERROR, "Failed to start async inference\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     return DNN_SUCCESS;

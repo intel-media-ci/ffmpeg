@@ -24,13 +24,13 @@
 #include "libavutil/avassert.h"
 #include "libavutil/detection_bbox.h"
 
-DNNReturnType ff_proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *log_ctx)
+int ff_proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *log_ctx)
 {
     struct SwsContext *sws_ctx;
     int bytewidth = av_image_get_linesize(frame->format, frame->width, 0);
     if (output->dt != DNN_FLOAT) {
         avpriv_report_missing_feature(log_ctx, "data type rather than DNN_FLOAT");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     switch (frame->format) {
@@ -48,7 +48,7 @@ DNNReturnType ff_proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *l
                 "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAYF32), frame->width * 3, frame->height,
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAY8),   frame->width * 3, frame->height);
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
         sws_scale(sws_ctx, (const uint8_t *[4]){(const uint8_t *)output->data, 0, 0, 0},
                            (const int[4]){frame->width * 3 * sizeof(float), 0, 0, 0}, 0, frame->height,
@@ -79,7 +79,7 @@ DNNReturnType ff_proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *l
                 "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAYF32), frame->width, frame->height,
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAY8),   frame->width, frame->height);
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
         sws_scale(sws_ctx, (const uint8_t *[4]){(const uint8_t *)output->data, 0, 0, 0},
                            (const int[4]){frame->width * sizeof(float), 0, 0, 0}, 0, frame->height,
@@ -88,19 +88,19 @@ DNNReturnType ff_proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *l
         return DNN_SUCCESS;
     default:
         avpriv_report_missing_feature(log_ctx, "%s", av_get_pix_fmt_name(frame->format));
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     return DNN_SUCCESS;
 }
 
-static DNNReturnType proc_from_frame_to_dnn_frameprocessing(AVFrame *frame, DNNData *input, void *log_ctx)
+static int proc_from_frame_to_dnn_frameprocessing(AVFrame *frame, DNNData *input, void *log_ctx)
 {
     struct SwsContext *sws_ctx;
     int bytewidth = av_image_get_linesize(frame->format, frame->width, 0);
     if (input->dt != DNN_FLOAT) {
         avpriv_report_missing_feature(log_ctx, "data type rather than DNN_FLOAT");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     switch (frame->format) {
@@ -118,7 +118,7 @@ static DNNReturnType proc_from_frame_to_dnn_frameprocessing(AVFrame *frame, DNND
                 "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAY8),  frame->width * 3, frame->height,
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAYF32),frame->width * 3, frame->height);
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
         sws_scale(sws_ctx, (const uint8_t **)frame->data,
                            frame->linesize, 0, frame->height,
@@ -150,7 +150,7 @@ static DNNReturnType proc_from_frame_to_dnn_frameprocessing(AVFrame *frame, DNND
                 "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAY8),  frame->width, frame->height,
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAYF32),frame->width, frame->height);
-            return DNN_ERROR;
+            return AVERROR(EINVAL);
         }
         sws_scale(sws_ctx, (const uint8_t **)frame->data,
                            frame->linesize, 0, frame->height,
@@ -160,7 +160,7 @@ static DNNReturnType proc_from_frame_to_dnn_frameprocessing(AVFrame *frame, DNND
         break;
     default:
         avpriv_report_missing_feature(log_ctx, "%s", av_get_pix_fmt_name(frame->format));
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     return DNN_SUCCESS;
@@ -184,7 +184,7 @@ static enum AVPixelFormat get_pixel_format(DNNData *data)
     return AV_PIX_FMT_BGR24;
 }
 
-DNNReturnType ff_frame_to_dnn_classify(AVFrame *frame, DNNData *input, uint32_t bbox_index, void *log_ctx)
+int ff_frame_to_dnn_classify(AVFrame *frame, DNNData *input, uint32_t bbox_index, void *log_ctx)
 {
     const AVPixFmtDescriptor *desc;
     int offsetx[4], offsety[4];
@@ -215,13 +215,13 @@ DNNReturnType ff_frame_to_dnn_classify(AVFrame *frame, DNNData *input, uint32_t 
                "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
                av_get_pix_fmt_name(frame->format), width, height,
                av_get_pix_fmt_name(fmt), input->width, input->height);
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     if (av_image_fill_linesizes(linesizes, fmt, input->width) < 0) {
         av_log(log_ctx, AV_LOG_ERROR, "unable to get linesizes with av_image_fill_linesizes");
         sws_freeContext(sws_ctx);
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     desc = av_pix_fmt_desc_get(frame->format);
@@ -243,7 +243,7 @@ DNNReturnType ff_frame_to_dnn_classify(AVFrame *frame, DNNData *input, uint32_t 
     return DNN_SUCCESS;
 }
 
-static DNNReturnType proc_from_frame_to_dnn_analytics(AVFrame *frame, DNNData *input, void *log_ctx)
+static int proc_from_frame_to_dnn_analytics(AVFrame *frame, DNNData *input, void *log_ctx)
 {
     struct SwsContext *sws_ctx;
     int linesizes[4];
@@ -256,13 +256,13 @@ static DNNReturnType proc_from_frame_to_dnn_analytics(AVFrame *frame, DNNData *i
             "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
             av_get_pix_fmt_name(frame->format), frame->width, frame->height,
             av_get_pix_fmt_name(fmt), input->width, input->height);
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     if (av_image_fill_linesizes(linesizes, fmt, input->width) < 0) {
         av_log(log_ctx, AV_LOG_ERROR, "unable to get linesizes with av_image_fill_linesizes");
         sws_freeContext(sws_ctx);
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 
     sws_scale(sws_ctx, (const uint8_t *const *)frame->data, frame->linesize, 0, frame->height,
@@ -272,7 +272,7 @@ static DNNReturnType proc_from_frame_to_dnn_analytics(AVFrame *frame, DNNData *i
     return DNN_SUCCESS;
 }
 
-DNNReturnType ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, DNNFunctionType func_type, void *log_ctx)
+int ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, DNNFunctionType func_type, void *log_ctx)
 {
     switch (func_type)
     {
@@ -282,6 +282,6 @@ DNNReturnType ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, DNNFunct
         return proc_from_frame_to_dnn_analytics(frame, input, log_ctx);
     default:
         avpriv_report_missing_feature(log_ctx, "model function type %d", func_type);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 }
