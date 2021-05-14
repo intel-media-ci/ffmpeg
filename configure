@@ -279,6 +279,7 @@ External library support:
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtls          enable LibreSSL (via libtls), needed for https support
                            if openssl, gnutls or mbedtls is not used [no]
+  --enable-libtorch        enable Torch as one DNN backend
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
   --enable-libuavs3d       enable AVS3 decoding via libuavs3d [no]
   --enable-libv4l2         enable libv4l2/v4l-utils [no]
@@ -1850,6 +1851,7 @@ EXTERNAL_LIBRARY_LIST="
     libopus
     libplacebo
     libpulse
+    libtorch
     librabbitmq
     librav1e
     librist
@@ -2720,7 +2722,7 @@ dct_select="rdft"
 deflate_wrapper_deps="zlib"
 dirac_parse_select="golomb"
 dovi_rpu_select="golomb"
-dnn_suggest="libtensorflow libopenvino"
+dnn_suggest="libtensorflow libopenvino libtorch"
 dnn_deps="avformat swscale"
 error_resilience_select="me_cmp"
 faandct_deps="faan"
@@ -6607,6 +6609,7 @@ enabled libopus           && {
 }
 enabled libplacebo        && require_pkg_config libplacebo "libplacebo >= 4.192.0" libplacebo/vulkan.h pl_vulkan_create
 enabled libpulse          && require_pkg_config libpulse libpulse pulse/pulseaudio.h pa_context_new
+enabled libtorch          && add_cppflags -D_GLIBCXX_USE_CXX11_ABI=0 && check_cxxflags -std=c++14 && require_cpp libtorch torch/torch.h "torch::Tensor" -ltorch -lc10 -ltorch_cpu -lstdc++ -lpthread
 enabled librabbitmq       && require_pkg_config librabbitmq "librabbitmq >= 0.7.1" amqp.h amqp_new_connection
 enabled librav1e          && require_pkg_config librav1e "rav1e >= 0.4.0" rav1e.h rav1e_context_new
 enabled librist           && require_pkg_config librist "librist >= 0.2.7" librist/librist.h rist_receiver_create
@@ -7035,6 +7038,8 @@ check_disable_warning -Wno-pointer-sign
 check_disable_warning -Wno-unused-const-variable
 check_disable_warning -Wno-bool-operation
 check_disable_warning -Wno-char-subscripts
+#this option is for supress redundant-decls warning in compile libtorch
+check_disable_warning -Wno-redundant-decls
 
 check_disable_warning_headers(){
     warning_flag=-W${1#-Wno-}
