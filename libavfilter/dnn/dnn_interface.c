@@ -27,6 +27,7 @@
 #include "dnn_backend_native.h"
 #include "dnn_backend_tf.h"
 #include "dnn_backend_openvino.h"
+#include "dnn_backend_torch.h"
 #include "libavutil/mem.h"
 
 DNNModule *ff_get_dnn_module(DNNBackendType backend_type)
@@ -68,6 +69,17 @@ DNNModule *ff_get_dnn_module(DNNBackendType backend_type)
     #else
         av_freep(&dnn_module);
         return NULL;
+    #endif
+        break;
+    case DNN_TH:
+    #if (CONFIG_LIBTORCH == 1)
+        dnn_module->load_model = &ff_dnn_load_model_th;
+        dnn_module->execute_model = &ff_dnn_execute_model_th;
+        dnn_module->get_result = &ff_dnn_get_result_th;
+        dnn_module->flush = &ff_dnn_flush_th;//support sync for now
+        dnn_module->free_model = &ff_dnn_free_model_th;
+    #else
+        av_freep(&dnn_module);
     #endif
         break;
     default:
