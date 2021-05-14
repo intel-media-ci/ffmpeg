@@ -24,16 +24,38 @@
 #include "libavutil/avassert.h"
 #include "libavutil/detection_bbox.h"
 
+static enum AVPixelFormat get_pixel_format(DNNData *data);
+
 int ff_proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *log_ctx)
 {
     struct SwsContext *sws_ctx;
+    int frame_size = frame->height * frame->width;
+    int linesize[3];
+    void **dst_data, *middle_data;
+    enum AVPixelFormat fmt;
     int bytewidth = av_image_get_linesize(frame->format, frame->width, 0);
+    linesize[0] = frame->linesize[0];
+    dst_data = (void **)frame->data;
+    fmt = get_pixel_format(output);
+
     if (bytewidth < 0) {
         return AVERROR(EINVAL);
     }
     if (output->dt != DNN_FLOAT) {
         avpriv_report_missing_feature(log_ctx, "data type rather than DNN_FLOAT");
         return AVERROR(ENOSYS);
+    }
+    if (fmt == AV_PIX_FMT_GBRP) {
+        middle_data = malloc(frame_size * 3 * sizeof(uint8_t));
+        if (!middle_data) {
+            av_log(log_ctx, AV_LOG_ERROR, "Failed to malloc memory for middle_data for "
+                    "the conversion fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
+                    av_get_pix_fmt_name(AV_PIX_FMT_GRAYF32),  frame->width, frame->height,
+                    av_get_pix_fmt_name(AV_PIX_FMT_GRAY8),frame->width, frame->height);
+            return AVERROR(EINVAL);
+        }
+        dst_data = &middle_data;
+        linesize[0] = frame->width * 3;
     }
 
     switch (frame->format) {
@@ -51,12 +73,43 @@ int ff_proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *log_ctx)
                 "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAYF32), frame->width * 3, frame->height,
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAY8),   frame->width * 3, frame->height);
+            av_freep(&middle_data);
             return AVERROR(EINVAL);
         }
         sws_scale(sws_ctx, (const uint8_t *[4]){(const uint8_t *)output->data, 0, 0, 0},
                            (const int[4]){frame->width * 3 * sizeof(float), 0, 0, 0}, 0, frame->height,
-                           (uint8_t * const*)frame->data, frame->linesize);
+                           (uint8_t * const*)dst_data, linesize);
         sws_freeContext(sws_ctx);
+        switch (fmt) {
+        case AV_PIX_FMT_GBRP:
+            sws_ctx = sws_getContext(frame->width,
+                                     frame->height,
+                                     AV_PIX_FMT_GBRP,
+                                     frame->width,
+                                     frame->height,
+                                     frame->format,
+                                     0, NULL, NULL, NULL);
+            if (!sws_ctx) {
+                av_log(log_ctx, AV_LOG_ERROR, "Impossible to create scale context for the conversion "
+                       "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
+                       av_get_pix_fmt_name(AV_PIX_FMT_GBRP),  frame->width, frame->height,
+                       av_get_pix_fmt_name(frame->format),frame->width, frame->height);
+                av_freep(&middle_data);
+                return AVERROR(EINVAL);
+            }
+            sws_scale(sws_ctx, (const uint8_t * const[4]){(uint8_t *)dst_data[0] + frame_size * sizeof(uint8_t),
+                                                          (uint8_t *)dst_data[0] + frame_size * sizeof(uint8_t) * 2,
+                                                          (uint8_t *)dst_data[0], 0},
+                      (const int [4]){frame->width * sizeof(uint8_t),
+                                      frame->width * sizeof(uint8_t),
+                                      frame->width * sizeof(uint8_t), 0}
+                      , 0, frame->height,
+                      (uint8_t * const*)frame->data, frame->linesize);
+            break;
+        default:
+            break;
+        }
+        av_freep(&middle_data);
         return 0;
     case AV_PIX_FMT_GRAYF32:
         av_image_copy_plane(frame->data[0], frame->linesize[0],
@@ -101,6 +154,14 @@ int ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, void *log_ctx)
 {
     struct SwsContext *sws_ctx;
     int bytewidth = av_image_get_linesize(frame->format, frame->width, 0);
+    int frame_size = frame->height * frame->width;
+    int linesize[3];
+    void **src_data, *middle_data = NULL;
+    enum AVPixelFormat fmt;
+    linesize[0] = frame->linesize[0];
+    src_data = (void **)frame->data;
+    fmt = get_pixel_format(input);
+
     if (bytewidth < 0) {
         return AVERROR(EINVAL);
     }
@@ -112,6 +173,46 @@ int ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, void *log_ctx)
     switch (frame->format) {
     case AV_PIX_FMT_RGB24:
     case AV_PIX_FMT_BGR24:
+        switch (fmt) {
+        case AV_PIX_FMT_GBRP:
+            middle_data = av_malloc(frame_size * 3 * sizeof(uint8_t));
+            if (!middle_data) {
+                av_log(log_ctx, AV_LOG_ERROR, "Failed to malloc memory for middle_data for "
+                       "the conversion fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
+                       av_get_pix_fmt_name(frame->format),  frame->width, frame->height,
+                       av_get_pix_fmt_name(AV_PIX_FMT_GBRP),frame->width, frame->height);
+                return AVERROR(EINVAL);
+            }
+            sws_ctx = sws_getContext(frame->width,
+                                     frame->height,
+                                     frame->format,
+                                     frame->width,
+                                     frame->height,
+                                     AV_PIX_FMT_GBRP,
+                                     0, NULL, NULL, NULL);
+            if (!sws_ctx) {
+                av_log(log_ctx, AV_LOG_ERROR, "Impossible to create scale context for the conversion "
+                       "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
+                       av_get_pix_fmt_name(frame->format),  frame->width, frame->height,
+                       av_get_pix_fmt_name(AV_PIX_FMT_GBRP),frame->width, frame->height);
+                av_freep(&middle_data);
+                return AVERROR(EINVAL);
+            }
+            sws_scale(sws_ctx, (const uint8_t **)frame->data,
+                      frame->linesize, 0, frame->height,
+                      (uint8_t * const [4]){(uint8_t *)middle_data + frame_size * sizeof(uint8_t),
+                                            (uint8_t *)middle_data + frame_size * sizeof(uint8_t) * 2,
+                                            (uint8_t *)middle_data, 0},
+                      (const int [4]){frame->width * sizeof(uint8_t),
+                                      frame->width * sizeof(uint8_t),
+                                      frame->width * sizeof(uint8_t), 0});
+            sws_freeContext(sws_ctx);
+            src_data = &middle_data;
+            linesize[0] = frame->width * 3;
+            break;
+        default:
+            break;
+        }
         sws_ctx = sws_getContext(frame->width * 3,
                                  frame->height,
                                  AV_PIX_FMT_GRAY8,
@@ -124,13 +225,15 @@ int ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, void *log_ctx)
                 "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAY8),  frame->width * 3, frame->height,
                 av_get_pix_fmt_name(AV_PIX_FMT_GRAYF32),frame->width * 3, frame->height);
+            av_freep(&middle_data);
             return AVERROR(EINVAL);
         }
-        sws_scale(sws_ctx, (const uint8_t **)frame->data,
-                           frame->linesize, 0, frame->height,
+        sws_scale(sws_ctx, (const uint8_t **)src_data,
+                           linesize, 0, frame->height,
                            (uint8_t * const [4]){input->data, 0, 0, 0},
                            (const int [4]){frame->width * 3 * sizeof(float), 0, 0, 0});
         sws_freeContext(sws_ctx);
+        av_freep(&middle_data);
         break;
     case AV_PIX_FMT_GRAYF32:
         av_image_copy_plane(input->data, bytewidth,
@@ -183,6 +286,14 @@ static enum AVPixelFormat get_pixel_format(DNNData *data)
         default:
             av_assert0(!"unsupported data pixel format.\n");
             return AV_PIX_FMT_BGR24;
+        }
+    } else if (data->dt == DNN_FLOAT) {
+        switch (data->order) {
+        case DCO_RGB_PLANAR:
+            return AV_PIX_FMT_GBRP;
+        default:
+            av_assert0(!"unsupported data pixel format.\n");
+            return AV_PIX_FMT_GBRP;
         }
     }
 
