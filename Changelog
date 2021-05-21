@@ -29,6 +29,7 @@ version <next>:
 - corr video filter
 - adrc audio filter
 - afdelaysrc audio filter
+- hstack_vaapi, vstack_vaapi and xstack_vaapi filters
 
 
 version 5.1:
