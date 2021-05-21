@@ -3696,6 +3696,12 @@ vpp_qsv_filter_select="qsvvpp"
 xfade_opencl_filter_deps="opencl"
 yadif_cuda_filter_deps="ffnvcodec"
 yadif_cuda_filter_deps_any="cuda_nvcc cuda_llvm"
+hstack_qsv_filter_deps="libmfx"
+hstack_qsv_filter_select="qsvvpp"
+vstack_qsv_filter_deps="libmfx"
+vstack_qsv_filter_select="qsvvpp"
+xstack_qsv_filter_deps="libmfx"
+xstack_qsv_filter_select="qsvvpp"
 
 # examples
 avio_list_dir_deps="avformat avutil"
