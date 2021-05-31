@@ -2252,7 +2252,7 @@ static int vulkan_map_frame_to_mem(AVHWFramesContext *hwfc, AVFrame *dst,
                                    const AVFrame *src, int flags)
 {
     VkResult ret;
-    int err, mapped_mem_count = 0;
+    int err, mapped_mem_count = 0, loop = 0;
     AVVkFrame *f = (AVVkFrame *)src->data[0];
     AVVulkanDeviceContext *hwctx = hwfc->device_ctx->hwctx;
     const int planes = av_pix_fmt_count_planes(hwfc->sw_format);
@@ -2281,7 +2281,8 @@ static int vulkan_map_frame_to_mem(AVHWFramesContext *hwfc, AVFrame *dst,
     dst->width  = src->width;
     dst->height = src->height;
 
-    for (int i = 0; i < planes; i++) {
+    loop = p->use_one_memory ? 1 : planes;
+    for (int i = 0; i < loop; i++) {
         ret = vk->MapMemory(hwctx->act_dev, f->mem[i], 0,
                             VK_WHOLE_SIZE, 0, (void **)&dst->data[i]);
         if (ret != VK_SUCCESS) {
@@ -2291,6 +2292,11 @@ static int vulkan_map_frame_to_mem(AVHWFramesContext *hwfc, AVFrame *dst,
             goto fail;
         }
         mapped_mem_count++;
+    }
+    if (p->use_one_memory) {
+        for (int i = 0; i < planes; i++) {
+            dst->data[i] = dst->data[0] + f->offset[i];
+        }
     }
 
     /* Check if the memory contents matter */
