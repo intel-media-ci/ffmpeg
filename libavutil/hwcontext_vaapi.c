@@ -47,6 +47,9 @@
 #include "hwcontext_drm.h"
 #include "hwcontext_internal.h"
 #include "hwcontext_vaapi.h"
+#if CONFIG_QSV
+#include "hwcontext_qsv.h"
+#endif
 #include "mem.h"
 #include "pixdesc.h"
 #include "pixfmt.h"
@@ -1729,6 +1732,24 @@ static int vaapi_device_derive(AVHWDeviceContext *ctx,
         }
 
         return vaapi_device_connect(ctx, display);
+    }
+#endif
+
+#if CONFIG_QSV
+    if (src_ctx->type == AV_HWDEVICE_TYPE_QSV) {
+        AVQSVDeviceContext *src_hwctx = src_ctx->hwctx;
+        mfxHDL handle;
+        mfxHandleType handle_type = MFX_HANDLE_VA_DISPLAY;
+        mfxStatus ret;
+        AVVAAPIDeviceContext *hwctx = ctx->hwctx;
+        ret = MFXVideoCORE_GetHandle(src_hwctx->session, handle_type, &handle);
+        if (ret < 0) {
+            av_log(ctx, AV_LOG_VERBOSE, "No supported hw handle could be retrieved "
+               "from the session\n");
+            return AVERROR(EINVAL);
+        }
+        hwctx->display = (VADisplay)handle;
+        return 0;
     }
 #endif
     return AVERROR(ENOSYS);
