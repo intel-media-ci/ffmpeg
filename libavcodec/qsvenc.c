@@ -1273,6 +1273,10 @@ static void clear_unused_frames(QSVEncContext *q)
             free_encoder_ctrl_payloads(&cur->enc_ctrl);
             //do not reuse enc_ctrl from previous frame
             memset(&cur->enc_ctrl, 0, sizeof(cur->enc_ctrl));
+            if (cur->external_frame) {
+                av_freep(&cur->surface.Data.MemId);
+                cur->external_frame = 0;
+            }
             if (cur->frame->format == AV_PIX_FMT_QSV) {
                 av_frame_unref(cur->frame);
             }
@@ -1339,12 +1343,20 @@ static int submit_frame(QSVEncContext *q, const AVFrame *frame,
 
         qf->surface = *(mfxFrameSurface1*)qf->frame->data[3];
 
+
         if (q->frames_ctx.mids) {
             ret = ff_qsv_find_surface_idx(&q->frames_ctx, qf);
-            if (ret < 0)
-                return ret;
-
-            qf->surface.Data.MemId = &q->frames_ctx.mids[ret];
+            if (ret >= 0)
+                qf->surface.Data.MemId = &q->frames_ctx.mids[ret];
+        }
+        if (!q->frames_ctx.mids || ret < 0) {
+            QSVMid *mid = NULL;
+            mid = (QSVMid *)av_mallocz(sizeof(*mid));
+            if (!mid)
+                return AVERROR(ENOMEM);
+            mid->handle_pair = (mfxHDLPair *)qf->surface.Data.MemId;
+            qf->surface.Data.MemId = mid;
+            qf->external_frame = 1;
         }
     } else {
         /* make a copy if the input is not padded as libmfx requires */
