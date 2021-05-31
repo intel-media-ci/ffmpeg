@@ -182,6 +182,7 @@ typedef struct AVVkFrame {
      */
     VkDeviceMemory mem[AV_NUM_DATA_POINTERS];
     size_t size[AV_NUM_DATA_POINTERS];
+    size_t offset[AV_NUM_DATA_POINTERS];
 
     /**
      * OR'd flags for all memory allocated
