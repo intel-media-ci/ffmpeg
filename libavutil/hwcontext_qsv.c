@@ -1025,40 +1025,106 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
     return 0;
 }
 
+static void qsv_umap_from_vaapi(AVHWFramesContext *dst_fc,
+                                 HWMapDescriptor *hwmap)
+{
+    mfxFrameSurface1 *new_sur = (mfxFrameSurface1 *)hwmap->priv;
+    av_freep(&new_sur->Data.MemId);
+    av_freep(&new_sur);
+}
+
 static int qsv_map_to(AVHWFramesContext *dst_ctx,
                       AVFrame *dst, const AVFrame *src, int flags)
 {
     AVQSVFramesContext *hwctx = dst_ctx->hwctx;
+    mfxFrameSurface1 *new_sur = NULL;
+    VASurfaceID *new_vasur = NULL;
+
     int i, err;
 
     for (i = 0; i < hwctx->nb_surfaces; i++) {
 #if CONFIG_VAAPI
-        if (*(VASurfaceID*)hwctx->surfaces[i].Data.MemId ==
-            (VASurfaceID)(uintptr_t)src->data[3])
-            break;
+        if (src->format == AV_PIX_FMT_VAAPI) {
+            if (*(VASurfaceID*)hwctx->surfaces[i].Data.MemId ==
+                (VASurfaceID)(uintptr_t)src->data[3])
+                break;
+        } else
 #endif
 #if CONFIG_DXVA2
-        if ((IDirect3DSurface9*)hwctx->surfaces[i].Data.MemId ==
-            (IDirect3DSurface9*)(uintptr_t)src->data[3])
-            break;
+        if (src->format == AV_PIX_FMT_DXVA2_VLD) {
+            if ((IDirect3DSurface9*)hwctx->surfaces[i].Data.MemId ==
+                (IDirect3DSurface9*)(uintptr_t)src->data[3])
+                break;
+        } else
 #endif
+        {
+            return AVERROR(ENOSYS);
+        }
     }
     if (i >= hwctx->nb_surfaces) {
-        av_log(dst_ctx, AV_LOG_ERROR, "Trying to map from a surface which "
-               "is not in the mapped frames context.\n");
-        return AVERROR(EINVAL);
-    }
+        switch (src->format) {
+#if CONFIG_VAAPI
+        case AV_PIX_FMT_VAAPI:
+        {
+            new_sur = (mfxFrameSurface1 *)av_mallocz(sizeof(*new_sur));
+            if (!new_sur) {
+                err = AVERROR(ENOMEM);
+                goto qsv_map_to_err;
+            }
+            err = qsv_init_surface(dst_ctx, new_sur);
+            if (err < 0)
+                goto qsv_map_to_err;
 
-    err = ff_hwframe_map_create(dst->hw_frames_ctx,
-                                dst, src, NULL, NULL);
-    if (err)
-        return err;
+            new_vasur = (VASurfaceID *)av_mallocz(sizeof(*new_vasur));
+            if (!new_vasur) {
+                err = AVERROR(ENOMEM);
+                goto qsv_map_to_err;
+            }
+            *new_vasur = (VASurfaceID)(uintptr_t)src->data[3];
+            new_sur->Data.MemId = new_vasur;
+
+            err = ff_hwframe_map_create(dst->hw_frames_ctx, dst, src,
+                                        &qsv_umap_from_vaapi,
+                                        (void*)new_sur);
+            if (err)
+                goto qsv_map_to_err;
+
+            av_log(dst_ctx, AV_LOG_DEBUG, "Trying to map from a surface which "
+                "is not in the mapped frames context, so create a new surface\n");
+        }
+        break;
+#endif
+#if CONFIG_DXVA2
+        case AV_PIX_FMT_DXVA2_VLD:
+        {
+            av_log(dst_ctx, AV_LOG_ERROR, "Trying to map from a surface which "
+                "is not in the mapped frames context.\n");
+            return AVERROR(EINVAL);
+        }
+        break;
+#endif
+        default:
+            return AVERROR(ENOSYS);
+        }
+    } else {
+        err = ff_hwframe_map_create(dst->hw_frames_ctx,
+                                    dst, src, NULL, NULL);
+        if (err)
+            goto qsv_map_to_err;
+    }
 
     dst->width   = src->width;
     dst->height  = src->height;
-    dst->data[3] = (uint8_t*)&hwctx->surfaces[i];
+    dst->data[3] = (uint8_t*)((i >= hwctx->nb_surfaces) ? new_sur : &hwctx->surfaces[i]);
 
     return 0;
+
+qsv_map_to_err:
+    if (new_sur)
+        av_freep(&new_sur);
+    if (new_vasur)
+        av_freep(&new_vasur);
+    return err;
 }
 
 static int qsv_frames_get_constraints(AVHWDeviceContext *ctx,
