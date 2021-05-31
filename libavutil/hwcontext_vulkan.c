@@ -1667,6 +1667,9 @@ static int alloc_bind_mem(AVHWFramesContext *hwfc, AVVkFrame *f,
     VulkanFunctions *vk = &p->vkfn;
     const int planes = av_pix_fmt_count_planes(hwfc->sw_format);
     VkBindImageMemoryInfo bind_info[AV_NUM_DATA_POINTERS] = { { 0 } };
+    VkMemoryRequirements memory_requirements = { 0 };
+    int mem_size = 0;
+    int mem_size_list[AV_NUM_DATA_POINTERS] = { 0 };
 
     AVVulkanDeviceContext *hwctx = ctx->hwctx;
 
@@ -1694,6 +1697,23 @@ static int alloc_bind_mem(AVHWFramesContext *hwfc, AVVkFrame *f,
             req.memoryRequirements.size = FFALIGN(req.memoryRequirements.size,
                                                   p->props.properties.limits.minMemoryMapAlignment);
 
+        if (p->use_one_memory) {
+            if (ded_req.prefersDedicatedAllocation | ded_req.requiresDedicatedAllocation) {
+                av_log(hwfc, AV_LOG_ERROR, "Cannot use dedicated allocation for intel vaapi\n");
+                return AVERROR(EINVAL);
+            }
+            if (memory_requirements.size == 0) {
+                memory_requirements = req.memoryRequirements;
+            } else if (memory_requirements.memoryTypeBits != req.memoryRequirements.memoryTypeBits) {
+                av_log(hwfc, AV_LOG_ERROR, "the param for each planes are not the same\n");
+                return AVERROR(EINVAL);
+            }
+
+            mem_size_list[i] = req.memoryRequirements.size;
+            mem_size += mem_size_list[i];
+            continue;
+        }
+
         /* In case the implementation prefers/requires dedicated allocation */
         use_ded_mem = ded_req.prefersDedicatedAllocation |
                       ded_req.requiresDedicatedAllocation;
@@ -1713,6 +1733,29 @@ static int alloc_bind_mem(AVHWFramesContext *hwfc, AVVkFrame *f,
         bind_info[i].sType  = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
         bind_info[i].image  = f->img[i];
         bind_info[i].memory = f->mem[i];
+    }
+
+    if (p->use_one_memory) {
+        memory_requirements.size = mem_size;
+
+        /* Allocate memory */
+        if ((err = alloc_mem(ctx, &memory_requirements,
+                                f->tiling == VK_IMAGE_TILING_LINEAR ?
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT :
+                                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                (void *)(((uint8_t *)alloc_pnext)),
+                                &f->flags, &f->mem[0])))
+            return err;
+
+        f->size[0] = memory_requirements.size;
+
+        for (int i = 0; i < planes; i++) {
+            bind_info[i].sType  = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+            bind_info[i].image  = f->img[i];
+            bind_info[i].memory = f->mem[0];
+            bind_info[i].memoryOffset = i == 0 ? 0 : mem_size_list[i-1];
+            f->offset[i] = bind_info[i].memoryOffset;
+        }
     }
 
     /* Bind the allocated memory to the images */
@@ -2921,7 +2964,8 @@ static int vulkan_map_to_drm(AVHWFramesContext *hwfc, AVFrame *dst,
             continue;
 
         vk->GetImageSubresourceLayout(hwctx->act_dev, f->img[i], &sub, &layout);
-        drm_desc->layers[i].planes[0].offset       = layout.offset;
+        drm_desc->layers[i].planes[0].offset       = p->use_one_memory ?
+                                                        f->offset[i] : layout.offset;
         drm_desc->layers[i].planes[0].pitch        = layout.rowPitch;
     }
 
