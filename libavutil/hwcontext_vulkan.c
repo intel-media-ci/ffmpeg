@@ -211,6 +211,9 @@ typedef struct VulkanDevicePriv {
     /* Settings */
     int use_linear_images;
 
+    /* map all planes to one memory */
+    int use_one_memory;
+
     /* Nvidia */
     int dev_is_nvidia;
 } VulkanDevicePriv;
@@ -1321,6 +1324,11 @@ static int vulkan_device_create_internal(AVHWDeviceContext *ctx,
     if (opt_d)
         p->use_linear_images = strtol(opt_d->value, NULL, 10);
 
+    opt_d = av_dict_get(opts, "one_memory", NULL, 0);
+    if (opt_d)
+        p->use_one_memory = strtol(opt_d->value, NULL, 10);
+
+
     hwctx->enabled_dev_extensions = dev_info.ppEnabledExtensionNames;
     hwctx->nb_enabled_dev_extensions = dev_info.enabledExtensionCount;
 
@@ -1443,8 +1451,10 @@ static int vulkan_device_derive(AVHWDeviceContext *ctx,
             return AVERROR_EXTERNAL;
         }
 
-        if (strstr(vendor, "Intel"))
+        if (strstr(vendor, "Intel")) {
+            av_dict_set_int(&opts, "one_memory", 1, 0);
             dev_select.vendor_id = 0x8086;
+        }
         if (strstr(vendor, "AMD"))
             dev_select.vendor_id = 0x1002;
 
