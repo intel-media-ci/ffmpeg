@@ -569,6 +569,8 @@ static int get_pixel_format(AVCodecContext *avctx)
 static void av1_frame_unref(AVCodecContext *avctx, AV1Frame *f)
 {
     ff_thread_release_buffer(avctx, &f->tf);
+    if (f->tf_display.f->buf[0])
+        ff_thread_release_buffer(avctx, &f->tf_display);
     av_buffer_unref(&f->hwaccel_priv_buf);
     f->hwaccel_picture_private = NULL;
     av_buffer_unref(&f->header_ref);
@@ -587,6 +589,12 @@ static int av1_frame_ref(AVCodecContext *avctx, AV1Frame *dst, const AV1Frame *s
     ret = ff_thread_ref_frame(&dst->tf, &src->tf);
     if (ret < 0)
         return ret;
+
+    if (src->tf_display.f->buf[0]) {
+        ret = ff_thread_ref_frame(&dst->tf_display, &src->tf_display);
+        if (ret < 0)
+            return ret;
+    }
 
     dst->header_ref = av_buffer_ref(src->header_ref);
     if (!dst->header_ref)
@@ -634,9 +642,11 @@ static av_cold int av1_decode_free(AVCodecContext *avctx)
     for (int i = 0; i < FF_ARRAY_ELEMS(s->ref); i++) {
         av1_frame_unref(avctx, &s->ref[i]);
         av_frame_free(&s->ref[i].tf.f);
+        av_frame_free(&s->ref[i].tf_display.f);
     }
     av1_frame_unref(avctx, &s->cur_frame);
     av_frame_free(&s->cur_frame.tf.f);
+    av_frame_free(&s->cur_frame.tf_display.f);
 
     av_buffer_unref(&s->seq_ref);
     av_buffer_unref(&s->header_ref);
@@ -738,12 +748,26 @@ static av_cold int av1_decode_init(AVCodecContext *avctx)
                    "Failed to allocate reference frame buffer %d.\n", i);
             return AVERROR(ENOMEM);
         }
+
+        s->ref[i].tf_display.f = av_frame_alloc();
+        if (!s->ref[i].tf_display.f) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Failed to allocate display frame buffer %d.\n", i);
+            return AVERROR(ENOMEM);
+        }
     }
 
     s->cur_frame.tf.f = av_frame_alloc();
     if (!s->cur_frame.tf.f) {
         av_log(avctx, AV_LOG_ERROR,
                "Failed to allocate current frame buffer.\n");
+        return AVERROR(ENOMEM);
+    }
+
+    s->cur_frame.tf_display.f = av_frame_alloc();
+    if (!s->cur_frame.tf_display.f) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Failed to allocate current display frame buffer.\n");
         return AVERROR(ENOMEM);
     }
 
@@ -817,6 +841,16 @@ static int av1_frame_alloc(AVCodecContext *avctx, AV1Frame *f)
     case AV1_FRAME_SWITCH:
         frame->pict_type = AV_PICTURE_TYPE_SP;
         break;
+    }
+
+    if (header->film_grain.apply_grain &&
+        (avctx->pix_fmt == AV_PIX_FMT_VAAPI) &&
+        !(avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN)) {
+        if ((ret = ff_thread_get_buffer(avctx, &f->tf_display, AV_GET_BUFFER_FLAG_REF)) < 0)
+            goto fail;
+
+        f->tf_display.f->key_frame = frame->key_frame;
+        f->tf_display.f->pict_type = frame->pict_type;
     }
 
     if (avctx->hwaccel) {
@@ -902,8 +936,15 @@ static int set_output_frame(AVCodecContext *avctx, AVFrame *frame,
                             const AVPacket *pkt, int *got_frame)
 {
     AV1DecContext *s = avctx->priv_data;
-    const AVFrame *srcframe = s->cur_frame.tf.f;
+    const AVFrame *srcframe;
     int ret;
+
+    /* Use tf_display as output when it is available. */
+    if (s->cur_frame.tf_display.f->buf[0]) {
+        srcframe = s->cur_frame.tf_display.f;
+    } else {
+        srcframe= s->cur_frame.tf.f;
+    }
 
     // TODO: all layers
     if (s->operating_point_idc &&

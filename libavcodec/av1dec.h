@@ -33,6 +33,9 @@
 typedef struct AV1Frame {
     ThreadFrame tf;
 
+    /** current tf_display is only used for VA-API to apply film grain */
+    ThreadFrame tf_display;
+
     AVBufferRef *hwaccel_priv_buf;
     void *hwaccel_picture_private;
 
