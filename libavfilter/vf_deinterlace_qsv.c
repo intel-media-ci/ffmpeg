@@ -283,7 +283,7 @@ static int init_out_session(AVFilterContext *ctx)
 
     par.AsyncDepth = 1;    // TODO async
 
-    par.vpp.In = hw_frames_hwctx->surfaces[0].Info;
+    par.vpp.In = hw_frames_hwctx->reserve_surface.Info;
 
     par.vpp.In.CropW = ctx->inputs[0]->w;
     par.vpp.In.CropH = ctx->inputs[0]->h;

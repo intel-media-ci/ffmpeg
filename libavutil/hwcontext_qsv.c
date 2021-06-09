@@ -477,7 +477,7 @@ static mfxStatus frame_alloc(mfxHDL pthis, mfxFrameAllocRequest *req,
     QSVFramesContext       *s = ctx->internal->priv;
     AVQSVFramesContext *hwctx = ctx->hwctx;
     mfxFrameInfo *i  = &req->Info;
-    mfxFrameInfo *i1 = &hwctx->surfaces[0].Info;
+    mfxFrameInfo *i1 = &hwctx->reserve_surface.Info;
 
     if (!(req->Type & MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET) ||
         !(req->Type & (MFX_MEMTYPE_FROM_VPPIN | MFX_MEMTYPE_FROM_VPPOUT)) ||
@@ -580,7 +580,7 @@ static int qsv_init_internal_session(AVHWFramesContext *ctx,
                               MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
     par.AsyncDepth = 1;
 
-    par.vpp.In = frames_hwctx->surfaces[0].Info;
+    par.vpp.In = frames_hwctx->reserve_surface.Info;
 
     /* Apparently VPP requires the frame rate to be set to some value, otherwise
      * init will fail (probably for the framerate conversion filter). Since we
@@ -651,6 +651,13 @@ static int qsv_frames_init(AVHWFramesContext *ctx)
 
         for (i = 0; i < frames_hwctx->nb_surfaces; i++)
             s->mem_ids[i] = frames_hwctx->surfaces[i].Data.MemId;
+    }
+
+    ret = qsv_init_surface(ctx, &frames_hwctx->reserve_surface);
+    if (ret < 0) {
+        if (opaque)
+            av_freep(&s->surface_ptrs);
+        return ret;
     }
 
     s->session_download = NULL;
@@ -1106,13 +1113,7 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
 {
     QSVFramesContext *s = dst_ctx->internal->priv;
     AVQSVFramesContext *dst_hwctx = dst_ctx->hwctx;
-    int i;
-
-    if (src_ctx->initial_pool_size == 0) {
-        av_log(dst_ctx, AV_LOG_ERROR, "Only fixed-size pools can be "
-            "mapped to QSV frames.\n");
-        return AVERROR(EINVAL);
-    }
+    int i, ret;
 
     switch (src_ctx->device_ctx->type) {
 #if CONFIG_VAAPI
@@ -1127,10 +1128,19 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
             if (!s->surfaces_internal)
                 return AVERROR(ENOMEM);
             for (i = 0; i < src_hwctx->nb_surfaces; i++) {
-                qsv_init_surface(dst_ctx, &s->surfaces_internal[i]);
+                ret = qsv_init_surface(dst_ctx, &s->surfaces_internal[i]);
+                if (ret < 0) {
+                    av_freep(&s->surfaces_internal);
+                    return ret;
+                }
                 s->handle_pairs_internal[i].first = src_hwctx->surface_ids + i;
                 s->handle_pairs_internal[i].second = (mfxMemId)MFX_INFINITE;
                 s->surfaces_internal[i].Data.MemId = (mfxMemId)&s->handle_pairs_internal[i];
+            }
+            ret = qsv_init_surface(dst_ctx, &dst_hwctx->reserve_surface);
+            if (ret < 0) {
+                av_freep(&s->surfaces_internal);
+                return ret;
             }
             dst_hwctx->nb_surfaces = src_hwctx->nb_surfaces;
             dst_hwctx->frame_type  = MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET;
@@ -1149,7 +1159,11 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
             if (!s->surfaces_internal)
                 return AVERROR(ENOMEM);
             for (i = 0; i < src_ctx->initial_pool_size; i++) {
-                qsv_init_surface(dst_ctx, &s->surfaces_internal[i]);
+                ret = qsv_init_surface(dst_ctx, &s->surfaces_internal[i]);
+                if (ret < 0) {
+                    av_freep(&s->surfaces_internal);
+                    return ret;
+                }
                 s->handle_pairs_internal[i].first = (mfxMemId)src_hwctx->texture_infos[i].texture;
                 if (src_hwctx->BindFlags & D3D11_BIND_RENDER_TARGET) {
                     s->handle_pairs_internal[i].second = (mfxMemId)MFX_INFINITE;
@@ -1157,6 +1171,11 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
                     s->handle_pairs_internal[i].second = (mfxMemId)src_hwctx->texture_infos[i].index;
                 }
                 s->surfaces_internal[i].Data.MemId = (mfxMemId)&s->handle_pairs_internal[i];
+            }
+            ret = qsv_init_surface(dst_ctx, &dst_hwctx->reserve_surface);
+            if (ret < 0) {
+                av_freep(&s->surfaces_internal);
+                return ret;
             }
             dst_hwctx->nb_surfaces = src_ctx->initial_pool_size;
             if (src_hwctx->BindFlags & D3D11_BIND_RENDER_TARGET) {
@@ -1179,10 +1198,19 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
             if (!s->surfaces_internal)
                 return AVERROR(ENOMEM);
             for (i = 0; i < src_hwctx->nb_surfaces; i++) {
-                qsv_init_surface(dst_ctx, &s->surfaces_internal[i]);
+                ret = qsv_init_surface(dst_ctx, &s->surfaces_internal[i]);
+                if (ret < 0) {
+                    av_freep(&s->surfaces_internal);
+                    return ret;
+                }
                 s->handle_pairs_internal[i].first = (mfxMemId)src_hwctx->surfaces[i];
                 s->handle_pairs_internal[i].second = (mfxMemId)MFX_INFINITE;
                 s->surfaces_internal[i].Data.MemId = (mfxMemId)&s->handle_pairs_internal[i];
+            }
+            ret = qsv_init_surface(dst_ctx, &dst_hwctx->reserve_surface);
+            if (ret < 0) {
+                av_freep(&s->surfaces_internal);
+                return ret;
             }
             dst_hwctx->nb_surfaces = src_hwctx->nb_surfaces;
             if (src_hwctx->surface_type == DXVA2_VideoProcessorRenderTarget)
