@@ -566,8 +566,8 @@ static int init_video_param_jpeg(AVCodecContext *avctx, QSVEncContext *q)
     if (avctx->hw_frames_ctx) {
         AVHWFramesContext *frames_ctx    = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
         AVQSVFramesContext *frames_hwctx = frames_ctx->hwctx;
-        q->param.mfx.FrameInfo.Width  = frames_hwctx->surfaces[0].Info.Width;
-        q->param.mfx.FrameInfo.Height = frames_hwctx->surfaces[0].Info.Height;
+        q->param.mfx.FrameInfo.Width  = frames_hwctx->reserve_surface.Info.Width;
+        q->param.mfx.FrameInfo.Height = frames_hwctx->reserve_surface.Info.Height;
     }
 
     if (avctx->framerate.den > 0 && avctx->framerate.num > 0) {
@@ -684,8 +684,8 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     if (avctx->hw_frames_ctx) {
         AVHWFramesContext *frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
         AVQSVFramesContext *frames_hwctx = frames_ctx->hwctx;
-        q->param.mfx.FrameInfo.Width  = frames_hwctx->surfaces[0].Info.Width;
-        q->param.mfx.FrameInfo.Height = frames_hwctx->surfaces[0].Info.Height;
+        q->param.mfx.FrameInfo.Width  = frames_hwctx->reserve_surface.Info.Width;
+        q->param.mfx.FrameInfo.Height = frames_hwctx->reserve_surface.Info.Height;
     }
 
     if (avctx->framerate.den > 0 && avctx->framerate.num > 0) {

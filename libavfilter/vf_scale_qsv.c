@@ -414,8 +414,8 @@ static int init_out_session(AVFilterContext *ctx)
 
     par.AsyncDepth = 1;    // TODO async
 
-    par.vpp.In  = in_frames_hwctx->surfaces[0].Info;
-    par.vpp.Out = out_frames_hwctx->surfaces[0].Info;
+    par.vpp.In  = in_frames_hwctx->reserve_surface.Info;
+    par.vpp.Out = out_frames_hwctx->reserve_surface.Info;
 
     /* Apparently VPP requires the frame rate to be set to some value, otherwise
      * init will fail (probably for the framerate conversion filter). Since we
