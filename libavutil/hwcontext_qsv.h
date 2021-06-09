@@ -43,6 +43,11 @@ typedef struct AVQSVFramesContext {
     mfxFrameSurface1 *surfaces;
     int            nb_surfaces;
 
+    /*
+     * Some filters and codecs use surfaces[0] to get frameInfo, but there is not
+     * guarantee that the surfaces is allocated. Add a variable to store the surface information
+     */
+    mfxFrameSurface1 reserve_surface;
     /**
      * A combination of MFX_MEMTYPE_* describing the frame pool.
      */
