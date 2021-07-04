@@ -188,10 +188,17 @@ int ff_dnn_execute_layer_conv2d(DnnOperand *operands, const int32_t *input_opera
                                 int32_t output_operand_index, const void *parameters, NativeContext *ctx)
 {
 #if HAVE_PTHREAD_CANCEL
-    int thread_num = (ctx->options.conv2d_threads <= 0 || ctx->options.conv2d_threads > av_cpu_count())
-        ? (av_cpu_count() + 1) : (ctx->options.conv2d_threads);
+    int thread_num;
     int ret = DNN_SUCCESS, thread_stride;
     ThreadParam *thread_param;
+    if (ctx->options.async) {
+        thread_num = (ctx->options.conv2d_threads <= 0 || ctx->options.conv2d_threads > av_cpu_count()/4+1)
+            ? (av_cpu_count()/4 + 1) : (ctx->options.conv2d_threads);
+    }
+    else {
+        thread_num = (ctx->options.conv2d_threads <= 0 || ctx->options.conv2d_threads > av_cpu_count())
+            ? (av_cpu_count() + 1) : (ctx->options.conv2d_threads);
+    }
 #else
     ThreadParam thread_param = { 0 };
 #endif
