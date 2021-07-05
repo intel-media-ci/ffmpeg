@@ -51,9 +51,27 @@ typedef struct InferenceItem {
     uint32_t bbox_index;
 } InferenceItem;
 
+/**
+ * Common Async Execution Mechanism for the DNN Backends.
+ */
 typedef struct DNNAsyncExecModule {
+    /**
+     * Synchronous inference function for the backend
+     * with corresponding request item as the argument.
+     */
     DNNReturnType (*start_inference)(void *request);
+
+    /**
+     * Completion Callback for the backend.
+     * Expected argument type of callback must match that
+     * of the inference function.
+     */
     void (*callback)(void *args);
+
+    /**
+     * Argument for the execution functions.
+     * i.e. Request item for the backend.
+     */
     void *args;
 #if HAVE_PTHREAD_CANCEL
     pthread_t thread_id;
@@ -78,9 +96,56 @@ int ff_check_exec_params(void *ctx, DNNBackendType backend, DNNFunctionType func
  */
 DNNReturnType ff_dnn_fill_task(TaskItem *task, DNNExecBaseParams *exec_params, void *backend_model, int async, int do_ioproc);
 
+/**
+ * Init Thread Attributes for Async Execution.
+ *
+ * @param async_module pointer to DNNAsyncExecModule module
+ *
+ * @retval DNN_SUCCESS if successful
+ * @retval DNN_ERROR if async_module is NULL
+ */
 DNNReturnType ff_init_async_attributes(DNNAsyncExecModule *async_module);
+
+/**
+ * Destroy Thread Attributes for Async Execution and set
+ * module pointers to NULL.
+ *
+ * @param async_module pointer to DNNAsyncExecModule module
+ *
+ * @retval DNN_SUCCESS if successful
+ * @retval DNN_ERROR if async_module is NULL
+ */
 DNNReturnType ff_destroy_async_attributes(DNNAsyncExecModule *async_module);
+
+/**
+ * Start asynchronous inference routine for the TensorFlow
+ * model on a detached thread. It calls the completion callback
+ * after the inference completes. Completion callback and inference
+ * function must be set before calling this function.
+ *
+ * If POSIX threads aren't supported, the execution rolls back
+ * to synchronous mode, calling completion callback after inference.
+ *
+ * @param ctx pointer to the backend context
+ * @param async_module pointer to DNNAsyncExecModule module
+ *
+ * @retval DNN_SUCCESS on the start of async inference.
+ * @retval DNN_ERROR in case async inference cannot be started
+ */
 DNNReturnType ff_dnn_start_inference_async(void *ctx, DNNAsyncExecModule *async_module);
+
+/**
+ * Extract input and output frame from the Task Queue after
+ * asynchronous inference.
+ *
+ * @param task_queue pointer to the task queue of the backend
+ * @param in double pointer to the input frame
+ * @param out double pointer to the output frame
+ *
+ * @retval DAST_EMPTY_QUEUE if task queue is empty
+ * @retval DAST_NOT_READY if inference not completed yet.
+ * @retval DAST_SUCCESS if result successfully extracted
+ */
 DNNAsyncStatusType dnn_get_async_result(Queue *task_queue, AVFrame **in, AVFrame **out);
 
 #endif
