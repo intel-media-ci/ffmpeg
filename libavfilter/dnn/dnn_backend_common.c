@@ -70,6 +70,10 @@ DNNReturnType ff_dnn_fill_task(TaskItem *task, DNNExecBaseParams *exec_params, v
     return DNN_SUCCESS;
 }
 
+/**
+ * Thread routine for async execution.
+ * @param args pointer to DNNAsyncExecModule module
+ */
 static void *async_thread_routine(void *args)
 {
     DNNAsyncExecModule *async_module = args;
