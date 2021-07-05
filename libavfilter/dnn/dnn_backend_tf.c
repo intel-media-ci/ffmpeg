@@ -89,6 +89,11 @@ AVFILTER_DEFINE_CLASS(dnn_tensorflow);
 static DNNReturnType execute_model_tf(TFRequestItem *request, Queue *inference_queue);
 static void infer_completion_callback(void *args);
 
+#define delete_request_item(request)                    \
+    ff_destroy_async_attributes(&request->exec_module); \
+    av_freep(&request->infer_request);                  \
+    av_freep(&request)
+
 static void free_buffer(void *data, size_t length)
 {
     av_freep(&data);
@@ -891,8 +896,7 @@ DNNModel *ff_dnn_load_model_tf(const char *model_filename, DNNFunctionType func_
         ff_init_async_attributes(&item->exec_module);
 
         if (ff_safe_queue_push_back(tf_model->request_queue, item) < 0) {
-            av_freep(&item->infer_request);
-            av_freep(&item);
+            delete_request_item(item);
             goto err;
         }
     }
@@ -1059,8 +1063,7 @@ err:
     av_freep(&outputs);
 
     if (ff_safe_queue_push_back(tf_model->request_queue, request) < 0) {
-        av_freep(&request->infer_request);
-        av_freep(&request);
+        delete_request_item(request);
         av_log(ctx, AV_LOG_ERROR, "Failed to push back request_queue.\n");
     }
 }
@@ -1075,25 +1078,31 @@ static DNNReturnType execute_model_tf(TFRequestItem *request, Queue *inference_q
     inference = ff_queue_peek_front(inference_queue);
     if (!inference) {
         av_log(NULL, AV_LOG_ERROR, "Failed to get inference item\n");
-        return DNN_ERROR;
+        goto err;
     }
     task = inference->task;
     tf_model = task->model;
     ctx = &tf_model->ctx;
 
     if (fill_model_input_tf(tf_model, request) != DNN_SUCCESS) {
-        return DNN_ERROR;
+        goto err;
     }
 
     if (task->async) {
         return ff_dnn_start_inference_async(ctx, &request->exec_module);
     } else {
         if (tf_start_inference(request) != DNN_SUCCESS) {
-            return DNN_ERROR;
+            goto err;
         }
         infer_completion_callback(request);
         return (task->inference_done == task->inference_todo) ? DNN_SUCCESS : DNN_ERROR;
     }
+err:
+    tf_free_request(request->infer_request);
+    if (ff_safe_queue_push_back(tf_model->request_queue, request) < 0) {
+        delete_request_item(request);
+    }
+    return DNN_ERROR;
 }
 
 DNNReturnType ff_dnn_execute_model_tf(const DNNModel *model, DNNExecBaseParams *exec_params)
@@ -1193,8 +1202,7 @@ DNNReturnType ff_dnn_flush_tf(const DNNModel *model)
     if (ret != DNN_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "Failed to fill model input.\n");
         if (ff_safe_queue_push_back(tf_model->request_queue, request) < 0) {
-            av_freep(&request->infer_request);
-            av_freep(&request);
+            delete_request_item(request);
         }
         return ret;
     }
@@ -1210,10 +1218,8 @@ void ff_dnn_free_model_tf(DNNModel **model)
         tf_model = (*model)->model;
         while (ff_safe_queue_size(tf_model->request_queue) != 0) {
             TFRequestItem *item = ff_safe_queue_pop_front(tf_model->request_queue);
-            ff_destroy_async_attributes(&item->exec_module);
             tf_free_request(item->infer_request);
-            av_freep(&item->infer_request);
-            av_freep(&item);
+            delete_request_item(item);
         }
         ff_safe_queue_destroy(tf_model->request_queue);
 
