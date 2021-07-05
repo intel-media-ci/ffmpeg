@@ -24,6 +24,7 @@
 #ifndef AVFILTER_DNN_DNN_BACKEND_COMMON_H
 #define AVFILTER_DNN_DNN_BACKEND_COMMON_H
 
+#include "queue.h"
 #include "../dnn_interface.h"
 #include "libavutil/thread.h"
 
@@ -80,5 +81,6 @@ DNNReturnType ff_dnn_fill_task(TaskItem *task, DNNExecBaseParams *exec_params, v
 DNNReturnType ff_init_async_attributes(DNNAsyncExecModule *async_module);
 DNNReturnType ff_destroy_async_attributes(DNNAsyncExecModule *async_module);
 DNNReturnType ff_dnn_start_inference_async(void *ctx, DNNAsyncExecModule *async_module);
+DNNAsyncStatusType dnn_get_async_result(Queue *task_queue, AVFrame **in, AVFrame **out);
 
 #endif
