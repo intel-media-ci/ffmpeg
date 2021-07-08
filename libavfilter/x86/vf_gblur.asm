@@ -238,3 +238,145 @@ POSTSCALE_SLICE
 INIT_ZMM avx512
 POSTSCALE_SLICE
 %endif
+
+; void ff_verti_slice_avx512(float *buffer, int width, int height, int column_begin, int column_end,
+;                         int steps, float nu, float bscale);
+
+%macro VERTI_SLICE 0
+cglobal verti_slice, 6, 12, 9, 0x20, buffer, width, height, cbegin, cend, steps, x, y, cwidth, step, ptr, stride
+%assign cols mmsize / 4
+    VBROADCASTSS m0, xmm0 ; nu
+    VBROADCASTSS m1, xmm1 ; bscale
+
+    mov cwidthq, cendq
+    sub cwidthq, cbeginq
+
+    lea strideq, [widthq * 4]
+
+    xor xq, xq ; x = 0
+    cmp cwidthq, cols
+    jl .x_scalar
+    cmp cwidthq, 0x0
+    je .end_scalar
+
+    sub cwidthq, cols
+    .loop_x:
+        xor stepq, stepq
+        .loop_step:
+            ; ptr = buffer + x + column_begin;
+            lea ptrq, [xq + cbeginq]
+            lea ptrq, [bufferq + ptrq*4]
+
+            ;  ptr[15:0] *= bcale;
+            movu m2, [ptrq]
+            mulps m2, m1
+            movu [ptrq], m2
+
+            ; Filter downwards
+            mov yq, 1
+            .loop_y_down:
+                add ptrq, strideq ; ptrq += width
+                movu m3, [ptrq]
+                FMULADD_PS m2, m2, m0, m3, m2
+                movu [ptrq], m2
+
+                inc yq
+                cmp yq, heightq
+                jl .loop_y_down
+
+            mulps m2, m1
+            movu [ptrq], m2
+
+            ; Filter upwards
+            dec yq
+            .loop_y_up:
+                sub ptrq, strideq
+                movu m3, [ptrq]
+                FMULADD_PS m2, m2, m0, m3, m2
+                movu [ptrq], m2
+
+                dec yq
+                cmp yq, 0
+                jg .loop_y_up
+
+            inc stepq
+            cmp stepq, stepsq
+            jl .loop_step
+
+        add xq, cols
+        cmp xq, cwidthq
+        jle .loop_x
+
+    add cwidthq, cols
+    cmp xq, cwidthq
+    jge .end_scalar
+
+    .x_scalar:
+        xor stepq, stepq
+        mov qword [rsp + 0x10], xq
+        sub cwidthq, xq
+        mov xq, 1
+        shlx cwidthq, xq, cwidthq
+        sub cwidthq, 1
+        kmovd k1, cwidthd
+        mov xq, qword [rsp + 0x10]
+
+        .loop_step_scalar:
+            lea ptrq, [xq + cbeginq]
+            lea ptrq, [bufferq + ptrq*4]
+
+            kmovw k7, k1
+            vmovups m2{k7}, [ptrq]
+            mulps m2, m1
+            kmovw k7, k1
+            vmovups [ptrq]{k7}, m2
+
+            ; Filter downwards
+            mov yq, 1
+            .x_scalar_loop_y_down:
+                add ptrq, strideq
+                kmovw k7, k1
+                vmovups m3{k7}, [ptrq]
+                FMULADD_PS m2, m2, m0, m3, m2
+                kmovw k7, k1
+                vmovups [ptrq]{k7}, m2
+
+                inc yq
+                cmp yq, heightq
+                jl .x_scalar_loop_y_down
+
+            mulps m2, m1
+            kmovw k7, k1
+            vmovups [ptrq]{k7}, m2
+
+            ; Filter upwards
+            dec yq
+            .x_scalar_loop_y_up:
+                sub ptrq, strideq
+                kmovw k7, k1
+                vmovups m3{k7}, [ptrq]
+                FMULADD_PS m2, m2, m0, m3, m2
+                kmovw k7, k1
+                vmovups [ptrq]{k7}, m2
+
+                dec yq
+                cmp yq, 0
+                jg .x_scalar_loop_y_up
+
+            inc stepq
+            cmp stepq, stepsq
+            jl .loop_step_scalar
+
+    .end_scalar:
+    RET
+%endmacro
+
+%if HAVE_AVX2_EXTERNAL
+INIT_YMM avx2
+VERTI_SLICE
+%endif
+
+%if HAVE_AVX512_EXTERNAL
+INIT_ZMM avx512
+VERTI_SLICE
+%endif
