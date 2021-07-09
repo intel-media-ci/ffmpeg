@@ -73,6 +73,7 @@ typedef struct TFInferRequest {
 typedef struct TFRequestItem {
     TFInferRequest *infer_request;
     InferenceItem *inference;
+    TF_Status *status;
     DNNAsyncExecModule exec_module;
 } TFRequestItem;
 
@@ -92,6 +93,7 @@ static void infer_completion_callback(void *args);
 #define delete_request_item(request)                    \
     ff_destroy_async_attributes(&request->exec_module); \
     av_freep(&request->infer_request);                  \
+    TF_DeleteStatus(request->status);                   \
     av_freep(&request)
 
 static void free_buffer(void *data, size_t length)
@@ -168,8 +170,8 @@ static DNNReturnType tf_start_inference(void *args)
                   infer_request->tf_input, &infer_request->input_tensor, 1,
                   infer_request->tf_outputs, infer_request->output_tensors,
                   task->nb_output, NULL, 0, NULL,
-                  tf_model->status);
-    if (TF_GetCode(tf_model->status) != TF_OK) {
+                  request->status);
+    if (TF_GetCode(request->status) != TF_OK) {
         av_log(&tf_model->ctx, AV_LOG_ERROR, "Failed to run session when executing model\n");
         return DNN_ERROR;
     }
@@ -890,6 +892,7 @@ DNNModel *ff_dnn_load_model_tf(const char *model_filename, DNNFunctionType func_
             av_freep(&item);
             goto err;
         }
+        item->status = TF_NewStatus();
         item->exec_module.start_inference = &tf_start_inference;
         item->exec_module.callback = &infer_completion_callback;
         item->exec_module.args = item;
