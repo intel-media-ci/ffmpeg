@@ -199,6 +199,10 @@ cglobal postscale_slice, 2, 2, 4, ptr, length, postscale, min, max
     VBROADCASTSS m0, xm0
     VBROADCASTSS m1, xm1
     VBROADCASTSS m2, maxm
+%elif cpuflag(avx512)
+    VBROADCASTSS m0, xmm0
+    VBROADCASTSS m1, xmm1
+    VBROADCASTSS m2, xmm2
 %else ; UNIX64
     VBROADCASTSS m0, xm0
     VBROADCASTSS m1, xm1
@@ -206,7 +210,7 @@ cglobal postscale_slice, 2, 2, 4, ptr, length, postscale, min, max
 %endif
 
     .loop:
-%if cpuflag(avx2)
+%if cpuflag(avx2) || cpuflag(avx512)
     mulps         m3, m0, [ptrq + lengthq]
 %else
     movu          m3, [ptrq + lengthq]
@@ -227,5 +231,10 @@ POSTSCALE_SLICE
 
 %if HAVE_AVX2_EXTERNAL
 INIT_YMM avx2
+POSTSCALE_SLICE
+%endif
+
+%if HAVE_AVX512_EXTERNAL
+INIT_ZMM avx512
 POSTSCALE_SLICE
 %endif
