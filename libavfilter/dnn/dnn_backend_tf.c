@@ -83,7 +83,6 @@ typedef struct TFRequestItem {
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption dnn_tensorflow_options[] = {
     { "sess_config", "config for SessionOptions", OFFSET(options.sess_config), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, FLAGS },
-    { "async",  "use DNN async inference",OFFSET(options.async), AV_OPT_TYPE_BOOL, { .i64 = 1 }, 0, 1, FLAGS},
     DNN_BACKEND_COMMON_OPTIONS
     { NULL }
 };

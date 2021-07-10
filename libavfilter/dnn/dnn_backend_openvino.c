@@ -39,6 +39,7 @@
 typedef struct OVOptions{
     char *device_type;
     int nireq;
+    uint8_t async;
     int batch_size;
     int input_resizable;
 } OVOptions;
@@ -373,6 +374,11 @@ static DNNReturnType init_model_ov(OVModel *ov_model, const char *input_name, co
     if (ctx->options.nireq <= 0) {
         // the default value is a rough estimation
         ctx->options.nireq = av_cpu_count() / 2 + 1;
+    }
+
+    if (ctx->options.async != 0 && ctx->options.async != 1) {
+        // default mode is async
+        ctx->options.async = 1;
     }
 
     ov_model->request_queue = ff_safe_queue_create();
@@ -724,6 +730,8 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, DNNFunctionType func_
 
     //parse options
     av_opt_set_defaults(ctx);
+    // set default async to 1
+    ctx->options.async = 1;
     if (av_opt_set_from_string(ctx, options, NULL, "=", "&") < 0) {
         av_log(ctx, AV_LOG_ERROR, "Failed to parse options \"%s\"\n", options);
         goto err;
@@ -761,55 +769,6 @@ DNNReturnType ff_dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *
 {
     OVModel *ov_model = model->model;
     OVContext *ctx = &ov_model->ctx;
-    TaskItem task;
-    OVRequestItem *request;
-
-    if (ff_check_exec_params(ctx, DNN_OV, model->func_type, exec_params) != 0) {
-        return DNN_ERROR;
-    }
-
-    if (model->func_type == DFT_ANALYTICS_CLASSIFY) {
-        // Once we add async support for tensorflow backend and native backend,
-        // we'll combine the two sync/async functions in dnn_interface.h to
-        // simplify the code in filter, and async will be an option within backends.
-        // so, do not support now, and classify filter will not call this function.
-        return DNN_ERROR;
-    }
-
-    if (ctx->options.batch_size > 1) {
-        avpriv_report_missing_feature(ctx, "batch mode for sync execution");
-        return DNN_ERROR;
-    }
-
-    if (!ov_model->exe_network) {
-        if (init_model_ov(ov_model, exec_params->input_name, exec_params->output_names[0]) != DNN_SUCCESS) {
-            av_log(ctx, AV_LOG_ERROR, "Failed init OpenVINO exectuable network or inference request\n");
-            return DNN_ERROR;
-        }
-    }
-
-    if (ff_dnn_fill_task(&task, exec_params, ov_model, 0, 1) != DNN_SUCCESS) {
-        return DNN_ERROR;
-    }
-
-    if (extract_inference_from_task(ov_model->model->func_type, &task, ov_model->inference_queue, exec_params) != DNN_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
-        return DNN_ERROR;
-    }
-
-    request = ff_safe_queue_pop_front(ov_model->request_queue);
-    if (!request) {
-        av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        return DNN_ERROR;
-    }
-
-    return execute_model_ov(request, ov_model->inference_queue);
-}
-
-DNNReturnType ff_dnn_execute_model_async_ov(const DNNModel *model, DNNExecBaseParams *exec_params)
-{
-    OVModel *ov_model = model->model;
-    OVContext *ctx = &ov_model->ctx;
     OVRequestItem *request;
     TaskItem *task;
     DNNReturnType ret;
@@ -831,7 +790,8 @@ DNNReturnType ff_dnn_execute_model_async_ov(const DNNModel *model, DNNExecBasePa
         return DNN_ERROR;
     }
 
-    if (ff_dnn_fill_task(task, exec_params, ov_model, 1, 1) != DNN_SUCCESS) {
+    if (ff_dnn_fill_task(task, exec_params, ov_model, ctx->options.async, 1) != DNN_SUCCESS) {
+        av_freep(&task);
         return DNN_ERROR;
     }
 
@@ -846,23 +806,46 @@ DNNReturnType ff_dnn_execute_model_async_ov(const DNNModel *model, DNNExecBasePa
         return DNN_ERROR;
     }
 
-    while (ff_queue_size(ov_model->inference_queue) >= ctx->options.batch_size) {
+    if (ctx->options.async) {
+        while (ff_queue_size(ov_model->inference_queue) >= ctx->options.batch_size) {
+            request = ff_safe_queue_pop_front(ov_model->request_queue);
+            if (!request) {
+                av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
+                return DNN_ERROR;
+            }
+
+            ret = execute_model_ov(request, ov_model->inference_queue);
+            if (ret != DNN_SUCCESS) {
+                return ret;
+            }
+        }
+
+        return DNN_SUCCESS;
+    }
+    else {
+        if (model->func_type == DFT_ANALYTICS_CLASSIFY) {
+            // Once we add async support for tensorflow backend and native backend,
+            // we'll combine the two sync/async functions in dnn_interface.h to
+            // simplify the code in filter, and async will be an option within backends.
+            // so, do not support now, and classify filter will not call this function.
+            return DNN_ERROR;
+        }
+
+        if (ctx->options.batch_size > 1) {
+            avpriv_report_missing_feature(ctx, "batch mode for sync execution");
+            return DNN_ERROR;
+        }
+
         request = ff_safe_queue_pop_front(ov_model->request_queue);
         if (!request) {
             av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
             return DNN_ERROR;
         }
-
-        ret = execute_model_ov(request, ov_model->inference_queue);
-        if (ret != DNN_SUCCESS) {
-            return ret;
-        }
+        return execute_model_ov(request, ov_model->inference_queue);
     }
-
-    return DNN_SUCCESS;
 }
 
-DNNAsyncStatusType ff_dnn_get_async_result_ov(const DNNModel *model, AVFrame **in, AVFrame **out)
+DNNAsyncStatusType ff_dnn_get_result_ov(const DNNModel *model, AVFrame **in, AVFrame **out)
 {
     OVModel *ov_model = model->model;
     return dnn_get_async_result(ov_model->task_queue, in, out);
