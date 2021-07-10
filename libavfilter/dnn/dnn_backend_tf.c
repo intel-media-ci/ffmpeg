@@ -41,6 +41,7 @@
 
 typedef struct TFOptions{
     char *sess_config;
+    uint8_t async;
     uint32_t nireq;
 } TFOptions;
 
@@ -82,6 +83,7 @@ typedef struct TFRequestItem {
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption dnn_tensorflow_options[] = {
     { "sess_config", "config for SessionOptions", OFFSET(options.sess_config), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, FLAGS },
+    { "async",  "use DNN async inference",OFFSET(options.async), AV_OPT_TYPE_BOOL, { .i64 = 1 }, 0, 1, FLAGS},
     DNN_BACKEND_COMMON_OPTIONS
     { NULL }
 };
@@ -859,6 +861,8 @@ DNNModel *ff_dnn_load_model_tf(const char *model_filename, DNNFunctionType func_
 
     //parse options
     av_opt_set_defaults(ctx);
+    // set default async to 1
+    ctx->options.async = 1;
     if (av_opt_set_from_string(ctx, options, NULL, "=", "&") < 0) {
         av_log(ctx, AV_LOG_ERROR, "Failed to parse options \"%s\"\n", options);
         goto err;
@@ -872,6 +876,10 @@ DNNModel *ff_dnn_load_model_tf(const char *model_filename, DNNFunctionType func_
 
     if (ctx->options.nireq <= 0) {
         ctx->options.nireq = av_cpu_count() / 2 + 1;
+    }
+
+    if (ctx->options.async != 0 && ctx->options.async != 1) {
+        ctx->options.async = 1;
     }
 
     tf_model->request_queue = ff_safe_queue_create();
@@ -1112,34 +1120,6 @@ DNNReturnType ff_dnn_execute_model_tf(const DNNModel *model, DNNExecBaseParams *
 {
     TFModel *tf_model = model->model;
     TFContext *ctx = &tf_model->ctx;
-    TaskItem task;
-    TFRequestItem *request;
-
-    if (ff_check_exec_params(ctx, DNN_TF, model->func_type, exec_params) != 0) {
-        return DNN_ERROR;
-    }
-
-    if (ff_dnn_fill_task(&task, exec_params, tf_model, 0, 1) != DNN_SUCCESS) {
-        return DNN_ERROR;
-    }
-
-    if (extract_inference_from_task(&task, tf_model->inference_queue) != DNN_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
-        return DNN_ERROR;
-    }
-
-    request = ff_safe_queue_pop_front(tf_model->request_queue);
-    if (!request) {
-        av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        return DNN_ERROR;
-    }
-
-    return execute_model_tf(request, tf_model->inference_queue);
-}
-
-DNNReturnType ff_dnn_execute_model_async_tf(const DNNModel *model, DNNExecBaseParams *exec_params) {
-    TFModel *tf_model = model->model;
-    TFContext *ctx = &tf_model->ctx;
     TaskItem *task;
     TFRequestItem *request;
 
@@ -1153,7 +1133,7 @@ DNNReturnType ff_dnn_execute_model_async_tf(const DNNModel *model, DNNExecBasePa
         return DNN_ERROR;
     }
 
-    if (ff_dnn_fill_task(task, exec_params, tf_model, 1, 1) != DNN_SUCCESS) {
+    if (ff_dnn_fill_task(task, exec_params, tf_model, ctx->options.async, 1) != DNN_SUCCESS) {
         av_freep(&task);
         return DNN_ERROR;
     }
@@ -1177,7 +1157,7 @@ DNNReturnType ff_dnn_execute_model_async_tf(const DNNModel *model, DNNExecBasePa
     return execute_model_tf(request, tf_model->inference_queue);
 }
 
-DNNAsyncStatusType ff_dnn_get_async_result_tf(const DNNModel *model, AVFrame **in, AVFrame **out)
+DNNAsyncStatusType ff_dnn_get_result_tf(const DNNModel *model, AVFrame **in, AVFrame **out)
 {
     TFModel *tf_model = model->model;
     return dnn_get_async_result(tf_model->task_queue, in, out);
