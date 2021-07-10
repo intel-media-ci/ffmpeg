@@ -34,6 +34,7 @@
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption dnn_native_options[] = {
     { "conv2d_threads", "threads num for conv2d layer", OFFSET(options.conv2d_threads), AV_OPT_TYPE_INT,  { .i64 = 0 }, INT_MIN, INT_MAX, FLAGS },
+    { "async",          "use DNN async inference",      OFFSET(options.async),          AV_OPT_TYPE_BOOL, { .i64 = 1 },       0,       1, FLAGS },
     { NULL },
 };
 
@@ -45,9 +46,29 @@ static const AVClass dnn_native_class = {
     .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
-static DNNReturnType execute_model_native(const DNNModel *model, const char *input_name, AVFrame *in_frame,
-                                          const char **output_names, uint32_t nb_output, AVFrame *out_frame,
-                                          int do_ioproc);
+static DNNReturnType execute_model_native(Queue *inference_queue);
+
+static DNNReturnType extract_inference_from_task(TaskItem *task, Queue *inference_queue)
+{
+    NativeModel *native_model = task->model;
+    NativeContext *ctx = &native_model->ctx;
+    InferenceItem *inference = av_malloc(sizeof(*inference));
+
+    if (!inference) {
+        av_log(ctx, AV_LOG_ERROR, "Unable to allocate space for InferenceItem\n");
+        return DNN_ERROR;
+    }
+    task->inference_todo = 1;
+    task->inference_done = 0;
+    inference->task = task;
+
+    if (ff_queue_push_back(inference_queue, inference) < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to push back inference_queue.\n");
+        av_freep(&inference);
+        return DNN_ERROR;
+    }
+    return DNN_SUCCESS;
+}
 
 static DNNReturnType get_input_native(void *model, DNNData *input, const char *input_name)
 {
@@ -83,6 +104,7 @@ static DNNReturnType get_output_native(void *model, const char *input_name, int 
     NativeContext *ctx = &native_model->ctx;
     AVFrame *in_frame = av_frame_alloc();
     AVFrame *out_frame = NULL;
+    TaskItem task;
 
     if (!in_frame) {
         av_log(ctx, AV_LOG_ERROR, "Could not allocate memory for input frame\n");
@@ -100,7 +122,23 @@ static DNNReturnType get_output_native(void *model, const char *input_name, int 
     in_frame->width = input_width;
     in_frame->height = input_height;
 
-    ret = execute_model_native(native_model->model, input_name, in_frame, &output_name, 1, out_frame, 0);
+    task.do_ioproc = 0;
+    task.async = 0;
+    task.input_name = input_name;
+    task.in_frame = in_frame;
+    task.output_names = &output_name;
+    task.out_frame = out_frame;
+    task.model = native_model;
+    task.nb_output = 1;
+
+    if (extract_inference_from_task(&task, native_model->inference_queue) != DNN_SUCCESS) {
+        av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
+        av_frame_free(&out_frame);
+        av_frame_free(&in_frame);
+        return DNN_ERROR;
+    }
+
+    ret = execute_model_native(native_model->inference_queue);
     *output_width = out_frame->width;
     *output_height = out_frame->height;
 
@@ -163,9 +201,15 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, DNNFunctionType f
 
     native_model->ctx.class = &dnn_native_class;
     model->options = options;
+    native_model->ctx.options.async = 0;
     if (av_opt_set_from_string(&native_model->ctx, model->options, NULL, "=", "&") < 0)
         goto fail;
     native_model->model = model;
+
+    if (native_model->ctx.options.async) {
+        av_log(&native_model->ctx, AV_LOG_WARNING, "Async not supported. Rolling back to sync\n");
+        native_model->ctx.options.async = 0;
+    }
 
 #if !HAVE_PTHREAD_CANCEL
     if (native_model->ctx.options.conv2d_threads > 1){
@@ -187,6 +231,16 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, DNNFunctionType f
 
     native_model->operands = av_mallocz(native_model->operands_num * sizeof(DnnOperand));
     if (!native_model->operands){
+        goto fail;
+    }
+
+    native_model->task_queue = ff_queue_create();
+    if (!native_model->task_queue) {
+        goto fail;
+    }
+
+    native_model->inference_queue = ff_queue_create();
+    if (!native_model->inference_queue) {
         goto fail;
     }
 
@@ -259,15 +313,24 @@ fail:
     return NULL;
 }
 
-static DNNReturnType execute_model_native(const DNNModel *model, const char *input_name, AVFrame *in_frame,
-                                          const char **output_names, uint32_t nb_output, AVFrame *out_frame,
-                                          int do_ioproc)
+static DNNReturnType execute_model_native(Queue *inference_queue)
 {
-    NativeModel *native_model = model->model;
-    NativeContext *ctx = &native_model->ctx;
+    NativeModel *native_model = NULL;
+    NativeContext *ctx = NULL;
     int32_t layer;
     DNNData input, output;
     DnnOperand *oprd = NULL;
+    InferenceItem *inference = NULL;
+    TaskItem *task = NULL;
+
+    inference = ff_queue_pop_front(inference_queue);
+    if (!inference) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to get inference item\n");
+        return DNN_ERROR;
+    }
+    task = inference->task;
+    native_model = task->model;
+    ctx = &native_model->ctx;
 
     if (native_model->layers_num <= 0 || native_model->operands_num <= 0) {
         av_log(ctx, AV_LOG_ERROR, "No operands or layers in model\n");
@@ -276,9 +339,9 @@ static DNNReturnType execute_model_native(const DNNModel *model, const char *inp
 
     for (int i = 0; i < native_model->operands_num; ++i) {
         oprd = &native_model->operands[i];
-        if (strcmp(oprd->name, input_name) == 0) {
+        if (strcmp(oprd->name, task->input_name) == 0) {
             if (oprd->type != DOT_INPUT) {
-                av_log(ctx, AV_LOG_ERROR, "Found \"%s\" in model, but it is not input node\n", input_name);
+                av_log(ctx, AV_LOG_ERROR, "Found \"%s\" in model, but it is not input node\n", task->input_name);
                 return DNN_ERROR;
             }
             break;
@@ -286,12 +349,12 @@ static DNNReturnType execute_model_native(const DNNModel *model, const char *inp
         oprd = NULL;
     }
     if (!oprd) {
-        av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model\n", input_name);
+        av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model\n", task->input_name);
         return DNN_ERROR;
     }
 
-    oprd->dims[1] = in_frame->height;
-    oprd->dims[2] = in_frame->width;
+    oprd->dims[1] = task->in_frame->height;
+    oprd->dims[2] = task->in_frame->width;
 
     av_freep(&oprd->data);
     oprd->length = ff_calculate_operand_data_length(oprd);
@@ -310,15 +373,15 @@ static DNNReturnType execute_model_native(const DNNModel *model, const char *inp
     input.channels = oprd->dims[3];
     input.data = oprd->data;
     input.dt = oprd->data_type;
-    if (do_ioproc) {
+    if (task->do_ioproc) {
         if (native_model->model->frame_pre_proc != NULL) {
-            native_model->model->frame_pre_proc(in_frame, &input, native_model->model->filter_ctx);
+            native_model->model->frame_pre_proc(task->in_frame, &input, native_model->model->filter_ctx);
         } else {
-            ff_proc_from_frame_to_dnn(in_frame, &input, ctx);
+            ff_proc_from_frame_to_dnn(task->in_frame, &input, ctx);
         }
     }
 
-    if (nb_output != 1) {
+    if (task->nb_output != 1) {
         // currently, the filter does not need multiple outputs,
         // so we just pending the support until we really need it.
         avpriv_report_missing_feature(ctx, "multiple outputs");
@@ -337,9 +400,9 @@ static DNNReturnType execute_model_native(const DNNModel *model, const char *inp
         }
     }
 
-    for (uint32_t i = 0; i < nb_output; ++i) {
+    for (uint32_t i = 0; i < task->nb_output; ++i) {
         DnnOperand *oprd = NULL;
-        const char *output_name = output_names[i];
+        const char *output_name = task->output_names[i];
         for (int j = 0; j < native_model->operands_num; ++j) {
             if (strcmp(native_model->operands[j].name, output_name) == 0) {
                 oprd = &native_model->operands[j];
@@ -358,17 +421,18 @@ static DNNReturnType execute_model_native(const DNNModel *model, const char *inp
         output.channels = oprd->dims[3];
         output.dt = oprd->data_type;
 
-        if (do_ioproc) {
+        if (task->do_ioproc) {
             if (native_model->model->frame_post_proc != NULL) {
-                native_model->model->frame_post_proc(out_frame, &output, native_model->model->filter_ctx);
+                native_model->model->frame_post_proc(task->out_frame, &output, native_model->model->filter_ctx);
             } else {
-                ff_proc_from_dnn_to_frame(out_frame, &output, ctx);
+                ff_proc_from_dnn_to_frame(task->out_frame, &output, ctx);
             }
         } else {
-            out_frame->width = output.width;
-            out_frame->height = output.height;
+            task->out_frame->width = output.width;
+            task->out_frame->height = output.height;
         }
     }
+    task->inference_done++;
 
     return DNN_SUCCESS;
 }
@@ -377,13 +441,55 @@ DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, DNNExecBasePara
 {
     NativeModel *native_model = model->model;
     NativeContext *ctx = &native_model->ctx;
+    TaskItem *task;
 
     if (ff_check_exec_params(ctx, DNN_NATIVE, model->func_type, exec_params) != 0) {
         return DNN_ERROR;
     }
 
-    return execute_model_native(model, exec_params->input_name, exec_params->in_frame,
-                                exec_params->output_names, exec_params->nb_output, exec_params->out_frame, 1);
+    task = av_malloc(sizeof(*task));
+    if (!task) {
+        av_log(ctx, AV_LOG_ERROR, "unable to alloc memory for task item.\n");
+        return DNN_ERROR;
+    }
+
+    if (ff_dnn_fill_task(task, exec_params, native_model, ctx->options.async, 1) != DNN_SUCCESS) {
+        av_freep(&task);
+        return DNN_ERROR;
+    }
+
+    if (ff_queue_push_back(native_model->task_queue, task) < 0) {
+        av_freep(&task);
+        av_log(ctx, AV_LOG_ERROR, "unable to push back task_queue.\n");
+        return DNN_ERROR;
+    }
+
+    if (extract_inference_from_task(task, native_model->inference_queue) != DNN_SUCCESS) {
+        av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
+        return DNN_ERROR;
+    }
+
+    return execute_model_native(native_model->inference_queue);
+}
+
+DNNReturnType ff_dnn_flush_native(const DNNModel *model)
+{
+    NativeModel *native_model = model->model;
+
+    if (ff_queue_size(native_model->inference_queue) == 0) {
+        // no pending task need to flush
+        return DNN_SUCCESS;
+    }
+
+    // for now, use sync node with flush operation
+    // Switch to async when it is supported
+    return execute_model_native(native_model->inference_queue);
+}
+
+DNNAsyncStatusType ff_dnn_get_result_native(const DNNModel *model, AVFrame **in, AVFrame **out)
+{
+    NativeModel *native_model = model->model;
+    return dnn_get_async_result(native_model->task_queue, in, out);
 }
 
 int32_t ff_calculate_operand_dims_count(const DnnOperand *oprd)
@@ -434,6 +540,20 @@ void ff_dnn_free_model_native(DNNModel **model)
                     av_freep(&native_model->operands[operand].data);
                 av_freep(&native_model->operands);
             }
+
+            while (ff_queue_size(native_model->inference_queue) != 0) {
+                InferenceItem *item = ff_queue_pop_front(native_model->inference_queue);
+                av_freep(&item);
+            }
+            ff_queue_destroy(native_model->inference_queue);
+
+            while (ff_queue_size(native_model->task_queue) != 0) {
+                TaskItem *item = ff_queue_pop_front(native_model->task_queue);
+                av_frame_free(&item->in_frame);
+                av_frame_free(&item->out_frame);
+                av_freep(&item);
+            }
+            ff_queue_destroy(native_model->task_queue);
 
             av_freep(&native_model);
         }
