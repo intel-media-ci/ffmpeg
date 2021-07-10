@@ -40,11 +40,10 @@ DNNModule *ff_get_dnn_module(DNNBackendType backend_type)
 
     switch(backend_type){
     case DNN_NATIVE:
-        // for now Native backend isn't unified
-        av_freep(&dnn_module);
-        return NULL;
         dnn_module->load_model = &ff_dnn_load_model_native;
         dnn_module->execute_model = &ff_dnn_execute_model_native;
+        dnn_module->get_result = &ff_dnn_get_result_native;
+        dnn_module->flush = &ff_dnn_flush_native;
         dnn_module->free_model = &ff_dnn_free_model_native;
         break;
     case DNN_TF:
