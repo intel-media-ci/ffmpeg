@@ -29,7 +29,8 @@
 #include "libavutil/thread.h"
 
 #define DNN_BACKEND_COMMON_OPTIONS \
-    { "nireq",           "number of request",             OFFSET(options.nireq),           AV_OPT_TYPE_INT,    { .i64 = 0 },     0, INT_MAX, FLAGS },
+    { "nireq",           "number of request",             OFFSET(options.nireq),           AV_OPT_TYPE_INT,    { .i64 = 0 },     0, INT_MAX, FLAGS }, \
+    { "async",           "use DNN async inference",       OFFSET(options.async),           AV_OPT_TYPE_BOOL,   { .i64 = 1 },     0,       1, FLAGS },
 
 // one task for one function call from dnn interface
 typedef struct TaskItem {
