@@ -354,63 +354,6 @@ static int dnn_detect_query_formats(AVFilterContext *context)
     return ff_set_common_formats(context, fmts_list);
 }
 
-static int dnn_detect_filter_frame(AVFilterLink *inlink, AVFrame *in)
-{
-    AVFilterContext *context  = inlink->dst;
-    AVFilterLink *outlink = context->outputs[0];
-    DnnDetectContext *ctx = context->priv;
-    DNNReturnType dnn_result;
-
-    dnn_result = ff_dnn_execute_model(&ctx->dnnctx, in, in);
-    if (dnn_result != DNN_SUCCESS){
-        av_log(ctx, AV_LOG_ERROR, "failed to execute model\n");
-        av_frame_free(&in);
-        return AVERROR(EIO);
-    }
-
-    return ff_filter_frame(outlink, in);
-}
-
-static int dnn_detect_activate_sync(AVFilterContext *filter_ctx)
-{
-    AVFilterLink *inlink = filter_ctx->inputs[0];
-    AVFilterLink *outlink = filter_ctx->outputs[0];
-    AVFrame *in = NULL;
-    int64_t pts;
-    int ret, status;
-    int got_frame = 0;
-
-    FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
-
-    do {
-        // drain all input frames
-        ret = ff_inlink_consume_frame(inlink, &in);
-        if (ret < 0)
-            return ret;
-        if (ret > 0) {
-            ret = dnn_detect_filter_frame(inlink, in);
-            if (ret < 0)
-                return ret;
-            got_frame = 1;
-        }
-    } while (ret > 0);
-
-    // if frame got, schedule to next filter
-    if (got_frame)
-        return 0;
-
-    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        if (status == AVERROR_EOF) {
-            ff_outlink_set_status(outlink, status, pts);
-            return ret;
-        }
-    }
-
-    FF_FILTER_FORWARD_WANTED(outlink, inlink);
-
-    return FFERROR_NOT_READY;
-}
-
 static int dnn_detect_flush_frame(AVFilterLink *outlink, int64_t pts, int64_t *out_pts)
 {
     DnnDetectContext *ctx = outlink->src->priv;
@@ -425,7 +368,7 @@ static int dnn_detect_flush_frame(AVFilterLink *outlink, int64_t pts, int64_t *o
     do {
         AVFrame *in_frame = NULL;
         AVFrame *out_frame = NULL;
-        async_state = ff_dnn_get_async_result(&ctx->dnnctx, &in_frame, &out_frame);
+        async_state = ff_dnn_get_result(&ctx->dnnctx, &in_frame, &out_frame);
         if (out_frame) {
             av_assert0(in_frame == out_frame);
             ret = ff_filter_frame(outlink, out_frame);
@@ -459,7 +402,7 @@ static int dnn_detect_activate_async(AVFilterContext *filter_ctx)
         if (ret < 0)
             return ret;
         if (ret > 0) {
-            if (ff_dnn_execute_model_async(&ctx->dnnctx, in, in) != DNN_SUCCESS) {
+            if (ff_dnn_execute_model(&ctx->dnnctx, in, in) != DNN_SUCCESS) {
                 return AVERROR(EIO);
             }
         }
@@ -469,7 +412,7 @@ static int dnn_detect_activate_async(AVFilterContext *filter_ctx)
     do {
         AVFrame *in_frame = NULL;
         AVFrame *out_frame = NULL;
-        async_state = ff_dnn_get_async_result(&ctx->dnnctx, &in_frame, &out_frame);
+        async_state = ff_dnn_get_result(&ctx->dnnctx, &in_frame, &out_frame);
         if (out_frame) {
             av_assert0(in_frame == out_frame);
             ret = ff_filter_frame(outlink, out_frame);
@@ -499,12 +442,7 @@ static int dnn_detect_activate_async(AVFilterContext *filter_ctx)
 
 static int dnn_detect_activate(AVFilterContext *filter_ctx)
 {
-    DnnDetectContext *ctx = filter_ctx->priv;
-
-    if (ctx->dnnctx.async)
-        return dnn_detect_activate_async(filter_ctx);
-    else
-        return dnn_detect_activate_sync(filter_ctx);
+    return dnn_detect_activate_async(filter_ctx);
 }
 
 static av_cold void dnn_detect_uninit(AVFilterContext *context)

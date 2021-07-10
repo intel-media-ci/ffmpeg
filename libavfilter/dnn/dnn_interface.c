@@ -33,6 +33,10 @@ DNNModule *ff_get_dnn_module(DNNBackendType backend_type)
 {
     DNNModule *dnn_module;
 
+    // temporary change till unification completes in atleast one backend
+    av_log(NULL, AV_LOG_ERROR, "Execution currently not supported \n");
+    return NULL;
+
     dnn_module = av_mallocz(sizeof(DNNModule));
     if(!dnn_module){
         return NULL;
@@ -48,8 +52,8 @@ DNNModule *ff_get_dnn_module(DNNBackendType backend_type)
     #if (CONFIG_LIBTENSORFLOW == 1)
         dnn_module->load_model = &ff_dnn_load_model_tf;
         dnn_module->execute_model = &ff_dnn_execute_model_tf;
-        dnn_module->execute_model_async = &ff_dnn_execute_model_async_tf;
-        dnn_module->get_async_result = &ff_dnn_get_async_result_tf;
+        // dnn_module->execute_model_async = &ff_dnn_execute_model_async_tf;
+        // dnn_module->get_result = &ff_dnn_get_async_result_tf;
         dnn_module->flush = &ff_dnn_flush_tf;
         dnn_module->free_model = &ff_dnn_free_model_tf;
     #else
@@ -61,8 +65,8 @@ DNNModule *ff_get_dnn_module(DNNBackendType backend_type)
     #if (CONFIG_LIBOPENVINO == 1)
         dnn_module->load_model = &ff_dnn_load_model_ov;
         dnn_module->execute_model = &ff_dnn_execute_model_ov;
-        dnn_module->execute_model_async = &ff_dnn_execute_model_async_ov;
-        dnn_module->get_async_result = &ff_dnn_get_async_result_ov;
+        // dnn_module->execute_model_async = &ff_dnn_execute_model_async_ov;
+        // dnn_module->get_result = &ff_dnn_get_async_result_ov;
         dnn_module->flush = &ff_dnn_flush_ov;
         dnn_module->free_model = &ff_dnn_free_model_ov;
     #else
