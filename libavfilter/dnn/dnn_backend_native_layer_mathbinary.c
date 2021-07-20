@@ -159,35 +159,35 @@ int ff_dnn_execute_layer_math_binary(DnnOperand *operands, const int32_t *input_
     output->length = ff_calculate_operand_data_length(output);
     if (output->length <= 0) {
         av_log(ctx, AV_LOG_ERROR, "The output data length overflow\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
     output->data = av_realloc(output->data, output->length);
     if (!output->data) {
         av_log(ctx, AV_LOG_ERROR, "Failed to reallocate memory for output\n");
-        return DNN_ERROR;
+        return AVERROR(ENOMEM);
     }
 
     switch (params->bin_op) {
     case DMBO_SUB:
         math_binary_not_commutative(sub, params, input, output, operands, input_operand_indexes);
-        return 0;
+        return DNN_SUCCESS;
     case DMBO_ADD:
         math_binary_commutative(add, params, input, output, operands, input_operand_indexes);
-        return 0;
+        return DNN_SUCCESS;
     case DMBO_MUL:
         math_binary_commutative(mul, params, input, output, operands, input_operand_indexes);
-        return 0;
+        return DNN_SUCCESS;
     case DMBO_REALDIV:
         math_binary_not_commutative(realdiv, params, input, output, operands, input_operand_indexes);
-        return 0;
+        return DNN_SUCCESS;
     case DMBO_MINIMUM:
         math_binary_commutative(minimum, params, input, output, operands, input_operand_indexes);
-        return 0;
+        return DNN_SUCCESS;
     case DMBO_FLOORMOD:
         math_binary_not_commutative(floormod, params, input, output, operands, input_operand_indexes);
-        return 0;
+        return DNN_SUCCESS;
     default:
         av_log(ctx, AV_LOG_ERROR, "Unmatch math binary operator\n");
-        return DNN_ERROR;
+        return AVERROR(EINVAL);
     }
 }
