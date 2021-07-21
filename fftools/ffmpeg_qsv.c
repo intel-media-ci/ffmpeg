@@ -16,7 +16,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 #include <stdlib.h>
 
 #include "libavutil/dict.h"
