@@ -69,3 +69,90 @@ DNNReturnType ff_dnn_fill_task(TaskItem *task, DNNExecBaseParams *exec_params, v
 
     return DNN_SUCCESS;
 }
+
+/**
+ * Thread routine for async execution.
+ * @param args pointer to DNNAsyncExecModule module
+ */
+static void *async_thread_routine(void *args)
+{
+    DNNAsyncExecModule *async_module = args;
+    void *request = async_module->args;
+
+    async_module->start_inference(request);
+    async_module->callback(request);
+#if HAVE_PTHREAD_CANCEL
+    pthread_exit(0);
+#endif
+}
+
+DNNReturnType ff_init_async_attributes(DNNAsyncExecModule *async_module)
+{
+    if (!async_module) {
+        return DNN_ERROR;
+    }
+#if HAVE_PTHREAD_CANCEL
+    pthread_attr_init(&async_module->thread_attr);
+    pthread_attr_setdetachstate(&async_module->thread_attr, PTHREAD_CREATE_DETACHED);
+#endif
+    return DNN_SUCCESS;
+}
+
+DNNReturnType ff_destroy_async_attributes(DNNAsyncExecModule *async_module)
+{
+    if (!async_module) {
+        return DNN_ERROR;
+    }
+    async_module->start_inference = NULL;
+    async_module->callback = NULL;
+    async_module->args = NULL;
+#if HAVE_PTHREAD_CANCEL
+    pthread_attr_destroy(&async_module->thread_attr);
+#endif
+    return DNN_SUCCESS;
+}
+
+DNNReturnType ff_dnn_start_inference_async(void *ctx, DNNAsyncExecModule *async_module)
+{
+    int ret;
+
+    if (!async_module) {
+        av_log(ctx, AV_LOG_ERROR, "async_module is null when starting async inference.\n");
+        return DNN_ERROR;
+    }
+
+#if HAVE_PTHREAD_CANCEL
+    ret = pthread_create(&async_module->thread_id, &async_module->thread_attr, async_thread_routine, async_module);
+    if (ret != 0) {
+        av_log(ctx, AV_LOG_ERROR, "Unable to start async inference.\n");
+        return DNN_ERROR;
+    }
+#else
+    av_log(ctx, AV_LOG_WARNING, "pthreads not supported. Roll back to sync.\n");
+    if (async_module->start_inference(async_module->args) != DNN_SUCCESS) {
+        return DNN_ERROR;
+    }
+    async_module->callback(async_module->args);
+#endif
+    return DNN_SUCCESS;
+}
+
+DNNAsyncStatusType dnn_get_async_result(Queue *task_queue, AVFrame **in, AVFrame **out)
+{
+    TaskItem *task = ff_queue_peek_front(task_queue);
+
+    if (!task) {
+        return DAST_EMPTY_QUEUE;
+    }
+
+    if (task->inference_done != task->inference_todo) {
+        return DAST_NOT_READY;
+    }
+
+    *in = task->in_frame;
+    *out = task->out_frame;
+    ff_queue_pop_front(task_queue);
+    av_freep(&task);
+
+    return DAST_SUCCESS;
+}
