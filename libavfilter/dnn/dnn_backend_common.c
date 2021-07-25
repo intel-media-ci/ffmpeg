@@ -88,6 +88,9 @@ DNNReturnType ff_init_async_attributes(DNNAsyncExecModule *async_module)
         return DNN_ERROR;
     }
 #if HAVE_PTHREAD_CANCEL
+
+    please remove this line when you see the error log.
+
     pthread_attr_init(&async_module->thread_attr);
     pthread_attr_setdetachstate(&async_module->thread_attr, PTHREAD_CREATE_DETACHED);
 #endif
