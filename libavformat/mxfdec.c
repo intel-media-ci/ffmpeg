@@ -47,6 +47,7 @@
 #include <inttypes.h>
 
 #include "libavutil/aes.h"
+#include "libavutil/avstring.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/mathematics.h"
 #include "libavcodec/bytestream.h"
@@ -107,12 +108,14 @@ typedef struct MXFPartition {
 
 typedef struct MXFCryptoContext {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     UID source_container_ul;
 } MXFCryptoContext;
 
 typedef struct MXFStructuralComponent {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     UID source_package_ul;
     UID source_package_uid;
@@ -124,6 +127,7 @@ typedef struct MXFStructuralComponent {
 
 typedef struct MXFSequence {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     UID data_definition_ul;
     UID *structural_components_refs;
@@ -134,6 +138,7 @@ typedef struct MXFSequence {
 
 typedef struct MXFTimecodeComponent {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     int drop_frame;
     int start_frame;
@@ -143,12 +148,14 @@ typedef struct MXFTimecodeComponent {
 
 typedef struct {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     UID input_segment_ref;
 } MXFPulldownComponent;
 
 typedef struct {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     UID *structural_components_refs;
     int structural_components_count;
@@ -157,6 +164,7 @@ typedef struct {
 
 typedef struct {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     char *name;
     char *value;
@@ -164,6 +172,7 @@ typedef struct {
 
 typedef struct {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     MXFSequence *sequence; /* mandatory, and only one */
     UID sequence_ref;
@@ -182,6 +191,7 @@ typedef struct {
 
 typedef struct MXFDescriptor {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     UID essence_container_ul;
     UID essence_codec_ul;
@@ -221,6 +231,7 @@ typedef struct MXFDescriptor {
 
 typedef struct MXFIndexTableSegment {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     int edit_unit_byte_count;
     int index_sid;
@@ -236,6 +247,7 @@ typedef struct MXFIndexTableSegment {
 
 typedef struct MXFPackage {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     UID package_uid;
     UID package_ul;
@@ -250,6 +262,7 @@ typedef struct MXFPackage {
 
 typedef struct MXFEssenceContainerData {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
     UID package_uid;
     UID package_ul;
@@ -259,6 +272,7 @@ typedef struct MXFEssenceContainerData {
 
 typedef struct MXFMetadataSet {
     UID uid;
+    MXFPartition *partition;
     enum MXFMetadataSetType type;
 } MXFMetadataSet;
 
@@ -841,10 +855,39 @@ static int mxf_read_partition_pack(void *arg, AVIOContext *pb, int tag, int size
     return 0;
 }
 
+static int partition_score(MXFPartition *p)
+{
+    if (p->type == Footer)
+        return 5;
+    if (p->complete)
+        return 4;
+    if (p->closed)
+        return 3;
+    return 1;
+}
+
 static int mxf_add_metadata_set(MXFContext *mxf, MXFMetadataSet **metadata_set)
 {
     MXFMetadataSet **tmp;
+    MXFPartition *new_p = (*metadata_set)->partition;
+    enum MXFMetadataSetType type = (*metadata_set)->type;
 
+    // Index Table is special because it might be added manually without
+    // partition and we iterate thorugh all instances of them. Also some files
+    // use the same Instance UID for different index tables...
+    if (type != IndexTableSegment) {
+        for (int i = 0; i < mxf->metadata_sets_count; i++) {
+            if (!memcmp((*metadata_set)->uid, mxf->metadata_sets[i]->uid, 16) && type == mxf->metadata_sets[i]->type) {
+                MXFPartition *old_p = mxf->metadata_sets[i]->partition;
+                int old_s = partition_score(old_p);
+                int new_s = partition_score(new_p);
+                if (old_s > new_s || old_s == new_s && old_p->this_partition > new_p->this_partition) {
+                     mxf_free_metadataset(metadata_set, 1);
+                     return 0;
+                }
+            }
+        }
+    }
     tmp = av_realloc_array(mxf->metadata_sets, mxf->metadata_sets_count + 1, sizeof(*mxf->metadata_sets));
     if (!tmp) {
         mxf_free_metadataset(metadata_set, 1);
@@ -1399,7 +1442,7 @@ static void *mxf_resolve_strong_ref(MXFContext *mxf, UID *strong_ref, enum MXFMe
 
     if (!strong_ref)
         return NULL;
-    for (i = 0; i < mxf->metadata_sets_count; i++) {
+    for (i = mxf->metadata_sets_count - 1; i >= 0; i--) {
         if (!memcmp(*strong_ref, mxf->metadata_sets[i]->uid, 16) &&
             (type == AnyType || mxf->metadata_sets[i]->type == type)) {
             return mxf->metadata_sets[i];
@@ -1410,7 +1453,7 @@ static void *mxf_resolve_strong_ref(MXFContext *mxf, UID *strong_ref, enum MXFMe
 
 static const MXFCodecUL mxf_picture_essence_container_uls[] = {
     // video essence container uls
-    { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x07,0x0d,0x01,0x03,0x01,0x02,0x0c,0x01,0x00 }, 14,   AV_CODEC_ID_JPEG2000, NULL, 14 },
+    { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x07,0x0d,0x01,0x03,0x01,0x02,0x0c,0x01,0x00 }, 14,   AV_CODEC_ID_JPEG2000, NULL, 14, J2KWrap },
     { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x02,0x0d,0x01,0x03,0x01,0x02,0x10,0x60,0x01 }, 14,       AV_CODEC_ID_H264, NULL, 15 }, /* H.264 */
     { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x02,0x0d,0x01,0x03,0x01,0x02,0x11,0x01,0x00 }, 14,      AV_CODEC_ID_DNXHD, NULL, 14 }, /* VC-3 */
     { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x02,0x0d,0x01,0x03,0x01,0x02,0x12,0x01,0x00 }, 14,        AV_CODEC_ID_VC1, NULL, 14 }, /* VC-1 */
@@ -1492,6 +1535,10 @@ static MXFWrappingScheme mxf_get_wrapping_kind(UID *essence_container_ul)
             break;
         case D10D11Wrap:
             if (val == 0x02)
+                val = 0x01;
+            break;
+        case J2KWrap:
+            if (val != 0x02)
                 val = 0x01;
             break;
     }
@@ -2868,9 +2915,10 @@ static const MXFMetadataReadTableEntry mxf_metadata_read_table[] = {
     { { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 }, NULL, 0, AnyType },
 };
 
-static int mxf_metadataset_init(MXFMetadataSet *ctx, enum MXFMetadataSetType type)
+static int mxf_metadataset_init(MXFMetadataSet *ctx, enum MXFMetadataSetType type, MXFPartition *partition)
 {
     ctx->type = type;
+    ctx->partition = partition;
     switch (type){
     case MultipleDescriptor:
     case Descriptor:
@@ -2895,7 +2943,7 @@ static int mxf_read_local_tags(MXFContext *mxf, KLVPacket *klv, MXFMetadataReadF
         if (!meta)
             return AVERROR(ENOMEM);
         ctx  = meta;
-        mxf_metadataset_init(meta, type);
+        mxf_metadataset_init(meta, type, mxf->current_partition);
     } else {
         meta = NULL;
         ctx  = mxf;
