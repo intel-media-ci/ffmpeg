@@ -48,7 +48,7 @@ av_cold void ff_threshold_init_x86(ThresholdContext *s)
         if (EXTERNAL_AVX2_FAST(cpu_flags)) {
             s->threshold = ff_threshold8_avx2;
         }
-    } else if (s->depth == 16) {
+    } else {
         if (EXTERNAL_SSE4(cpu_flags)) {
             s->threshold = ff_threshold16_sse4;
         }
