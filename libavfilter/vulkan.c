@@ -1160,7 +1160,7 @@ void ff_vk_update_descriptor_set(AVFilterContext *avctx, VulkanPipeline *pl,
     VulkanFilterContext *s = avctx->priv;
 
     vkUpdateDescriptorSetWithTemplate(s->hwctx->act_dev,
-                                      pl->desc_set[s->cur_queue_idx * pl->desc_layout_num + set_id],
+                                      pl->desc_set[set_id],
                                       pl->desc_template[set_id],
                                       s);
 }
@@ -1179,7 +1179,7 @@ int ff_vk_init_pipeline_layout(AVFilterContext *avctx, VulkanPipeline *pl)
     VkResult ret;
     VulkanFilterContext *s = avctx->priv;
 
-    pl->descriptor_sets_num = pl->desc_layout_num * s->queue_count;
+    pl->descriptor_sets_num = pl->desc_layout_num;
 
     { /* Init descriptor set pool */
         VkDescriptorPoolCreateInfo pool_create_info = {
