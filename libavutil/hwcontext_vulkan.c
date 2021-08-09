@@ -1737,8 +1737,6 @@ static int prepare_frame(AVHWFramesContext *hwfc, VulkanExecCtx *ectx,
 
     VkSubmitInfo s_info = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pSignalSemaphores    = frame->sem,
-        .signalSemaphoreCount = planes,
     };
 
     VkPipelineStageFlagBits wait_st[AV_NUM_DATA_POINTERS];
@@ -1750,11 +1748,15 @@ static int prepare_frame(AVHWFramesContext *hwfc, VulkanExecCtx *ectx,
         new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         new_access = VK_ACCESS_TRANSFER_WRITE_BIT;
         dst_qf     = VK_QUEUE_FAMILY_IGNORED;
+        s_info.pSignalSemaphores    = frame->sem;
+        s_info.signalSemaphoreCount = planes;
         break;
     case PREP_MODE_RO_SHADER:
         new_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         new_access = VK_ACCESS_TRANSFER_READ_BIT;
         dst_qf     = VK_QUEUE_FAMILY_IGNORED;
+        s_info.pSignalSemaphores    = frame->sem;
+        s_info.signalSemaphoreCount = planes;
         break;
     case PREP_MODE_EXTERNAL_EXPORT:
         new_layout = VK_IMAGE_LAYOUT_GENERAL;
@@ -3226,11 +3228,11 @@ static int transfer_image_buf(AVHWFramesContext *hwfc, const AVFrame *f,
 
     VkSubmitInfo s_info = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pSignalSemaphores    = frame->sem,
-        .pWaitSemaphores      = frame->sem,
+        .pSignalSemaphores    = to_buf ? NULL: frame->sem,
+        .pWaitSemaphores      = to_buf ? frame->sem : NULL,
         .pWaitDstStageMask    = sem_wait_dst,
-        .signalSemaphoreCount = planes,
-        .waitSemaphoreCount   = planes,
+        .signalSemaphoreCount = to_buf ? 0 : planes,
+        .waitSemaphoreCount   = to_buf ? planes : 0,
     };
 
     if ((err = wait_start_exec_ctx(hwfc, ectx)))

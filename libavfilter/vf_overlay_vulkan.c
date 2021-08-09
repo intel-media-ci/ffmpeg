@@ -331,9 +331,9 @@ static int process_frames(AVFilterContext *avctx, AVFrame *out_f,
                   FFALIGN(s->vkctx.output_width,  CGROUPS[0])/CGROUPS[0],
                   FFALIGN(s->vkctx.output_height, CGROUPS[1])/CGROUPS[1], 1);
 
-    ff_vk_add_exec_dep(avctx, s->exec, main_f, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
-    ff_vk_add_exec_dep(avctx, s->exec, overlay_f, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
-    ff_vk_add_exec_dep(avctx, s->exec, out_f, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    ff_vk_add_exec_dep(avctx, s->exec, main_f, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 1);
+    ff_vk_add_exec_dep(avctx, s->exec, overlay_f, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 1);
+    ff_vk_add_exec_dep(avctx, s->exec, out_f, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0);
 
     err = ff_vk_submit_exec_queue(avctx, s->exec);
     if (err)

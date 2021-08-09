@@ -462,9 +462,10 @@ VkCommandBuffer ff_vk_get_exec_buf(AVFilterContext *avctx, FFVkExecContext *e)
 }
 
 int ff_vk_add_exec_dep(AVFilterContext *avctx, FFVkExecContext *e,
-                       AVFrame *frame, VkPipelineStageFlagBits in_wait_dst_flag)
+                       AVFrame *frame, VkPipelineStageFlagBits in_wait_dst_flag, int input_frame)
 {
     AVFrame **dst;
+    VkSemaphore *sem_temp;
     VulkanFilterContext *s = avctx->priv;
     AVVkFrame *f = (AVVkFrame *)frame->data[0];
     FFVkQueueCtx *q = &e->queues[s->cur_queue_idx];
@@ -472,33 +473,39 @@ int ff_vk_add_exec_dep(AVFilterContext *avctx, FFVkExecContext *e,
     int planes = av_pix_fmt_count_planes(fc->sw_format);
 
     for (int i = 0; i < planes; i++) {
-        e->sem_wait = av_fast_realloc(e->sem_wait, &e->sem_wait_alloc,
-                                      (e->sem_wait_cnt + 1)*sizeof(*e->sem_wait));
-        if (!e->sem_wait) {
-            ff_vk_discard_exec_deps(avctx, e);
-            return AVERROR(ENOMEM);
+        if (input_frame) {
+            sem_temp = av_fast_realloc(e->sem_wait, &e->sem_wait_alloc,
+                                        (e->sem_wait_cnt + 1)*sizeof(*e->sem_wait));
+            if (!sem_temp) {
+                ff_vk_discard_exec_deps(avctx, e);
+                return AVERROR(ENOMEM);
+            }
+            e->sem_wait = sem_temp;
+
+            sem_temp = av_fast_realloc(e->sem_wait_dst, &e->sem_wait_dst_alloc,
+                                            (e->sem_wait_cnt + 1)*sizeof(*e->sem_wait_dst));
+            if (!sem_temp) {
+                ff_vk_discard_exec_deps(avctx, e);
+                return AVERROR(ENOMEM);
+            }
+            e->sem_wait_dst = sem_temp;
+
+            e->sem_wait[e->sem_wait_cnt] = f->sem[i];
+            e->sem_wait_dst[e->sem_wait_cnt] = in_wait_dst_flag;
+            e->sem_wait_cnt++;
+        } else {
+
+            sem_temp = av_fast_realloc(e->sem_sig, &e->sem_sig_alloc,
+                                        (e->sem_sig_cnt + 1)*sizeof(*e->sem_sig));
+            if (!sem_temp) {
+                ff_vk_discard_exec_deps(avctx, e);
+                return AVERROR(ENOMEM);
+            }
+            e->sem_sig = sem_temp;
+
+            e->sem_sig[e->sem_sig_cnt] = f->sem[i];
+            e->sem_sig_cnt++;
         }
-
-        e->sem_wait_dst = av_fast_realloc(e->sem_wait_dst, &e->sem_wait_dst_alloc,
-                                          (e->sem_wait_cnt + 1)*sizeof(*e->sem_wait_dst));
-        if (!e->sem_wait_dst) {
-            ff_vk_discard_exec_deps(avctx, e);
-            return AVERROR(ENOMEM);
-        }
-
-        e->sem_sig = av_fast_realloc(e->sem_sig, &e->sem_sig_alloc,
-                                     (e->sem_sig_cnt + 1)*sizeof(*e->sem_sig));
-        if (!e->sem_sig) {
-            ff_vk_discard_exec_deps(avctx, e);
-            return AVERROR(ENOMEM);
-        }
-
-        e->sem_wait[e->sem_wait_cnt] = f->sem[i];
-        e->sem_wait_dst[e->sem_wait_cnt] = in_wait_dst_flag;
-        e->sem_wait_cnt++;
-
-        e->sem_sig[e->sem_sig_cnt] = f->sem[i];
-        e->sem_sig_cnt++;
     }
 
     dst = av_fast_realloc(q->frame_deps, &q->frame_deps_alloc_size,

@@ -340,7 +340,8 @@ void ff_vk_discard_exec_deps(AVFilterContext *avctx, FFVkExecContext *e);
  * Must be called before submission.
  */
 int ff_vk_add_exec_dep(AVFilterContext *avctx, FFVkExecContext *e,
-                       AVFrame *frame, VkPipelineStageFlagBits in_wait_dst_flag);
+                       AVFrame *frame, VkPipelineStageFlagBits in_wait_dst_flag,
+                       int input_frame);
 
 /**
  * Submits a command buffer to the queue for execution.
