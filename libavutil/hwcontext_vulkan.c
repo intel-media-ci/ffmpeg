@@ -2888,7 +2888,7 @@ static int vulkan_map_to_drm(AVHWFramesContext *hwfc, AVFrame *dst,
     for (int i = 0; i < drm_desc->nb_layers; i++) {
         VkSubresourceLayout layout;
         VkImageSubresource sub = {
-            .aspectMask = p->extensions & EXT_DRM_MODIFIER_FLAGS ?
+            .aspectMask = f->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT ?
                           VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT :
                           VK_IMAGE_ASPECT_COLOR_BIT,
         };
