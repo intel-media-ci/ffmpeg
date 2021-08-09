@@ -2382,7 +2382,9 @@ static int vulkan_map_from_drm_frame_desc(AVHWFramesContext *hwfc, AVVkFrame **f
             .extent.depth          = 1,
             .mipLevels             = 1,
             .arrayLayers           = 1,
-            .flags                 = VK_IMAGE_CREATE_ALIAS_BIT,
+            .flags                 = VK_IMAGE_CREATE_ALIAS_BIT |
+                                     (has_modifiers && planes > 1) ? VK_IMAGE_CREATE_DISJOINT_BIT :
+                                     0,
             .tiling                = f->tiling,
             .initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED, /* specs say so */
             .usage                 = frames_hwctx->usage,
@@ -2397,7 +2399,7 @@ static int vulkan_map_from_drm_frame_desc(AVHWFramesContext *hwfc, AVVkFrame **f
                      hwfc->sw_format, src->width, src->height, i);
 
         for (int j = 0; j < planes; j++) {
-            plane_data[j].offset     = desc->layers[i].planes[j].offset;
+            plane_data[j].offset     = 0;
             plane_data[j].rowPitch   = desc->layers[i].planes[j].pitch;
             plane_data[j].size       = 0; /* The specs say so for all 3 */
             plane_data[j].arrayPitch = 0;
