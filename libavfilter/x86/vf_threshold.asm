@@ -29,6 +29,15 @@ pb_128_0 : times 8 db 0, 128
 
 SECTION .text
 
+%macro DECL_MASK 2
+%if mmsize < 64
+    %xdefine %1 m%2
+%else
+    %assign  %%i %2 + 1
+    %xdefine  %1 k %+ %%i
+%endif
+%endmacro
+
 ;%1 depth (8 or 16) ; %2 b or w ; %3 constant
 %macro THRESHOLD 3
 %if ARCH_X86_64
@@ -58,17 +67,24 @@ cglobal threshold%1, 5, 7, 5, in, threshold, min, max, out, w, x
 .nextrow:
     mov         xq, wq
 
-    .loop:
-        movu            m1, [inq + xq]
-        movu            m0, [thresholdq + xq]
-        movu            m2, [minq + xq]
-        movu            m3, [maxq + xq]
-        pxor            m0, m4
-        pxor            m1, m4
-        pcmpgt%2        m0, m1
-        PBLENDVB        m3, m2, m0
-        movu   [outq + xq], m3
-        add             xq, mmsize
+.loop:
+    movu              m1, [inq + xq]
+    movu              m0, [thresholdq + xq]
+    movu              m2, [minq + xq]
+    movu              m3, [maxq + xq]
+    pxor              m0, m4
+    pxor              m1, m4
+    DECL_MASK       mask, 0
+    pcmpgt%2        mask, m0, m1
+
+%if mmsize == 64
+    vpblendm%2  m3{mask}, m3, m2
+%else
+    PBLENDVB          m3, m2, mask
+%endif
+
+    movu     [outq + xq], m3
+    add               xq, mmsize
     jl .loop
 
     add          inq, ilinesizeq
@@ -87,6 +103,12 @@ THRESHOLD 16, w, pb_128_0
 
 %if HAVE_AVX2_EXTERNAL
 INIT_YMM avx2
+THRESHOLD 8, b, pb_128
+THRESHOLD 16, w, pb_128_0
+%endif
+
+%if HAVE_AVX512_EXTERNAL
+INIT_ZMM avx512
 THRESHOLD 8, b, pb_128
 THRESHOLD 16, w, pb_128_0
 %endif
