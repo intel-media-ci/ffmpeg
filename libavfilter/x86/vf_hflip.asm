@@ -26,12 +26,16 @@ SECTION_RODATA
 
 pb_flip_byte:  db 15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0
 pb_flip_short: db 14,15,12,13,10,11,8,9,6,7,4,5,2,3,0,1
+pd_flip_indicies: dd 12,13,14,15,8,9,10,11,4,5,6,7,0,1,2,3
 
 SECTION .text
 
 ;%1 byte or short, %2 b or w, %3 size in byte (1 for byte, 2 for short)
 %macro HFLIP 3
 cglobal hflip_%1, 3, 5, 3, src, dst, w, r, x
+%if mmsize == 64
+    movu              m3, [pd_flip_indicies]
+%endif
     VBROADCASTI128    m0, [pb_flip_%1]
     xor               xq, xq
 %if %3 == 1
@@ -47,12 +51,15 @@ cglobal hflip_%1, 3, 5, 3, src, dst, w, r, x
 
     .loop0:
         neg     xq
-%if mmsize == 32
-        vpermq  m1, [srcq + xq -     mmsize + %3], 0x4e; flip each lane at load
-        vpermq  m2, [srcq + xq - 2 * mmsize + %3], 0x4e; flip each lane at load
+%if   mmsize == 64
+        vpermd  m1, m3, [srcq + xq -     mmsize + %3]
+        vpermd  m2, m3, [srcq + xq - 2 * mmsize + %3]
+%elif mmsize == 32
+        vpermq      m1, [srcq + xq -     mmsize + %3], 0x4e; flip each lane at load
+        vpermq      m2, [srcq + xq - 2 * mmsize + %3], 0x4e; flip each lane at load
 %else
-        movu    m1, [srcq + xq -     mmsize + %3]
-        movu    m2, [srcq + xq - 2 * mmsize + %3]
+        movu        m1, [srcq + xq -     mmsize + %3]
+        movu        m2, [srcq + xq - 2 * mmsize + %3]
 %endif
         pshufb  m1, m0
         pshufb  m2, m0
@@ -85,6 +92,12 @@ HFLIP short, w, 2
 
 %if HAVE_AVX2_EXTERNAL
 INIT_YMM avx2
+HFLIP byte, b, 1
+HFLIP short, w, 2
+%endif
+
+%if HAVE_AVX512_EXTERNAL
+INIT_ZMM avx512
 HFLIP byte, b, 1
 HFLIP short, w, 2
 %endif
