@@ -32,6 +32,7 @@
  * with the data pointer set to an AVVkFrame.
  */
 
+#define MAX_VULKAN_MODIFIERS 16
 /**
  * Main Vulkan context, allocated as AVHWDeviceContext.hwctx.
  * All of these can be set before init to change what the context uses
@@ -141,6 +142,10 @@ typedef struct AVVulkanFramesContext {
      * Extension data for image creation.
      */
     void *create_pnext;
+
+    VkImageDrmFormatModifierListCreateInfoEXT modifier_info;
+    uint64_t modifiers[MAX_VULKAN_MODIFIERS];
+    int modifier_count;
 
     /**
      * Extension data for memory allocation. Must have as many entries as

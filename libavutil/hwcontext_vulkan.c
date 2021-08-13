@@ -1967,6 +1967,8 @@ static void try_export_flags(AVHWFramesContext *hwfc,
     AVVulkanDeviceContext *dev_hwctx = hwfc->device_ctx->hwctx;
     VulkanDevicePriv *p = hwfc->device_ctx->internal->priv;
     VulkanFunctions *vk = &p->vkfn;
+    const int has_modifiers = hwctx->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+
     VkExternalImageFormatProperties eprops = {
         .sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR,
     };
@@ -1974,9 +1976,18 @@ static void try_export_flags(AVHWFramesContext *hwfc,
         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
         .pNext = &eprops,
     };
+    VkPhysicalDeviceImageDrmFormatModifierInfoEXT phy_dev_mod_info = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
+        .pNext = NULL,
+        .pQueueFamilyIndices   = p->qfs,
+        .queueFamilyIndexCount = p->num_qfs,
+        .sharingMode           = p->num_qfs > 1 ? VK_SHARING_MODE_CONCURRENT :
+                                                  VK_SHARING_MODE_EXCLUSIVE,
+    };
     VkPhysicalDeviceExternalImageFormatInfo enext = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO,
         .handleType = exp,
+        .pNext = has_modifiers ? &phy_dev_mod_info : NULL,
     };
     VkPhysicalDeviceImageFormatInfo2 pinfo = {
         .sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
@@ -1988,11 +1999,15 @@ static void try_export_flags(AVHWFramesContext *hwfc,
         .flags  = VK_IMAGE_CREATE_ALIAS_BIT,
     };
 
-    ret = vk->GetPhysicalDeviceImageFormatProperties2(dev_hwctx->phys_dev,
-                                                      &pinfo, &props);
-    if (ret == VK_SUCCESS) {
-        *iexp |= exp;
-        *comp_handle_types |= eprops.externalMemoryProperties.compatibleHandleTypes;
+    for (int i = 0; i < (has_modifiers ? hwctx->modifier_count : 1); i++) {
+        if (has_modifiers && hwctx->modifier_count)
+            phy_dev_mod_info.drmFormatModifier = hwctx->modifiers[i];
+        ret = vk->GetPhysicalDeviceImageFormatProperties2(dev_hwctx->phys_dev,
+                                                        &pinfo, &props);
+        if (ret == VK_SUCCESS) {
+            *iexp |= exp;
+            *comp_handle_types |= eprops.externalMemoryProperties.compatibleHandleTypes;
+        }
     }
 }
 
@@ -2055,6 +2070,7 @@ fail:
 static void vulkan_frames_uninit(AVHWFramesContext *hwfc)
 {
     VulkanFramesPriv *fp = hwfc->internal->priv;
+    AVVulkanFramesContext *hwctx = hwfc->hwctx;
 
     free_exec_ctx(hwfc, &fp->conv_ctx);
     free_exec_ctx(hwfc, &fp->upload_ctx);
@@ -2069,10 +2085,59 @@ static int vulkan_frames_init(AVHWFramesContext *hwfc)
     VulkanFramesPriv *fp = hwfc->internal->priv;
     AVVulkanDeviceContext *dev_hwctx = hwfc->device_ctx->hwctx;
     VulkanDevicePriv *p = hwfc->device_ctx->internal->priv;
+    const int has_modifiers = !!(p->extensions & EXT_DRM_MODIFIER_FLAGS);
 
     /* Default pool flags */
-    hwctx->tiling = hwctx->tiling ? hwctx->tiling : p->use_linear_images ?
+    hwctx->tiling = hwctx->tiling ? hwctx->tiling : has_modifiers ?
+                    VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT : p->use_linear_images ?
                     VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
+
+    /* get the supported modifier */
+    if (has_modifiers) {
+        const VkFormat *fmt = av_vkfmt_from_pixfmt(hwfc->sw_format);
+        VulkanFunctions *vk = &p->vkfn;
+        VkDrmFormatModifierPropertiesEXT mod_props[MAX_VULKAN_MODIFIERS];
+
+        VkDrmFormatModifierPropertiesListEXT mod_props_list = {
+            .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT,
+            .pNext = NULL,
+            .drmFormatModifierCount = 0,
+            .pDrmFormatModifierProperties = NULL,
+        };
+        VkFormatProperties2 prop = {
+            .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
+            .pNext = &mod_props_list,
+        };
+
+        vk->GetPhysicalDeviceFormatProperties2(dev_hwctx->phys_dev, fmt[0], &prop);
+        if (!mod_props_list.drmFormatModifierCount) {
+            av_log(hwfc, AV_LOG_ERROR, "There are not supported modifiers for sw_format\n");
+            return AVERROR(EINVAL);
+        }
+        mod_props_list.drmFormatModifierCount =
+            FFMIN(mod_props_list.drmFormatModifierCount, MAX_VULKAN_MODIFIERS);
+
+        mod_props_list.pDrmFormatModifierProperties = mod_props;
+        vk->GetPhysicalDeviceFormatProperties2(dev_hwctx->phys_dev, fmt[0], &prop);
+
+        hwctx->modifier_count = 0;
+        for (int i = 0; i < mod_props_list.drmFormatModifierCount; i++) {
+            if (!(mod_props[i].drmFormatModifierTilingFeatures & DEFAULT_USAGE_FLAGS))
+                continue;
+            hwctx->modifiers[hwctx->modifier_count++] = mod_props[i].drmFormatModifier;
+        }
+        if (!hwctx->modifier_count) {
+            av_log(hwfc, AV_LOG_ERROR, "The supported modifiers doesn't support"
+                                       "default usage\n");
+            return AVERROR(EINVAL);
+        }
+
+        hwctx->create_pnext = &hwctx->modifier_info;
+        hwctx->modifier_info.pNext = NULL;
+        hwctx->modifier_info.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT;
+        hwctx->modifier_info.drmFormatModifierCount = hwctx->modifier_count;
+        hwctx->modifier_info.pDrmFormatModifiers = hwctx->modifiers;
+    }
 
     if (!hwctx->usage)
         hwctx->usage = DEFAULT_USAGE_FLAGS;
