@@ -33,6 +33,7 @@
 typedef struct NativeRequestItem {
     DnnOperand *operands;
     LastLevelTaskItem *lltask;
+    DNNAsyncExecModule exec_module;
 } NativeRequestItem;
 
 #define OFFSET(x) offsetof(NativeContext, x)
@@ -424,15 +425,15 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, DNNFunctionType f
         goto fail;
     native_model->model = model;
 
-    if (native_model->ctx.options.async) {
-        av_log(&native_model->ctx, AV_LOG_WARNING, "Async not supported. Rolling back to sync\n");
-        native_model->ctx.options.async = 0;
-    }
-
 #if !HAVE_PTHREAD_CANCEL
     if (native_model->ctx.options.conv2d_threads > 1){
         av_log(&native_model->ctx, AV_LOG_WARNING, "'conv2d_threads' option was set but it is not supported "
                        "on this build (pthread support is required)\n");
+    }
+
+    if (native_model->ctx.options.async) {
+        av_log(&native_model->ctx, AV_LOG_WARNING, "Async not supported. Rolling back to sync\n");
+        native_model->ctx.options.async = 0;
     }
 #endif
 
@@ -532,6 +533,10 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, DNNFunctionType f
             av_freep(&item);
             goto fail;
         }
+        item->exec_module.start_inference = &native_start_inference;
+        item->exec_module.callback = &infer_completion_callback;
+        item->exec_module.args = item;
+
         if (ff_safe_queue_push_back(native_model->request_queue, item) < 0) {
             av_freep(&item->operands);
             av_freep(&item);
@@ -560,37 +565,44 @@ fail:
 static DNNReturnType execute_model_native(NativeRequestItem *request, Queue *lltask_queue)
 {
     NativeModel *native_model = NULL;
-    NativeContext *ctx = NULL;
-    int32_t layer;
     LastLevelTaskItem *lltask = NULL;
     TaskItem *task = NULL;
 
     lltask = ff_queue_peek_front(lltask_queue);
     if (!lltask) {
         av_log(NULL, AV_LOG_ERROR, "Failed to get LastLevelTaskItem\n");
+        av_freep(&request->operands);
+        av_freep(&request);
         return DNN_ERROR;
     }
     task = lltask->task;
     native_model = task->model;
-    ctx = &native_model->ctx;
 
     if (fill_model_input_native(native_model, request) != DNN_SUCCESS) {
-        return DNN_ERROR;
+        goto err;
     }
 
-    for (layer = 0; layer < native_model->layers_num; ++layer){
-        DNNLayerType layer_type = native_model->layers[layer].type;
-        if (ff_layer_funcs[layer_type].pf_exec(request->operands,
-                                            native_model->layers[layer].input_operand_indexes,
-                                            native_model->layers[layer].output_operand_index,
-                                            native_model->layers[layer].params,
-                                            &native_model->ctx) == DNN_ERROR) {
-            av_log(ctx, AV_LOG_ERROR, "Failed to execute model\n");
-            return DNN_ERROR;
+    if (task->async) {
+        if (ff_dnn_start_inference_async(&native_model->ctx, &request->exec_module) != DNN_SUCCESS) {
+            goto err;
         }
+        return DNN_SUCCESS;
     }
-    infer_completion_callback(request);
-    return (task->inference_done == task->inference_todo) ? DNN_SUCCESS : DNN_ERROR;
+    else {
+        if (native_start_inference(request) != DNN_SUCCESS) {
+            goto err;
+        }
+        infer_completion_callback(request);
+
+        return (task->inference_done == task->inference_todo) ? DNN_SUCCESS : DNN_ERROR;
+    }
+err:
+    native_free_request(request, native_model->operands_num);
+    if (ff_safe_queue_push_back(native_model->request_queue, request) < 0) {
+        ff_dnn_async_module_cleanup(&request->exec_module);
+        av_freep(&request);
+    }
+    return DNN_ERROR;
 }
 
 DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, DNNExecBaseParams *exec_params)
@@ -711,7 +723,8 @@ void ff_dnn_free_model_native(DNNModel **model)
 
             while (ff_safe_queue_size(native_model->request_queue) != 0) {
                 NativeRequestItem *item = ff_safe_queue_pop_front(native_model->request_queue);
-                av_freep(&item->operands);
+                native_free_request(item, native_model->operands_num);
+                ff_dnn_async_module_cleanup(&item->exec_module);
                 av_freep(&item);
             }
             ff_safe_queue_destroy(native_model->request_queue);
