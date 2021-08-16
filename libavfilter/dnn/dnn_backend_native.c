@@ -30,6 +30,11 @@
 #include "dnn_io_proc.h"
 #include "dnn_backend_common.h"
 
+typedef struct NativeRequestItem {
+    DnnOperand *operands;
+    LastLevelTaskItem *lltask;
+} NativeRequestItem;
+
 #define OFFSET(x) offsetof(NativeContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption dnn_native_options[] = {
@@ -47,6 +52,40 @@ static const AVClass dnn_native_class = {
 };
 
 static DNNReturnType execute_model_native(Queue *lltask_queue);
+
+static DnnOperand* copy_operands(NativeModel *native_model)
+{
+    DnnOperand *original, *duplicate;
+
+    original = native_model->operands;
+    duplicate = av_mallocz(native_model->operands_num * sizeof(DnnOperand));
+    if (!duplicate) {
+        return NULL;
+    }
+
+    for (int32_t i = 0; i < native_model->operands_num; ++i){
+        DnnOperand *oprd, *src;
+
+        oprd = &duplicate[i];
+        src = &original[i];
+
+        oprd->data = NULL;
+        oprd->type = src->type;
+        oprd->length = src->length;
+        oprd->isNHWC = src->isNHWC;
+        oprd->data_type = src->data_type;
+        oprd->usedNumbersLeft = src->usedNumbersLeft;
+
+        for (int32_t dim = 0; dim < 4; ++dim) {
+            oprd->dims[dim] = src->dims[dim];
+        }
+
+        for (int32_t index = 0; index < 128; ++index) {
+            oprd->name[index] = src->name[index];
+        }
+    }
+    return duplicate;
+}
 
 static DNNReturnType extract_lltask_from_task(TaskItem *task, Queue *lltask_queue)
 {
