@@ -214,6 +214,48 @@ err:
     return ret;
 }
 
+static void infer_completion_callback(void *args)
+{
+    TaskItem *task = args;
+    DNNData output;
+    NativeModel *native_model = task->model;
+    NativeContext *ctx = &native_model->ctx;
+
+    for (uint32_t i = 0; i < task->nb_output; ++i) {
+        DnnOperand *oprd = NULL;
+        const char *output_name = task->output_names[i];
+        for (int j = 0; j < native_model->operands_num; ++j) {
+            if (strcmp(native_model->operands[j].name, output_name) == 0) {
+                oprd = &native_model->operands[j];
+                break;
+            }
+        }
+
+        if (oprd == NULL) {
+            av_log(ctx, AV_LOG_ERROR, "Could not find output in model\n");
+            return;
+        }
+
+        output.data = oprd->data;
+        output.height = oprd->dims[1];
+        output.width = oprd->dims[2];
+        output.channels = oprd->dims[3];
+        output.dt = oprd->data_type;
+
+        if (task->do_ioproc) {
+            if (native_model->model->frame_post_proc != NULL) {
+                native_model->model->frame_post_proc(task->out_frame, &output, native_model->model->filter_ctx);
+            } else {
+                ff_proc_from_dnn_to_frame(task->out_frame, &output, ctx);
+            }
+        } else {
+            task->out_frame->width = output.width;
+            task->out_frame->height = output.height;
+        }
+    }
+    task->inference_done++;
+}
+
 // Loads model and its parameters that are stored in a binary file with following structure:
 // layers_num,layer_type,layer_parameterss,layer_type,layer_parameters...
 // For CONV layer: activation_function, input_num, output_num, kernel_size, kernel, biases
@@ -384,7 +426,6 @@ static DNNReturnType execute_model_native(Queue *lltask_queue)
     NativeModel *native_model = NULL;
     NativeContext *ctx = NULL;
     int32_t layer;
-    DNNData output;
     LastLevelTaskItem *lltask = NULL;
     TaskItem *task = NULL;
 
@@ -412,40 +453,7 @@ static DNNReturnType execute_model_native(Queue *lltask_queue)
             return DNN_ERROR;
         }
     }
-
-    for (uint32_t i = 0; i < task->nb_output; ++i) {
-        DnnOperand *oprd = NULL;
-        const char *output_name = task->output_names[i];
-        for (int j = 0; j < native_model->operands_num; ++j) {
-            if (strcmp(native_model->operands[j].name, output_name) == 0) {
-                oprd = &native_model->operands[j];
-                break;
-            }
-        }
-
-        if (oprd == NULL) {
-            av_log(ctx, AV_LOG_ERROR, "Could not find output in model\n");
-            return DNN_ERROR;
-        }
-
-        output.data = oprd->data;
-        output.height = oprd->dims[1];
-        output.width = oprd->dims[2];
-        output.channels = oprd->dims[3];
-        output.dt = oprd->data_type;
-
-        if (task->do_ioproc) {
-            if (native_model->model->frame_post_proc != NULL) {
-                native_model->model->frame_post_proc(task->out_frame, &output, native_model->model->filter_ctx);
-            } else {
-                ff_proc_from_dnn_to_frame(task->out_frame, &output, ctx);
-            }
-        } else {
-            task->out_frame->width = output.width;
-            task->out_frame->height = output.height;
-        }
-    }
-    task->inference_done++;
+    infer_completion_callback(task);
     return (task->inference_done == task->inference_todo) ? DNN_SUCCESS : DNN_ERROR;
 }
 
