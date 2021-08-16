@@ -30,6 +30,7 @@
 #include "../dnn_interface.h"
 #include "libavformat/avio.h"
 #include "libavutil/opt.h"
+#include "safe_queue.h"
 #include "queue.h"
 
 /**
@@ -112,6 +113,7 @@ typedef struct InputParams{
 
 typedef struct NativeOptions{
     uint8_t async;
+    uint32_t nireq;
     uint32_t conv2d_threads;
 } NativeOptions;
 
@@ -130,6 +132,7 @@ typedef struct NativeModel{
     int32_t operands_num;
     Queue *task_queue;
     Queue *lltask_queue;
+    SafeQueue *request_queue;
 } NativeModel;
 
 DNNModel *ff_dnn_load_model_native(const char *model_filename, DNNFunctionType func_type, const char *options, AVFilterContext *filter_ctx);
