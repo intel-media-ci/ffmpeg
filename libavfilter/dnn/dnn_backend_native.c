@@ -650,6 +650,7 @@ DNNReturnType ff_dnn_flush_native(const DNNModel *model)
 {
     NativeModel *native_model = model->model;
     NativeRequestItem *request;
+    DNNReturnType ret = 0;
 
     if (ff_queue_size(native_model->lltask_queue) == 0) {
         // no pending task need to flush
@@ -661,9 +662,25 @@ DNNReturnType ff_dnn_flush_native(const DNNModel *model)
         av_log(NULL, AV_LOG_ERROR, "unable to get infer request.\n");
         return DNN_ERROR;
     }
-    // for now, use sync node with flush operation
-    // Switch to async when it is supported
-    return execute_model_native(request, native_model->lltask_queue);
+
+    ret = fill_model_input_native(native_model, request);
+    if (ret != DNN_SUCCESS) {
+        av_log(&native_model->ctx, AV_LOG_ERROR, "Failed to fill model input.\n");
+        goto err;
+    }
+
+    ret = ff_dnn_start_inference_async(&native_model->ctx, &request->exec_module);
+    if (ret != DNN_SUCCESS) {
+        goto err;
+    }
+    return DNN_SUCCESS;
+err:
+    if (ff_safe_queue_push_back(native_model->request_queue, request) < 0) {
+        native_free_request(request, native_model->operands_num);
+        ff_dnn_async_module_cleanup(&request->exec_module);
+        av_freep(&request);
+    }
+    return DNN_ERROR;
 }
 
 DNNAsyncStatusType ff_dnn_get_result_native(const DNNModel *model, AVFrame **in, AVFrame **out)
