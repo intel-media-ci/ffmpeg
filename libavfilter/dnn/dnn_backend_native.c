@@ -52,6 +52,7 @@ static const AVClass dnn_native_class = {
 };
 
 static DNNReturnType execute_model_native(NativeRequestItem *request, Queue *lltask_queue);
+static void infer_completion_callback(void *args);
 
 static DnnOperand* copy_operands(NativeModel *native_model)
 {
@@ -85,6 +86,49 @@ static DnnOperand* copy_operands(NativeModel *native_model)
         }
     }
     return duplicate;
+}
+
+static void native_free_request(NativeRequestItem *request, int32_t numOperands)
+{
+    if (!request->operands)
+        return;
+
+    for (int32_t i = 0; i < numOperands; ++i){
+        av_freep(&request->operands[i].data);
+    }
+    av_freep(&request->operands);
+}
+
+static DNNReturnType native_start_inference(void *args)
+{
+    int32_t layer;
+    NativeRequestItem *request = args;
+    LastLevelTaskItem *lltask = request->lltask;
+    TaskItem *task = lltask->task;
+    NativeModel *native_model = task->model;
+    NativeContext *ctx = &native_model->ctx;
+
+    if (!request) {
+        av_log(ctx, AV_LOG_ERROR, "NativeRequestItem is NULL\n");
+        return DNN_ERROR;
+    }
+
+    for (layer = 0; layer < native_model->layers_num; ++layer){
+        DNNLayerType layer_type = native_model->layers[layer].type;
+        if (ff_layer_funcs[layer_type].pf_exec(request->operands,
+                                            native_model->layers[layer].input_operand_indexes,
+                                            native_model->layers[layer].output_operand_index,
+                                            native_model->layers[layer].params,
+                                            &native_model->ctx) == DNN_ERROR) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to execute model\n");
+            av_freep(&request->operands);
+            if (ff_safe_queue_push_back(native_model->request_queue, request) < 0) {
+                av_freep(&request);
+            }
+            return DNN_ERROR;
+        }
+    }
+    return DNN_SUCCESS;
 }
 
 static DNNReturnType extract_lltask_from_task(TaskItem *task, Queue *lltask_queue)
