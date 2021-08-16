@@ -187,14 +187,6 @@ static void * dnn_execute_layer_conv2d_thread(void *threadarg)
 int ff_dnn_execute_layer_conv2d(DnnOperand *operands, const int32_t *input_operand_indexes,
                                 int32_t output_operand_index, const void *parameters, NativeContext *ctx)
 {
-#if HAVE_PTHREAD_CANCEL
-    int thread_num = (ctx->options.conv2d_threads <= 0 || ctx->options.conv2d_threads > av_cpu_count())
-        ? (av_cpu_count() + 1) : (ctx->options.conv2d_threads);
-    int ret = DNN_SUCCESS, thread_stride;
-    ThreadParam *thread_param;
-#else
-    ThreadParam thread_param = { 0 };
-#endif
     ThreadCommonParam thread_common_param;
     const ConvolutionalParams *conv_params = parameters;
     int height = operands[input_operand_indexes[0]].dims[1];
@@ -202,6 +194,21 @@ int ff_dnn_execute_layer_conv2d(DnnOperand *operands, const int32_t *input_opera
     int pad_size = (conv_params->padding_method == VALID) ? (conv_params->kernel_size - 1) / 2 * conv_params->dilation : 0;
     DnnOperand *output_operand = &operands[output_operand_index];
     void *tmp;
+#if HAVE_PTHREAD_CANCEL
+    int thread_num;
+    int ret = DNN_SUCCESS, thread_stride;
+    ThreadParam *thread_param;
+    if (ctx && ctx->options.async) {
+        thread_num = (ctx->options.conv2d_threads <= 0 || ctx->options.conv2d_threads > av_cpu_count()/4+1)
+            ? (av_cpu_count()/4 + 1) : (ctx->options.conv2d_threads);
+    }
+    else {
+        thread_num = (ctx->options.conv2d_threads <= 0 || ctx->options.conv2d_threads > av_cpu_count())
+            ? (av_cpu_count() + 1) : (ctx->options.conv2d_threads);
+    }
+#else
+    ThreadParam thread_param = { 0 };
+#endif
 
     output_operand->dims[0] = operands[input_operand_indexes[0]].dims[0];
     output_operand->dims[1] = height - pad_size * 2;
