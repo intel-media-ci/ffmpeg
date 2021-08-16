@@ -54,6 +54,13 @@ static const AVClass dnn_native_class = {
 static DNNReturnType execute_model_native(NativeRequestItem *request, Queue *lltask_queue);
 static void infer_completion_callback(void *args);
 
+/**
+ * Copy operands from the Operands in the Native Model
+ *
+ * @param native_model pointer to the native backend model
+ * @return Pointer to the newly created copy of DnnOperands.
+ * @retval NULL if memory cannot be allocated.
+ */
 static DnnOperand* copy_operands(NativeModel *native_model)
 {
     DnnOperand *original, *duplicate;
@@ -88,6 +95,12 @@ static DnnOperand* copy_operands(NativeModel *native_model)
     return duplicate;
 }
 
+/**
+ * Free the operands and their data in the NativeRequestItem
+ *
+ * @param request pointer to the NativeRequestItem
+ * @param numOperands number of operands
+ */
 static void native_free_request(NativeRequestItem *request, int32_t numOperands)
 {
     if (!request->operands)
@@ -99,6 +112,14 @@ static void native_free_request(NativeRequestItem *request, int32_t numOperands)
     av_freep(&request->operands);
 }
 
+/**
+ * Start synchronous inference of the model
+ *
+ * @param args pointer to the NativeRequestItem for execution.
+ * Data should already be filled in the input operand.
+ * @retval DNN_SUCCESS on successful execution
+ * @retval DNN_ERROR if unable to execute the model
+ */
 static DNNReturnType native_start_inference(void *args)
 {
     int32_t layer;
