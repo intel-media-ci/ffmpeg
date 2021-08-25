@@ -197,6 +197,16 @@ static int alloc_picture(H264Context *h, H264Picture *pic)
     if (ret < 0)
         goto fail;
 
+    if (pic->needs_fg) {
+        pic->tf_grain.f = pic->f_grain;
+        pic->f_grain->format = pic->f->format;
+        pic->f_grain->width = pic->f->width;
+        pic->f_grain->height = pic->f->height;
+        ret = ff_thread_get_buffer(h->avctx, &pic->tf_grain, 0);
+        if (ret < 0)
+            goto fail;
+    }
+
     if (h->avctx->hwaccel) {
         const AVHWAccel *hwaccel = h->avctx->hwaccel;
         av_assert0(!pic->hwaccel_picture_private);
@@ -406,6 +416,7 @@ int ff_h264_update_thread_context(AVCodecContext *dst,
 
     h->next_output_pic   = h1->next_output_pic;
     h->next_outputed_poc = h1->next_outputed_poc;
+    h->poc_offset        = h1->poc_offset;
 
     memcpy(h->mmco, h1->mmco, sizeof(h->mmco));
     h->nb_mmco         = h1->nb_mmco;
@@ -515,6 +526,9 @@ static int h264_frame_start(H264Context *h)
     pic->f->crop_right  = h->crop_right;
     pic->f->crop_top    = h->crop_top;
     pic->f->crop_bottom = h->crop_bottom;
+
+    pic->needs_fg = h->sei.film_grain_characteristics.present &&
+        !(h->avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN);
 
     if ((ret = alloc_picture(h, pic)) < 0)
         return ret;
@@ -1327,14 +1341,14 @@ static int h264_export_frame_props(H264Context *h)
     }
     h->sei.unregistered.nb_buf_ref = 0;
 
-    if (h->sei.film_grain_characteristics.present &&
-        (h->avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN)) {
+    if (h->sei.film_grain_characteristics.present) {
         H264SEIFilmGrainCharacteristics *fgc = &h->sei.film_grain_characteristics;
         AVFilmGrainParams *fgp = av_film_grain_params_create_side_data(out);
         if (!fgp)
             return AVERROR(ENOMEM);
 
         fgp->type = AV_FILM_GRAIN_PARAMS_H274;
+        fgp->seed = cur->poc + (h->poc_offset << 5);
 
         fgp->codec.h274.model_id = fgc->model_id;
         if (fgc->separate_colour_description_present_flag) {
@@ -1378,6 +1392,8 @@ static int h264_export_frame_props(H264Context *h)
                sizeof(fgp->codec.h274.comp_model_value));
 
         fgc->present = !!fgc->repetition_period;
+
+        h->avctx->properties |= FF_CODEC_PROPERTY_FILM_GRAIN;
     }
 
     if (h->sei.picture_timing.timecode_cnt > 0) {
@@ -1542,6 +1558,11 @@ static int h264_field_start(H264Context *h, const H264SliceContext *sl,
     h->poc.delta_poc_bottom = sl->delta_poc_bottom;
     h->poc.delta_poc[0]     = sl->delta_poc[0];
     h->poc.delta_poc[1]     = sl->delta_poc[1];
+
+    if (nal->type == H264_NAL_IDR_SLICE)
+        h->poc_offset = sl->idr_pic_id;
+    else if (h->picture_intra_only)
+        h->poc_offset = 0;
 
     /* Shorten frame num gaps so we don't have to allocate reference
      * frames just to throw them away */
@@ -1891,7 +1912,7 @@ static int h264_slice_header_parse(const H264Context *h, H264SliceContext *sl,
     }
 
     if (nal->type == H264_NAL_IDR_SLICE)
-        get_ue_golomb_long(&sl->gb); /* idr_pic_id */
+        sl->idr_pic_id = get_ue_golomb_long(&sl->gb);
 
     sl->poc_lsb = 0;
     sl->delta_poc_bottom = 0;

@@ -1395,7 +1395,8 @@ static int mkv_write_tracks(AVFormatContext *s)
 {
     MatroskaMuxContext *mkv = s->priv_data;
     AVIOContext *pb = s->pb;
-    int i, ret, video_default_idx, audio_default_idx, subtitle_default_idx;
+    int video_default_idx = -1, audio_default_idx = -1, subtitle_default_idx = -1;
+    int i, ret;
 
     if (mkv->nb_attachments == s->nb_streams)
         return 0;
@@ -1405,11 +1406,7 @@ static int mkv_write_tracks(AVFormatContext *s)
         return ret;
 
     if (mkv->default_mode != DEFAULT_MODE_PASSTHROUGH) {
-        int video_idx, audio_idx, subtitle_idx;
-
-        video_idx    = video_default_idx    =
-        audio_idx    = audio_default_idx    =
-        subtitle_idx = subtitle_default_idx = -1;
+        int video_idx = -1, audio_idx = -1, subtitle_idx = -1;
 
         for (i = s->nb_streams - 1; i >= 0; i--) {
             AVStream *st = s->streams[i];
@@ -1435,8 +1432,7 @@ static int mkv_write_tracks(AVFormatContext *s)
     }
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
-        int is_default = mkv->default_mode == DEFAULT_MODE_PASSTHROUGH ?
-                             st->disposition & AV_DISPOSITION_DEFAULT  :
+        int is_default = st->disposition & AV_DISPOSITION_DEFAULT ||
                              i == video_default_idx || i == audio_default_idx ||
                              i == subtitle_default_idx;
         ret = mkv_write_track(s, mkv, st, &mkv->tracks[i],
@@ -2636,33 +2632,6 @@ after_cues:
     return ret2;
 }
 
-static int mkv_query_codec(enum AVCodecID codec_id, int std_compliance)
-{
-    int i;
-    for (i = 0; ff_mkv_codec_tags[i].id != AV_CODEC_ID_NONE; i++)
-        if (ff_mkv_codec_tags[i].id == codec_id)
-            return 1;
-
-    if (std_compliance < FF_COMPLIANCE_NORMAL) {
-        enum AVMediaType type = avcodec_get_type(codec_id);
-        // mkv theoretically supports any video/audio through VFW/ACM
-        if (type == AVMEDIA_TYPE_VIDEO || type == AVMEDIA_TYPE_AUDIO)
-            return 1;
-    }
-
-    return 0;
-}
-
-static int webm_query_codec(enum AVCodecID codec_id, int std_compliance)
-{
-    int i;
-    for (i = 0; ff_webm_codec_tags[i].id != AV_CODEC_ID_NONE; i++)
-        if (ff_webm_codec_tags[i].id == codec_id)
-            return 1;
-
-    return 0;
-}
-
 static uint64_t mkv_get_uid(const mkv_track *tracks, int i, AVLFG *c)
 {
     while (1) {
@@ -2822,9 +2791,9 @@ static const AVOption options[] = {
     { "allow_raw_vfw", "allow RAW VFW mode", OFFSET(allow_raw_vfw), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS },
     { "flipped_raw_rgb", "Raw RGB bitmaps in VFW mode are stored bottom-up", OFFSET(flipped_raw_rgb), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS },
     { "write_crc32", "write a CRC32 element inside every Level 1 element", OFFSET(write_crc), AV_OPT_TYPE_BOOL, { .i64 = 1 }, 0, 1, FLAGS },
-    { "default_mode", "Controls how a track's FlagDefault is inferred", OFFSET(default_mode), AV_OPT_TYPE_INT, { .i64 = DEFAULT_MODE_INFER }, DEFAULT_MODE_INFER, DEFAULT_MODE_PASSTHROUGH, FLAGS, "default_mode" },
-    { "infer", "For each track type, mark the first track of disposition default as default; if none exists, mark the first track as default.", 0, AV_OPT_TYPE_CONST, { .i64 = DEFAULT_MODE_INFER }, 0, 0, FLAGS, "default_mode" },
-    { "infer_no_subs", "For each track type, mark the first track of disposition default as default; for audio and video: if none exists, mark the first track as default.", 0, AV_OPT_TYPE_CONST, { .i64 = DEFAULT_MODE_INFER_NO_SUBS }, 0, 0, FLAGS, "default_mode" },
+    { "default_mode", "Controls how a track's FlagDefault is inferred", OFFSET(default_mode), AV_OPT_TYPE_INT, { .i64 = DEFAULT_MODE_PASSTHROUGH }, DEFAULT_MODE_INFER, DEFAULT_MODE_PASSTHROUGH, FLAGS, "default_mode" },
+    { "infer", "For each track type, mark each track of disposition default as default; if none exists, mark the first track as default.", 0, AV_OPT_TYPE_CONST, { .i64 = DEFAULT_MODE_INFER }, 0, 0, FLAGS, "default_mode" },
+    { "infer_no_subs", "For each track type, mark each track of disposition default as default; for audio and video: if none exists, mark the first track as default.", 0, AV_OPT_TYPE_CONST, { .i64 = DEFAULT_MODE_INFER_NO_SUBS }, 0, 0, FLAGS, "default_mode" },
     { "passthrough", "Use the disposition flag as-is", 0, AV_OPT_TYPE_CONST, { .i64 = DEFAULT_MODE_PASSTHROUGH }, 0, 0, FLAGS, "default_mode" },
     { NULL },
 };
@@ -2837,6 +2806,22 @@ static const AVClass matroska_webm_class = {
 };
 
 #if CONFIG_MATROSKA_MUXER
+static int mkv_query_codec(enum AVCodecID codec_id, int std_compliance)
+{
+    for (int i = 0; ff_mkv_codec_tags[i].id != AV_CODEC_ID_NONE; i++)
+        if (ff_mkv_codec_tags[i].id == codec_id)
+            return 1;
+
+    if (std_compliance < FF_COMPLIANCE_NORMAL) {
+        enum AVMediaType type = avcodec_get_type(codec_id);
+        // mkv theoretically supports any video/audio through VFW/ACM
+        if (type == AVMEDIA_TYPE_VIDEO || type == AVMEDIA_TYPE_AUDIO)
+            return 1;
+    }
+
+    return 0;
+}
+
 const AVOutputFormat ff_matroska_muxer = {
     .name              = "matroska",
     .long_name         = NULL_IF_CONFIG_SMALL("Matroska"),
@@ -2866,6 +2851,15 @@ const AVOutputFormat ff_matroska_muxer = {
 #endif
 
 #if CONFIG_WEBM_MUXER
+static int webm_query_codec(enum AVCodecID codec_id, int std_compliance)
+{
+    for (int i = 0; ff_webm_codec_tags[i].id != AV_CODEC_ID_NONE; i++)
+        if (ff_webm_codec_tags[i].id == codec_id)
+            return 1;
+
+    return 0;
+}
+
 const AVOutputFormat ff_webm_muxer = {
     .name              = "webm",
     .long_name         = NULL_IF_CONFIG_SMALL("WebM"),
