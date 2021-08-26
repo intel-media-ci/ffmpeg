@@ -138,6 +138,7 @@ typedef struct QSVEncContext {
     mfxExtMultiFrameControl extmfc;
 #endif
     mfxExtHEVCTiles exthevctiles;
+    mfxExtHEVCParam exthevcparam;
     mfxExtVP9Param  extvp9param;
 
 #if QSV_HAVE_OPAQUE
@@ -148,7 +149,7 @@ typedef struct QSVEncContext {
 
     mfxExtVideoSignalInfo extvsi;
 
-    mfxExtBuffer  *extparam_internal[5 + (QSV_HAVE_MF * 2)];
+    mfxExtBuffer  *extparam_internal[6 + (QSV_HAVE_MF * 2)];
     int         nb_extparam_internal;
 
     mfxExtBuffer **extparam;
@@ -229,6 +230,8 @@ typedef struct QSVEncContext {
     int min_qp_p;
     int max_qp_b;
     int min_qp_b;
+    int exthevcparam_idx;
+    int main10sp;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);
