@@ -40,6 +40,8 @@
 #define QSV_HAVE_CO_VPS  QSV_VERSION_ATLEAST(1, 17)
 
 #define QSV_HAVE_EXT_HEVC_TILES QSV_VERSION_ATLEAST(1, 13)
+#define QSV_HAVE_EXT_HEVC_PARAM QSV_VERSION_ATLEAST(1, 15)
+#define QSV_HAVE_CONSTRAIN_FLAG QSV_VERSION_ATLEAST(1, 16)
 #define QSV_HAVE_EXT_VP9_PARAM QSV_VERSION_ATLEAST(1, 26)
 
 #define QSV_HAVE_TRELLIS QSV_VERSION_ATLEAST(1, 8)
@@ -131,6 +133,9 @@ typedef struct QSVEncContext {
 #if QSV_HAVE_EXT_HEVC_TILES
     mfxExtHEVCTiles exthevctiles;
 #endif
+#if QSV_HAVE_EXT_HEVC_PARAM
+    mfxExtHEVCParam exthevcparam;
+#endif
 #if QSV_HAVE_EXT_VP9_PARAM
     mfxExtVP9Param  extvp9param;
 #endif
@@ -141,7 +146,8 @@ typedef struct QSVEncContext {
 
     mfxExtVideoSignalInfo extvsi;
 
-    mfxExtBuffer  *extparam_internal[3 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + (QSV_HAVE_MF * 2)];
+    mfxExtBuffer  *extparam_internal[3 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + (QSV_HAVE_MF * 2) +
+                                     QSV_HAVE_EXT_HEVC_PARAM];
     int         nb_extparam_internal;
 
     mfxExtBuffer **extparam;
@@ -203,6 +209,8 @@ typedef struct QSVEncContext {
     char *load_plugins;
     SetEncodeCtrlCB *set_encode_ctrl_cb;
     int forced_idr;
+
+    int main10sp;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);

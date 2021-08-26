@@ -144,6 +144,10 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
 #if QSV_HAVE_EXT_HEVC_TILES
     mfxExtHEVCTiles *exthevctiles = (mfxExtHEVCTiles *)coding_opts[3 + QSV_HAVE_CO_VPS];
 #endif
+#if QSV_HAVE_EXT_HEVC_PARAM
+    mfxExtHEVCParam *exthevcparam = (mfxExtHEVCParam *)coding_opts[3 + QSV_HAVE_CO_VPS +
+                                                                   QSV_HAVE_EXT_HEVC_TILES];
+#endif
 
     av_log(avctx, AV_LOG_VERBOSE, "profile: %s; level: %"PRIu16"\n",
            print_profile(info->CodecProfile), info->CodecLevel);
@@ -213,6 +217,16 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
     if (avctx->codec_id == AV_CODEC_ID_HEVC)
         av_log(avctx, AV_LOG_VERBOSE, "NumTileColumns: %"PRIu16"; NumTileRows: %"PRIu16"\n",
                exthevctiles->NumTileColumns, exthevctiles->NumTileRows);
+#endif
+
+#if QSV_HAVE_EXT_HEVC_PARAM
+    if (avctx->codec_id == AV_CODEC_ID_HEVC) {
+#if QSV_HAVE_CONSTRAIN_FLAG
+        if (info->CodecProfile == MFX_PROFILE_HEVC_MAIN10 &&
+            exthevcparam->GeneralConstraintFlags == MFX_HEVC_CONSTR_REXT_ONE_PICTURE_ONLY)
+            av_log(avctx, AV_LOG_VERBOSE, "Main10sp (Main10 profile and one_pic_only flag): enable\n");
+#endif
+    }
 #endif
 
 #if QSV_HAVE_CO2
@@ -807,6 +821,20 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     }
 #endif
 
+#if QSV_HAVE_EXT_HEVC_PARAM
+    if (avctx->codec_id == AV_CODEC_ID_HEVC) {
+        q->exthevcparam.Header.BufferId = MFX_EXTBUFF_HEVC_PARAM;
+        q->exthevcparam.Header.BufferSz = sizeof(q->exthevcparam);
+#if QSV_HAVE_CONSTRAIN_FLAG
+        if (q->main10sp) {
+            q->param.mfx.CodecProfile = MFX_PROFILE_HEVC_MAIN10;
+            q->exthevcparam.GeneralConstraintFlags = MFX_HEVC_CONSTR_REXT_ONE_PICTURE_ONLY;
+        }
+#endif
+        q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->exthevcparam;
+    }
+#endif
+
     q->extvsi.VideoFullRange = (avctx->color_range == AVCOL_RANGE_JPEG);
     q->extvsi.ColourDescriptionPresent = 0;
 
@@ -949,8 +977,15 @@ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
          .Header.BufferSz = sizeof(hevc_tile_buf),
     };
 #endif
+#if QSV_HAVE_EXT_HEVC_PARAM
+    mfxExtHEVCParam hevc_param_buf = {
+        .Header.BufferId = MFX_EXTBUFF_HEVC_PARAM,
+        .Header.BufferSz = sizeof(hevc_param_buf),
+    };
+#endif
 
-    mfxExtBuffer *ext_buffers[2 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + QSV_HAVE_CO_VPS + QSV_HAVE_EXT_HEVC_TILES];
+    mfxExtBuffer *ext_buffers[2 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + QSV_HAVE_CO_VPS +
+                              QSV_HAVE_EXT_HEVC_TILES + QSV_HAVE_EXT_HEVC_PARAM];
 
     int need_pps = avctx->codec_id != AV_CODEC_ID_MPEG2VIDEO;
     int ret, ext_buf_num = 0, extradata_offset = 0;
@@ -971,6 +1006,10 @@ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
 #if QSV_HAVE_EXT_HEVC_TILES
     if (avctx->codec_id == AV_CODEC_ID_HEVC)
         ext_buffers[ext_buf_num++] = (mfxExtBuffer*)&hevc_tile_buf;
+#endif
+#if QSV_HAVE_EXT_HEVC_PARAM
+    if (avctx->codec_id == AV_CODEC_ID_HEVC)
+        ext_buffers[ext_buf_num++] = (mfxExtBuffer*)&hevc_param_buf;
 #endif
 
     q->param.ExtParam    = ext_buffers;
