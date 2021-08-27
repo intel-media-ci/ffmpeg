@@ -452,15 +452,22 @@ static int get_pixel_format(AVCodecContext *avctx)
     *fmtp++ = s->pix_fmt;
     *fmtp = AV_PIX_FMT_NONE;
 
+    /**
+     * check if the HW accel is specificed. If not, return un-implemented.
+     * Since now the av1 decoder doesn't support native decode, if it will be
+     * implemented in the future, need remove this check.
+     */
+    if (!avctx->hw_device_ctx) {
+        av_log(avctx, AV_LOG_ERROR, "The AV1 decoder requires a hw acceleration"
+	       " to be specified.\n");
+        return AVERROR(ENOSYS);
+    }
+
     ret = ff_thread_get_format(avctx, pix_fmts);
     if (ret < 0)
         return ret;
 
-    /**
-     * check if the HW accel is inited correctly. If not, return un-implemented.
-     * Since now the av1 decoder doesn't support native decode, if it will be
-     * implemented in the future, need remove this check.
-     */
+    /** check if the HW accel is inited correctly by the specificed setting */
     if (!avctx->hwaccel) {
         av_log(avctx, AV_LOG_ERROR, "Your platform doesn't suppport"
                " hardware accelerated AV1 decoding.\n");
