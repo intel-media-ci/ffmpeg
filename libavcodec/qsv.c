@@ -188,6 +188,12 @@ enum AVPixelFormat ff_qsv_map_fourcc(uint32_t fourcc)
     case MFX_FOURCC_P8:   return AV_PIX_FMT_PAL8;
 #if CONFIG_VAAPI
     case MFX_FOURCC_YUY2: return AV_PIX_FMT_YUYV422;
+#if QSV_VERSION_ATLEAST(1, 17)
+    // MFX_FOURCC_AYUV is used in the SDK for
+    // 444 8bit but A is ignored actually, so map
+    // MFX_FOURCC_AYUV to AV_PIX_FMT_0YUV in FFmpeg
+    case MFX_FOURCC_AYUV: return AV_PIX_FMT_0YUV;
+#endif
 #if QSV_VERSION_ATLEAST(1, 27)
     case MFX_FOURCC_Y210: return AV_PIX_FMT_Y210;
 #endif
@@ -213,6 +219,12 @@ int ff_qsv_map_pixfmt(enum AVPixelFormat format, uint32_t *fourcc)
     case AV_PIX_FMT_YUYV422:
         *fourcc = MFX_FOURCC_YUY2;
         return AV_PIX_FMT_YUYV422;
+#if QSV_VERSION_ATLEAST(1, 17)
+    case AV_PIX_FMT_0YUV:
+    case AV_PIX_FMT_YUV444P:
+        *fourcc = MFX_FOURCC_AYUV;
+        return AV_PIX_FMT_0YUV;
+#endif
 #if QSV_VERSION_ATLEAST(1, 27)
     case AV_PIX_FMT_YUV422P10:
     case AV_PIX_FMT_Y210:
