@@ -177,6 +177,7 @@ isBE:
   yuva444p9be
 
 isYUV:
+  0yuv
   ayuv64be
   ayuv64le
   nv12
@@ -643,6 +644,7 @@ ALPHA:
 Packed:
   0bgr
   0rgb
+  0yuv
   ayuv64be
   ayuv64le
   bayer_bggr16be
