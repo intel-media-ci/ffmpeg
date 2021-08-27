@@ -572,6 +572,25 @@ static void y210le_Y_c(uint8_t *dst, const uint8_t *src, const uint8_t *unused0,
         AV_WN16(dst + i * 2, AV_RL16(src + i * 4) >> 6);
 }
 
+static void xyuvToY_c(uint8_t *dst, const uint8_t *src, const uint8_t *unused1, const uint8_t *unused2,  int width,
+                      uint32_t *unused)
+{
+    int i;
+    for (i = 0; i < width; i++)
+        dst[i] = src[4 * i + 2];
+}
+
+static void xyuvToUV_c(uint8_t *dstU, uint8_t *dstV, const uint8_t *unused0, const uint8_t *src1,
+                       const uint8_t *src2, int width, uint32_t *unused)
+{
+    int i;
+    for (i = 0; i < width; i++) {
+        dstV[i] = src1[4 * i];
+        dstU[i] = src1[4 * i + 1];
+    }
+    av_assert1(src1 == src2);
+}
+
 static void bswap16Y_c(uint8_t *_dst, const uint8_t *_src, const uint8_t *unused1, const uint8_t *unused2, int width,
                        uint32_t *unused)
 {
@@ -1256,6 +1275,9 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
     case AV_PIX_FMT_Y210LE:
         c->chrToYV12 = y210le_UV_c;
         break;
+    case AV_PIX_FMT_0YUV:
+        c->chrToYV12 = xyuvToUV_c;
+        break;
     }
     if (c->chrSrcHSubSample) {
         switch (srcFormat) {
@@ -1706,6 +1728,9 @@ av_cold void ff_sws_init_input_funcs(SwsContext *c)
         break;
     case AV_PIX_FMT_Y210LE:
         c->lumToYV12 = y210le_Y_c;
+        break;
+    case AV_PIX_FMT_0YUV:
+        c->lumToYV12 = xyuvToY_c;
         break;
     case AV_PIX_FMT_X2RGB10LE:
         c->lumToYV12 =rgb30leToY_c;
