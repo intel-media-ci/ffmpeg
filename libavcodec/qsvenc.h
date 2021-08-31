@@ -105,6 +105,12 @@
 { "low_power", "enable low power mode(experimental: many limitations by mfx version, BRC modes, etc.)", OFFSET(qsv.low_power), AV_OPT_TYPE_BOOL, { .i64 = -1}, -1, 1, VE},\
 { "dblk_idc", "This option disable deblocking. It has value in range 0~2.",   OFFSET(qsv.dblk_idc),   AV_OPT_TYPE_INT,    { .i64 = 0 },   0,  2,  VE},    \
 { "low_delay_brc",   "Allow to strictly obey avg frame size", OFFSET(qsv.low_delay_brc),  AV_OPT_TYPE_BOOL,{ .i64 = -1 }, -1,          1, VE },                         \
+{ "max_qp_i", "Maximum video quantizer scale for I frame",       OFFSET(qsv.max_qp_i),       AV_OPT_TYPE_INT, { .i64 = -1 },  -1,          51, VE},                         \
+{ "min_qp_i", "Minimum video quantizer scale for I frame",       OFFSET(qsv.min_qp_i),       AV_OPT_TYPE_INT, { .i64 = -1 },  -1,          51, VE},                         \
+{ "max_qp_p", "Maximum video quantizer scale for P frame",       OFFSET(qsv.max_qp_p),       AV_OPT_TYPE_INT, { .i64 = -1 },  -1,          51, VE},                         \
+{ "min_qp_p", "Minimum video quantizer scale for P frame",       OFFSET(qsv.min_qp_p),       AV_OPT_TYPE_INT, { .i64 = -1 },  -1,          51, VE},                         \
+{ "max_qp_b", "Maximum video quantizer scale for B frame",       OFFSET(qsv.max_qp_b),       AV_OPT_TYPE_INT, { .i64 = -1 },  -1,          51, VE},                         \
+{ "min_qp_b", "Minimum video quantizer scale for B frame",       OFFSET(qsv.min_qp_b),       AV_OPT_TYPE_INT, { .i64 = -1 },  -1,          51, VE},                         \
 
 extern const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[];
 
@@ -218,6 +224,12 @@ typedef struct QSVEncContext {
     SetEncodeCtrlCB *set_encode_ctrl_cb;
     int forced_idr;
     int low_delay_brc;
+    int max_qp_i;
+    int min_qp_i;
+    int max_qp_p;
+    int min_qp_p;
+    int max_qp_b;
+    int min_qp_b;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);

@@ -3282,6 +3282,24 @@ Forcing I frames as IDR frames.
 
 @item @var{low_power}
 For encoders set this flag to ON to reduce power consumption and GPU usage.
+
+@item @var{max_qp_i}
+Maximum video quantizer scale for I frame.
+
+@item @var{min_qp_i}
+Minimum video quantizer scale for I frame.
+
+@item @var{max_qp_p}
+Maximum video quantizer scale for P frame.
+
+@item @var{min_qp_p}
+Minimum video quantizer scale for P frame.
+
+@item @var{max_qp_b}
+Maximum video quantizer scale for B frame.
+
+@item @var{min_qp_b}
+Minimum video quantizer scale for B frame.
 @end table
 
 @subsection H264 options
