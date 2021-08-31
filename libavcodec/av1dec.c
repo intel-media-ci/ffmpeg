@@ -462,8 +462,8 @@ static int get_pixel_format(AVCodecContext *avctx)
      * implemented in the future, need remove this check.
      */
     if (!avctx->hwaccel) {
-        av_log(avctx, AV_LOG_ERROR, "Your platform doesn't suppport"
-               " hardware accelerated AV1 decoding.\n");
+        av_log(avctx, AV_LOG_ERROR, "The AV1 decoder requires a hw acceleration"
+               " to be specified or the specified hw doesn't support AV1 decoding.\n");
         return AVERROR(ENOSYS);
     }
 
