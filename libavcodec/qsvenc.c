@@ -164,6 +164,12 @@ static const struct {
 #endif
 };
 
+#define UPDATE_PARAM(a, b)  \
+    if ((a) != (b)) {       \
+        a = b;              \
+        updated = 1;        \
+    }
+
 static const char *print_ratecontrol(mfxU16 rc_mode)
 {
     int i;
@@ -841,6 +847,12 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
 #endif
 #endif
     }
+
+    q->init_bitrate = q->param.mfx.TargetKbps;
+    q->init_max_bitrate = q->param.mfx.MaxKbps;
+    q->init_multiplier = q->param.mfx.BRCParamMultiplier;
+    q->init_initial_delay = q->param.mfx.InitialDelayInKB;
+    q->init_buffer_size = q->param.mfx.BufferSizeInKB;
 
     // The HEVC encoder plugin currently fails with some old libmfx version if coding options
     // are provided. Can't find the extract libmfx version which fixed it, just enable it from
@@ -1648,6 +1660,106 @@ static void print_interlace_msg(AVCodecContext *avctx, QSVEncContext *q)
     }
 }
 
+static int update_low_delay_brc(AVCodecContext *avctx,
+                                          QSVEncContext *q,
+                                          const AVFrame *frame)
+{
+
+    int updated = 0;
+
+#if QSV_HAVE_CO3
+    mfxExtCodingOption3 *extbuf3 = &q->extco3;
+    mfxExtCodingOption *extbuf = &q->extco;
+    mfxVideoParam *mfxparam = &q->param;
+    AVDictionaryEntry *entry;
+
+    if (!frame)
+        return 0;
+
+    entry = av_dict_get(frame->metadata, "low_delay_brc", NULL, 0);
+    if (entry != NULL) {
+        double framerate = 0.0;
+        double bitrate = 0.0;
+        uint32_t target_size = atoi(entry->value);
+
+        // Previous off, then record the bitrate
+        if (extbuf3->LowDelayBRC == MFX_CODINGOPTION_OFF) {
+            q->init_bitrate = mfxparam->mfx.TargetKbps;
+            q->init_max_bitrate = mfxparam->mfx.MaxKbps;
+            q->init_multiplier = mfxparam->mfx.BRCParamMultiplier;
+            q->init_initial_delay = q->param.mfx.InitialDelayInKB;
+            q->init_buffer_size = q->param.mfx.BufferSizeInKB;
+        }
+
+        // Enable low_delay_brc
+        UPDATE_PARAM(extbuf3->LowDelayBRC, MFX_CODINGOPTION_ON);
+        // HRD not compatible with low_delay_brc
+        UPDATE_PARAM(extbuf->NalHrdConformance, MFX_CODINGOPTION_OFF);
+
+        // Calculate corresponding rate from size
+        framerate =
+            (double)mfxparam->mfx.FrameInfo.FrameRateExtN /
+            (double)mfxparam->mfx.FrameInfo.FrameRateExtD;
+        bitrate = target_size * framerate * 8.0 / 1000.0;
+
+        if ((uint32_t)bitrate > 0xFFFF) {
+            uint16_t multiplier = 1;
+            float fscale = 1.0;
+            while (bitrate / multiplier > 0xFFFF)
+                multiplier *= 16;
+
+            bitrate = bitrate / multiplier;
+            fscale =
+                (float)mfxparam->mfx.BRCParamMultiplier /
+                (float)multiplier;
+
+            UPDATE_PARAM(mfxparam->mfx.BRCParamMultiplier, multiplier);
+            UPDATE_PARAM(mfxparam->mfx.InitialDelayInKB,
+                         (uint16_t)ceil(mfxparam->mfx.InitialDelayInKB *
+                                        fscale));
+            UPDATE_PARAM(mfxparam->mfx.BufferSizeInKB,
+                         (uint16_t)ceil(mfxparam->mfx.BufferSizeInKB *
+                                        fscale));
+        }
+        UPDATE_PARAM(mfxparam->mfx.TargetKbps, (uint16_t)ceil(bitrate));
+        UPDATE_PARAM(mfxparam->mfx.MaxKbps, (uint16_t)ceil(bitrate));
+        av_log(avctx, AV_LOG_DEBUG, "Enable low_delay_brc, set target size %d.\n",
+                target_size);
+    } else {
+        //previous on, then restore the bitrate
+        if (extbuf3->LowDelayBRC == MFX_CODINGOPTION_ON) {
+            UPDATE_PARAM(extbuf3->LowDelayBRC, MFX_CODINGOPTION_OFF);
+            mfxparam->mfx.TargetKbps = q->init_bitrate;
+            mfxparam->mfx.MaxKbps = q->init_max_bitrate;
+            mfxparam->mfx.BRCParamMultiplier = q->init_multiplier;
+            mfxparam->mfx.InitialDelayInKB = q->init_initial_delay;
+            mfxparam->mfx.BufferSizeInKB = q->init_buffer_size;
+        }
+    }
+#endif
+    return updated;
+}
+
+static int update_parameters(AVCodecContext *avctx,
+                             QSVEncContext *q,
+                             const AVFrame *frame)
+{
+    // Update low_delay_brc target frame size
+    int need_reset = update_low_delay_brc(avctx, q, frame);
+
+    int ret = 0;
+    if (need_reset) {
+        q->param.ExtParam    = q->extparam_internal;
+        q->param.NumExtParam = q->nb_extparam_internal;
+        av_log(avctx, AV_LOG_VERBOSE, "Parameter change. Call msdk reset.\n");
+        ret = MFXVideoENCODE_Reset(q->session, &q->param);
+        if (ret < 0)
+            ff_qsv_print_error(avctx, ret, "Error calling Reset\n");
+    }
+
+    return 0;
+}
+
 static int encode_frame(AVCodecContext *avctx, QSVEncContext *q,
                         const AVFrame *frame)
 {
@@ -1763,6 +1875,10 @@ int ff_qsv_encode(AVCodecContext *avctx, QSVEncContext *q,
                   AVPacket *pkt, const AVFrame *frame, int *got_packet)
 {
     int ret;
+
+    ret = update_parameters(avctx, q, frame);
+    if (ret < 0)
+        return ret;
 
     ret = encode_frame(avctx, q, frame);
     if (ret < 0)

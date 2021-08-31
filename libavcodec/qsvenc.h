@@ -218,6 +218,13 @@ typedef struct QSVEncContext {
     SetEncodeCtrlCB *set_encode_ctrl_cb;
     int forced_idr;
     int low_delay_brc;
+
+    //These options are used for runtime low_delay_brc
+    uint16_t init_bitrate;
+    uint16_t init_max_bitrate;
+    uint16_t init_multiplier;
+    uint16_t init_initial_delay;
+    uint16_t init_buffer_size;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);
