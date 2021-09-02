@@ -1348,7 +1348,8 @@ static int submit_frame(QSVEncContext *q, const AVFrame *frame,
         /* make a copy if the input is not padded as libmfx requires */
         /* and to make allocation continious for data[0]/data[1] */
          if ((frame->height & 31 || frame->linesize[0] & (q->width_align - 1)) ||
-            (frame->data[1] - frame->data[0] != frame->linesize[0] * FFALIGN(qf->frame->height, q->height_align))) {
+            ((frame->format != AV_PIX_FMT_0YUV) &&
+            (frame->data[1] - frame->data[0] != frame->linesize[0] * FFALIGN(qf->frame->height, q->height_align)))) {
             qf->frame->height = FFALIGN(frame->height, q->height_align);
             qf->frame->width  = FFALIGN(frame->width, q->width_align);
 
@@ -1388,8 +1389,20 @@ static int submit_frame(QSVEncContext *q, const AVFrame *frame,
             qf->surface.Info.PicStruct |= MFX_PICSTRUCT_FRAME_TRIPLING;
 
         qf->surface.Data.PitchLow  = qf->frame->linesize[0];
-        qf->surface.Data.Y         = qf->frame->data[0];
-        qf->surface.Data.UV        = qf->frame->data[1];
+
+        switch (qf->frame->format) {
+        case AV_PIX_FMT_0YUV:
+            qf->surface.Data.V  = qf->frame->data[0];
+            qf->surface.Data.U  = qf->frame->data[0] + 1;
+            qf->surface.Data.Y  = qf->frame->data[0] + 2;
+            qf->surface.Data.A  = qf->frame->data[0] + 3;
+            break;
+
+        default:
+            qf->surface.Data.Y  = qf->frame->data[0];
+            qf->surface.Data.UV = qf->frame->data[1];
+            break;
+        }
     }
 
     qf->surface.Data.TimeStamp = av_rescale_q(frame->pts, q->avctx->time_base, (AVRational){1, 90000});
@@ -1675,5 +1688,6 @@ const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[] = {
     HW_CONFIG_ENCODER_FRAMES(QSV,  QSV),
     HW_CONFIG_ENCODER_DEVICE(NV12, QSV),
     HW_CONFIG_ENCODER_DEVICE(P010, QSV),
+    HW_CONFIG_ENCODER_DEVICE(0YUV, QSV),
     NULL,
 };

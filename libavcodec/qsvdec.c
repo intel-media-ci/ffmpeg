@@ -124,6 +124,9 @@ static int qsv_get_continuous_buffer(AVCodecContext *avctx, AVFrame *frame,
     case AV_PIX_FMT_P010:
         frame->linesize[0] = 2 * FFALIGN(avctx->width, 128);
         break;
+    case AV_PIX_FMT_0YUV:
+        frame->linesize[0] = 4 * FFALIGN(avctx->width, 128);
+        break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Unsupported pixel format.\n");
         return AVERROR(EINVAL);
@@ -135,7 +138,9 @@ static int qsv_get_continuous_buffer(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR(ENOMEM);
 
     frame->data[0] = frame->buf[0]->data;
-    frame->data[1] = frame->data[0] +
+
+    if (avctx->pix_fmt != AV_PIX_FMT_0YUV)
+        frame->data[1] = frame->data[0] +
                             frame->linesize[0] * FFALIGN(avctx->height, 64);
 
     ret = ff_attach_decode_data(frame);
@@ -412,8 +417,20 @@ static int alloc_frame(AVCodecContext *avctx, QSVContext *q, QSVFrame *frame)
         frame->surface.Info = q->frame_info;
 
         frame->surface.Data.PitchLow = frame->frame->linesize[0];
-        frame->surface.Data.Y        = frame->frame->data[0];
-        frame->surface.Data.UV       = frame->frame->data[1];
+
+        switch (frame->frame->format) {
+        case AV_PIX_FMT_0YUV:
+            frame->surface.Data.V    = frame->frame->data[0];
+            frame->surface.Data.U    = frame->frame->data[0] + 1;
+            frame->surface.Data.Y    = frame->frame->data[0] + 2;
+            frame->surface.Data.A    = frame->frame->data[0] + 3;
+            break;
+
+        default:
+            frame->surface.Data.Y        = frame->frame->data[0];
+            frame->surface.Data.UV       = frame->frame->data[1];
+            break;
+        }
     }
 
     if (q->frames_ctx.mids) {
@@ -904,6 +921,7 @@ const AVCodec ff_##x##_qsv_decoder = { \
     .priv_class     = &x##_qsv_class, \
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12, \
                                                     AV_PIX_FMT_P010, \
+                                                    AV_PIX_FMT_0YUV, \
                                                     AV_PIX_FMT_QSV, \
                                                     AV_PIX_FMT_NONE }, \
     .hw_configs     = qsv_hw_configs, \
