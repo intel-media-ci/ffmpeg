@@ -1123,8 +1123,7 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
     case AV_HWDEVICE_TYPE_VAAPI:
         {
             AVVAAPIFramesContext *src_hwctx = src_ctx->hwctx;
-            s->handle_pairs_internal = av_calloc(src_ctx->initial_pool_size,
-                                                 sizeof(*s->handle_pairs_internal));
+            s->handle_pairs_internal = av_calloc(src_hwctx->nb_surfaces, sizeof(*s->handle_pairs_internal));
             if (!s->handle_pairs_internal)
                 return AVERROR(ENOMEM);
             s->surfaces_internal = av_calloc(src_hwctx->nb_surfaces,
@@ -1146,15 +1145,15 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
     case AV_HWDEVICE_TYPE_D3D11VA:
         {
             AVD3D11VAFramesContext *src_hwctx = src_ctx->hwctx;
-            s->handle_pairs_internal = av_calloc(src_ctx->initial_pool_size,
+            s->handle_pairs_internal = av_calloc(src_ctx->nb_surfaces,
                                                  sizeof(*s->handle_pairs_internal));
             if (!s->handle_pairs_internal)
                 return AVERROR(ENOMEM);
-            s->surfaces_internal = av_calloc(src_ctx->initial_pool_size,
+            s->surfaces_internal = av_calloc(src_ctx->nb_surfaces,
                                              sizeof(*s->surfaces_internal));
             if (!s->surfaces_internal)
                 return AVERROR(ENOMEM);
-            for (i = 0; i < src_ctx->initial_pool_size; i++) {
+            for (i = 0; i < src_ctx->nb_surfaces; i++) {
                 qsv_init_surface(dst_ctx, &s->surfaces_internal[i]);
                 s->handle_pairs_internal[i].first = (mfxMemId)src_hwctx->texture_infos[i].texture;
                 if (src_hwctx->BindFlags & D3D11_BIND_RENDER_TARGET) {
@@ -1164,7 +1163,7 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
                 }
                 s->surfaces_internal[i].Data.MemId = (mfxMemId)&s->handle_pairs_internal[i];
             }
-            dst_hwctx->nb_surfaces = src_ctx->initial_pool_size;
+            dst_hwctx->nb_surfaces = src_ctx->nb_surfaces;
             if (src_hwctx->BindFlags & D3D11_BIND_RENDER_TARGET) {
                 dst_hwctx->frame_type |= MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET;
             } else {
@@ -1177,7 +1176,7 @@ static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
     case AV_HWDEVICE_TYPE_DXVA2:
         {
             AVDXVA2FramesContext *src_hwctx = src_ctx->hwctx;
-            s->handle_pairs_internal = av_calloc(src_ctx->initial_pool_size,
+            s->handle_pairs_internal = av_calloc(src_ctx->nb_surfaces,
                                                  sizeof(*s->handle_pairs_internal));
             if (!s->handle_pairs_internal)
                 return AVERROR(ENOMEM);
