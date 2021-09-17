@@ -804,6 +804,48 @@ static const AVCodec *choose_decoder(OptionsContext *o, AVFormatContext *s, AVSt
         return avcodec_find_decoder(st->codecpar->codec_id);
 }
 
+static const AVCodec *choose_decoder2(InputStream *ist, OptionsContext *o, AVFormatContext *s, AVStream *st)
+{
+    char *codec_name = NULL;
+
+    MATCH_PER_STREAM_OPT(codec_names, str, codec_name, s, st);
+    if (codec_name) {
+        const AVCodec *codec = find_codec_or_die(codec_name, st->codecpar->codec_type, 0);
+        st->codecpar->codec_id = codec->id;
+        if (recast_media && st->codecpar->codec_type != codec->type)
+            st->codecpar->codec_type = codec->type;
+        return codec;
+    } else {
+        if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
+            ist->hwaccel_id == HWACCEL_GENERIC &&
+            ist->hwaccel_device_type != AV_HWDEVICE_TYPE_NONE) {
+            const AVCodec *p;
+            void *i = 0;
+
+            while ((p = av_codec_iterate(&i))) {
+                int j;
+
+                if (p->id != st->codecpar->codec_id ||
+                    !av_codec_is_decoder(p) ||
+                    !avcodec_get_hw_config(p, 0))
+                    continue;
+
+                for (j = 0; ;j++) {
+                    const AVCodecHWConfig *config = avcodec_get_hw_config(p, j);
+
+                    if (!config)
+                        break;
+
+                    if (config->device_type == ist->hwaccel_device_type)
+                        return p;
+                }
+            }
+        }
+
+        return avcodec_find_decoder(st->codecpar->codec_id);
+    }
+}
+
 /* Add all the streams from the given input file to the global
  * list of input streams. */
 static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
@@ -931,7 +973,7 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
             ist->hwaccel_pix_fmt = AV_PIX_FMT_NONE;
         }
 
-        ist->dec = choose_decoder(o, ic, st);
+        ist->dec = choose_decoder2(ist, o, ic, st);
         ist->decoder_opts = filter_codec_opts(o->g->codec_opts, ist->st->codecpar->codec_id, ic, st, ist->dec);
 
         ist->reinit_filters = -1;
