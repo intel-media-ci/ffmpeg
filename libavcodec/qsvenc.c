@@ -1546,6 +1546,14 @@ int ff_qsv_encode(AVCodecContext *avctx, QSVEncContext *q,
 {
     int ret;
 
+    if (frame && avctx->hw_frames_ctx && frame->hw_frames_ctx &&
+        avctx->hw_frames_ctx->data != frame->hw_frames_ctx->data) {
+        avctx->codec->close(avctx);
+        av_buffer_unref(&avctx->hw_frames_ctx);
+        avctx->hw_frames_ctx = av_buffer_ref(frame->hw_frames_ctx);
+        avctx->codec->init(avctx);
+    }
+
     ret = encode_frame(avctx, q, frame);
     if (ret < 0)
         return ret;
@@ -1639,6 +1647,8 @@ int ff_qsv_enc_close(AVCodecContext *avctx, QSVEncContext *q)
 
     av_buffer_unref(&q->frames_ctx.hw_frames_ctx);
     av_buffer_unref(&q->frames_ctx.mids_buf);
+    q->frames_ctx.mids = NULL;
+    q->frames_ctx.nb_mids = 0;
 
     cur = q->work_frames;
     while (cur) {
@@ -1669,6 +1679,30 @@ int ff_qsv_enc_close(AVCodecContext *avctx, QSVEncContext *q)
     av_buffer_unref(&q->opaque_alloc_buf);
 
     av_freep(&q->extparam);
+
+    memset(&q->param, 0, sizeof(q->param));
+    memset(&q->req, 0, sizeof(q->req));
+    memset(&q->extco, 0, sizeof(q->extco));
+#if QSV_HAVE_CO2
+    memset(&q->extco2, 0, sizeof(q->extco2));
+#endif
+#if QSV_HAVE_CO3
+    memset(&q->extco3, 0, sizeof(q->extco3));
+#endif
+#if QSV_HAVE_MF
+    memset(&q->extmfp, 0, sizeof(q->extmfp));
+    memset(&q->extmfc, 0, sizeof(q->extmfc));
+#endif
+#if QSV_HAVE_EXT_HEVC_TILES
+    memset(&q->exthevctiles, 0, sizeof(q->exthevctiles));
+#endif
+#if QSV_HAVE_EXT_VP9_PARAM
+    memset(&q->extvp9param, 0, sizeof(q->extvp9param));
+#endif
+
+    memset(&q->extvsi, 0, sizeof(q->extvsi));
+
+    q->nb_extparam_internal = 0;
 
     return 0;
 }
