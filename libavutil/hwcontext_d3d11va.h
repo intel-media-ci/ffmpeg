@@ -173,6 +173,8 @@ typedef struct AVD3D11VAFramesContext {
      * This field is ignored/invalid if a user-allocated texture is provided.
     */
     AVD3D11FrameDescriptor *texture_infos;
+
+    int nb_surfaces;
 } AVD3D11VAFramesContext;
 
 #endif /* AVUTIL_HWCONTEXT_D3D11VA_H */

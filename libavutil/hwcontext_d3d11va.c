@@ -72,7 +72,6 @@ static av_cold void load_functions(void)
 }
 
 typedef struct D3D11VAFramesContext {
-    int nb_surfaces;
     int nb_surfaces_used;
 
     DXGI_FORMAT format;
@@ -287,7 +286,7 @@ static int d3d11va_frames_init(AVHWFramesContext *ctx)
     hwctx->texture_infos = av_calloc(ctx->initial_pool_size, sizeof(*hwctx->texture_infos));
     if (!hwctx->texture_infos)
         return AVERROR(ENOMEM);
-    s->nb_surfaces = ctx->initial_pool_size;
+    hwctx->nb_surfaces = ctx->initial_pool_size;
 
     ctx->internal->pool_internal = av_buffer_pool_init2(sizeof(AVD3D11FrameDescriptor),
                                                         ctx, d3d11va_pool_alloc, NULL);
