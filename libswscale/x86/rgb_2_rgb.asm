@@ -168,6 +168,14 @@ SHUFFLE_BYTES 1, 2, 3, 0
 SHUFFLE_BYTES 3, 0, 1, 2
 SHUFFLE_BYTES 3, 2, 1, 0
 %endif
+%if HAVE_AVX512_EXTERNAL
+INIT_ZMM avx512
+SHUFFLE_BYTES 2, 1, 0, 3
+SHUFFLE_BYTES 0, 3, 2, 1
+SHUFFLE_BYTES 1, 2, 3, 0
+SHUFFLE_BYTES 3, 0, 1, 2
+SHUFFLE_BYTES 3, 2, 1, 0
+%endif
 %endif
 
 ;-----------------------------------------------------------------------------------------------
