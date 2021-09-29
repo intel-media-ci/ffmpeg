@@ -41,6 +41,8 @@
 #include "qsv_internal.h"
 #include "qsvenc.h"
 
+#define MFX_IMPL_VIA_MASK(impl) (0x0f00 & (impl))
+
 static const struct {
     mfxU16 profile;
     const char *name;
@@ -298,6 +300,19 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
 
     av_log(avctx, AV_LOG_VERBOSE, "FrameRateExtD: %"PRIu32"; FrameRateExtN: %"PRIu32" \n",
            info->FrameInfo.FrameRateExtD, info->FrameInfo.FrameRateExtN);
+
+#if QSV_HAVE_HE
+    av_log(avctx, AV_LOG_VERBOSE, "HyperEncode: ");
+
+    if (q->hyperEncodeParam.Mode == MFX_HYPERMODE_OFF)
+        av_log(avctx, AV_LOG_VERBOSE, "off");
+    if (q->hyperEncodeParam.Mode == MFX_HYPERMODE_ON)
+        av_log(avctx, AV_LOG_VERBOSE, "on");
+    if (q->hyperEncodeParam.Mode == MFX_HYPERMODE_ADAPTIVE)
+        av_log(avctx, AV_LOG_VERBOSE, "adaptive");
+
+    av_log(avctx, AV_LOG_VERBOSE, "\n");
+#endif
 
 }
 
@@ -825,6 +840,47 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
         q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extvsi;
     }
 
+    if (q->dual_gfx) {
+#if QSV_HAVE_HE
+        mfxIMPL impl;
+        MFXQueryIMPL(q->session, &impl);
+        if (MFX_IMPL_VIA_MASK(impl) != MFX_IMPL_VIA_D3D11) {
+            av_log(avctx, AV_LOG_ERROR, "Dual GFX mode requires D3D11VA \n");
+        }
+
+        if(q->param.mfx.CodecId != MFX_CODEC_AVC && q->param.mfx.CodecId != MFX_CODEC_HEVC) {
+            av_log(avctx, AV_LOG_WARNING, "Not supported encoder for dual GFX mode. "
+                                          "Supported: h264_qsv and hevc_qsv \n");
+        }
+        if(q->param.mfx.RateControlMethod != MFX_RATECONTROL_VBR &&
+           q->param.mfx.RateControlMethod != MFX_RATECONTROL_CQP &&
+           q->param.mfx.RateControlMethod != MFX_RATECONTROL_ICQ) {
+            av_log(avctx, AV_LOG_WARNING, "Not supported BRC for dual GFX mode. "
+                                          "Supported: VBR, CQP and ICQ \n");
+        }
+        if(q->param.mfx.LowPower != MFX_CODINGOPTION_ON) {
+            av_log(avctx, AV_LOG_WARNING, "Dual GFX mode supports only low-power encoding mode \n");
+        }
+        if((q->param.mfx.CodecId == MFX_CODEC_AVC  && q->param.mfx.IdrInterval != 0) ||
+           (q->param.mfx.CodecId == MFX_CODEC_HEVC && q->param.mfx.IdrInterval != 1)) {
+            av_log(avctx, AV_LOG_WARNING, "Dual GFX mode requires closed GOP (IdrInterval = 0) \n");
+        }
+        if(q->param.mfx.GopPicSize > 30) {
+            av_log(avctx, AV_LOG_WARNING, "For better performance in dual GFX mode GopPicSize must be <= 30 \n");
+        }
+        if(q->param.AsyncDepth < 30) {
+            av_log(avctx, AV_LOG_WARNING, "For better performance in dual GFX mode AsyncDepth must be >= 30 \n");
+        }
+
+        q->hyperEncodeParam.Header.BufferId = MFX_EXTBUFF_HYPER_MODE_PARAM;
+        q->hyperEncodeParam.Header.BufferSz = sizeof(q->hyperEncodeParam);
+        q->hyperEncodeParam.Mode            = q->dual_gfx;
+        q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->hyperEncodeParam;
+#else
+        av_log(avctx, AV_LOG_ERROR, "Dual GFX mode is supported only on Windows and requires oneVPL \n");
+#endif
+    }
+
     if (!check_enc_param(avctx,q)) {
         av_log(avctx, AV_LOG_ERROR,
                "some encoding parameters are not supported by the QSV "
@@ -950,7 +1006,14 @@ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
     };
 #endif
 
-    mfxExtBuffer *ext_buffers[2 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + QSV_HAVE_CO_VPS + QSV_HAVE_EXT_HEVC_TILES];
+#if QSV_HAVE_HE
+    mfxExtHyperModeParam hyperEncodeParam = {
+         .Header.BufferId = MFX_EXTBUFF_HYPER_MODE_PARAM,
+         .Header.BufferSz = sizeof(hyperEncodeParam),
+    };
+#endif
+
+    mfxExtBuffer *ext_buffers[2 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + QSV_HAVE_CO_VPS + QSV_HAVE_EXT_HEVC_TILES + QSV_HAVE_HE];
 
     int need_pps = avctx->codec_id != AV_CODEC_ID_MPEG2VIDEO;
     int ret, ext_buf_num = 0, extradata_offset = 0;
@@ -971,6 +1034,9 @@ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
 #if QSV_HAVE_EXT_HEVC_TILES
     if (avctx->codec_id == AV_CODEC_ID_HEVC)
         ext_buffers[ext_buf_num++] = (mfxExtBuffer*)&hevc_tile_buf;
+#endif
+#if QSV_HAVE_HE
+    ext_buffers[ext_buf_num++] = (mfxExtBuffer*)&hyperEncodeParam;
 #endif
 
     q->param.ExtParam    = ext_buffers;

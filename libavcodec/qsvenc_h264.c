@@ -101,6 +101,7 @@ static av_cold int qsv_enc_close(AVCodecContext *avctx)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
     QSV_COMMON_OPTS
+    QSV_HE_OPTIONS
 
     { "cavlc",          "Enable CAVLC",                           OFFSET(qsv.cavlc),          AV_OPT_TYPE_INT, { .i64 = 0 },   0,          1, VE },
 #if QSV_HAVE_VCM

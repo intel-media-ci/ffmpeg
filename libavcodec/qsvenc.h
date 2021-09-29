@@ -62,12 +62,14 @@
 #define QSV_HAVE_VCM    QSV_VERSION_ATLEAST(1, 8)
 #define QSV_HAVE_QVBR   QSV_VERSION_ATLEAST(1, 11)
 #define QSV_HAVE_MF     0
+#define QSV_HAVE_HE     QSV_ONEVPL
 #else
 #define QSV_HAVE_AVBR   0
 #define QSV_HAVE_ICQ    QSV_VERSION_ATLEAST(1, 28)
 #define QSV_HAVE_VCM    0
 #define QSV_HAVE_QVBR   QSV_VERSION_ATLEAST(1, 28)
 #define QSV_HAVE_MF     QSV_VERSION_ATLEAST(1, 25) && !QSV_ONEVPL
+#define QSV_HAVE_HE     0
 #endif
 
 #if !QSV_HAVE_LA_DS
@@ -100,6 +102,20 @@
 { "b_strategy",     "Strategy to choose between I/P/B-frames", OFFSET(qsv.b_strategy),    AV_OPT_TYPE_INT, { .i64 = -1 }, -1,          1, VE },                         \
 { "forced_idr",     "Forcing I frames as IDR frames",         OFFSET(qsv.forced_idr),     AV_OPT_TYPE_BOOL,{ .i64 = 0  },  0,          1, VE },                         \
 { "low_power", "enable low power mode(experimental: many limitations by mfx version, BRC modes, etc.)", OFFSET(qsv.low_power), AV_OPT_TYPE_BOOL, { .i64 = -1}, -1, 1, VE},\
+
+#if QSV_HAVE_HE
+#define QSV_HE_OPTIONS \
+{ "dual_gfx", "Prefer processing on both iGfx and dGfx simultaneously", OFFSET(qsv.dual_gfx), AV_OPT_TYPE_INT, { .i64 = MFX_HYPERMODE_OFF }, MFX_HYPERMODE_OFF, MFX_HYPERMODE_ADAPTIVE, VE, "dual_gfx" }, \
+{ "off",      "Disable HyperEncode mode",                                                              0, AV_OPT_TYPE_CONST, { .i64 = MFX_HYPERMODE_OFF       },   INT_MIN, INT_MAX, VE, "dual_gfx" },    \
+{ "on",       "Enable HyperEncode mode and return error if some issue on initialization",              0, AV_OPT_TYPE_CONST, { .i64 = MFX_HYPERMODE_ON        },   INT_MIN, INT_MAX, VE, "dual_gfx" },    \
+{ "adaptive", "Enable HyperEncode mode and switch to single fallback if some issue on initialization", 0, AV_OPT_TYPE_CONST, { .i64 = MFX_HYPERMODE_ADAPTIVE  },   INT_MIN, INT_MAX, VE, "dual_gfx" },
+#else
+#define QSV_HE_OPTIONS \
+{ "dual_gfx", "(not supported)", OFFSET(qsv.dual_gfx), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE, "dual_gfx" }, \
+{ "off",       NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, 0, 0, VE, "dual_gfx" },                                    \
+{ "on",        NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 }, 0, 0, VE, "dual_gfx" },                                    \
+{ "adaptive",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 2 }, 0, 0, VE, "dual_gfx" },
+#endif
 
 extern const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[];
 
@@ -137,7 +153,9 @@ typedef struct QSVEncContext {
 #if QSV_HAVE_EXT_VP9_PARAM
     mfxExtVP9Param  extvp9param;
 #endif
-
+#if QSV_HAVE_HE
+    mfxExtHyperModeParam hyperEncodeParam;
+#endif
 #if QSV_HAVE_OPAQUE
     mfxExtOpaqueSurfaceAlloc opaque_alloc;
     mfxFrameSurface1       **opaque_surfaces;
@@ -146,7 +164,7 @@ typedef struct QSVEncContext {
 
     mfxExtVideoSignalInfo extvsi;
 
-    mfxExtBuffer  *extparam_internal[3 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + (QSV_HAVE_MF * 2)];
+    mfxExtBuffer  *extparam_internal[3 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + (QSV_HAVE_MF * 2) + QSV_HAVE_HE];
     int         nb_extparam_internal;
 
     mfxExtBuffer **extparam;
@@ -208,6 +226,8 @@ typedef struct QSVEncContext {
     char *load_plugins;
     SetEncodeCtrlCB *set_encode_ctrl_cb;
     int forced_idr;
+
+    int dual_gfx;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);
