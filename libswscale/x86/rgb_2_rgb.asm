@@ -31,8 +31,10 @@ pb_shuffle0321: db 0, 3, 2, 1, 4, 7, 6, 5, 8, 11, 10, 9, 12, 15, 14, 13
 pb_shuffle1230: db 1, 2, 3, 0, 5, 6, 7, 4, 9, 10, 11, 8, 13, 14, 15, 12
 pb_shuffle3012: db 3, 0, 1, 2, 7, 4, 5, 6, 11, 8, 9, 10, 15, 12, 13, 14
 pb_shuffle3210: db 3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12
+pd_permd512_uv: dd 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15
 pb_shuffle_low: db 1, 3, 5, 7, 9, 11, 13, 15
 pd_permd256_uv: dd 0, 4, 1, 5, 2, 6, 3, 7
+pq_permq512_yy: dq 0, 2, 4, 6, 1, 3, 5, 7
 
 SECTION .text
 
@@ -194,7 +196,11 @@ SHUFFLE_BYTES 3, 2, 1, 0
 %macro UYVY_TO_YUV422 0
 cglobal uyvytoyuv422, 9, 14, 8, ydst, udst, vdst, src, w, h, lum_stride, chrom_stride, src_stride, wtwo, whalf, tmp, x, back_w
     pxor         m0, m0
+%if mmsize == 64
+    vpternlogd   m1, m1, m1, 0xff
+%else
     pcmpeqw      m1, m1
+%endif
     psrlw        m1, 8
 
     movsxdifnidn            wq, wd
@@ -213,7 +219,12 @@ cglobal uyvytoyuv422, 9, 14, 8, ydst, udst, vdst, src, w, h, lum_stride, chrom_s
 
 %if mmsize > 16
     vpbroadcastq    m13, [pb_shuffle_low]
+%if mmsize == 32
     movu            m15, [pd_permd256_uv]
+%else
+    movu            m14, [pq_permq512_yy]
+    movu            m15, [pd_permd512_uv]
+%endif
 %endif
 
 .loop_line:
@@ -271,6 +282,7 @@ cglobal uyvytoyuv422, 9, 14, 8, ydst, udst, vdst, src, w, h, lum_stride, chrom_s
         pshufb         m7, m3, m13
         punpcklqdq     m6, m6, m7
         VPERM   q, 32, m6, m6, 0xd8
+        VPERM   q, 64, m6, m14, m6
 %endif
         movu [ydstq + wq], m6
 
@@ -287,6 +299,7 @@ cglobal uyvytoyuv422, 9, 14, 8, ydst, udst, vdst, src, w, h, lum_stride, chrom_s
         pshufb         m7, m5, m13
         punpcklqdq     m6, m6, m7
         VPERM   q, 32, m6, m6, 0xd8
+        VPERM   q, 64, m6, m14, m6
 %endif
         movu [ydstq + wq + mmsize], m6
 
@@ -305,6 +318,7 @@ cglobal uyvytoyuv422, 9, 14, 8, ydst, udst, vdst, src, w, h, lum_stride, chrom_s
         packuswb     m6, m7 ; UUUU
 
         VPERM d, 32, m6, m15, m6
+        VPERM d, 64, m6, m15, m6
 
         movu   [udstq + whalfq], m6
 
@@ -314,6 +328,7 @@ cglobal uyvytoyuv422, 9, 14, 8, ydst, udst, vdst, src, w, h, lum_stride, chrom_s
         packuswb     m2, m4 ; VVVV
 
         VPERM d, 32, m2, m15, m2
+        VPERM d, 64, m2, m15, m2
 
         movu   [vdstq + whalfq], m2
 
@@ -348,6 +363,11 @@ UYVY_TO_YUV422
 
 %if HAVE_AVX2_EXTERNAL
 INIT_YMM avx2
+UYVY_TO_YUV422
+%endif
+
+%if HAVE_AVX512_EXTERNAL
+INIT_ZMM avx512
 UYVY_TO_YUV422
 %endif
 %endif
