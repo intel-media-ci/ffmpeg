@@ -164,6 +164,9 @@ void ff_uyvytoyuv422_sse2(uint8_t *ydst, uint8_t *udst, uint8_t *vdst,
 void ff_uyvytoyuv422_avx(uint8_t *ydst, uint8_t *udst, uint8_t *vdst,
                          const uint8_t *src, int width, int height,
                          int lumStride, int chromStride, int srcStride);
+void ff_uyvytoyuv422_avx2(uint8_t *ydst, uint8_t *udst, uint8_t *vdst,
+                          const uint8_t *src, int width, int height,
+                          int lumStride, int chromStride, int srcStride);
 #endif
 
 av_cold void rgb2rgb_init_x86(void)
@@ -215,6 +218,9 @@ av_cold void rgb2rgb_init_x86(void)
     }
     if (EXTERNAL_AVX(cpu_flags)) {
         uyvytoyuv422 = ff_uyvytoyuv422_avx;
+    }
+    if (EXTERNAL_AVX2_FAST(cpu_flags)) {
+        uyvytoyuv422 = ff_uyvytoyuv422_avx2;
     }
 #endif
 }
