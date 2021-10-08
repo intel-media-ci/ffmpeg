@@ -34,8 +34,10 @@ void ff_threshold##depth##_##opt(const uint8_t *in, const uint8_t *threshold,\
 
 THRESHOLD_FUNC(8, sse4)
 THRESHOLD_FUNC(8, avx2)
+THRESHOLD_FUNC(8, avx512)
 THRESHOLD_FUNC(16, sse4)
 THRESHOLD_FUNC(16, avx2)
+THRESHOLD_FUNC(16, avx512)
 
 av_cold void ff_threshold_init_x86(ThresholdContext *s)
 {
@@ -48,12 +50,18 @@ av_cold void ff_threshold_init_x86(ThresholdContext *s)
         if (EXTERNAL_AVX2_FAST(cpu_flags)) {
             s->threshold = ff_threshold8_avx2;
         }
+        if (EXTERNAL_AVX512(cpu_flags)) {
+            s->threshold = ff_threshold8_avx512;
+        }
     } else if (s->depth == 16) {
         if (EXTERNAL_SSE4(cpu_flags)) {
             s->threshold = ff_threshold16_sse4;
         }
         if (EXTERNAL_AVX2_FAST(cpu_flags)) {
             s->threshold = ff_threshold16_avx2;
+        }
+        if (EXTERNAL_AVX512(cpu_flags)) {
+            s->threshold = ff_threshold16_avx512;
         }
     }
 }
