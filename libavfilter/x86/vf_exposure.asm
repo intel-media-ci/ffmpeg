@@ -36,11 +36,21 @@ cglobal exposure, 2, 2, 4, ptr, length, black, scale
     VBROADCASTSS m1, xmm1
 %endif
 
+%if cpuflag(fma3)
+    mulps       m0, m0, m1 ; black * scale
+%endif
+
 .loop:
+%if cpuflag(fma3)
+    mova        m2, m0
+    vfmsub231ps m2, m1, [ptrq]
+    movu    [ptrq], m2
+%else
     movu        m2, [ptrq]
     subps       m2, m2, m0
     mulps       m2, m2, m1
     movu    [ptrq], m2
+%endif
     add       ptrq, mmsize
     sub    lengthq, mmsize/4
 
@@ -52,4 +62,9 @@ cglobal exposure, 2, 2, 4, ptr, length, black, scale
 %if ARCH_X86_64
 INIT_XMM sse
 EXPOSURE
+
+%if HAVE_AVX2_EXTERNAL
+INIT_YMM avx2
+EXPOSURE
+%endif
 %endif

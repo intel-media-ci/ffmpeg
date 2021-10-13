@@ -24,6 +24,7 @@
 #include "libavfilter/exposure.h"
 
 void ff_exposure_sse(float *ptr, int length, float black, float scale);
+void ff_exposure_avx2(float *ptr, int length, float black, float scale);
 
 av_cold void ff_exposure_init_x86(ExposureContext *s)
 {
@@ -32,5 +33,8 @@ av_cold void ff_exposure_init_x86(ExposureContext *s)
 #if ARCH_X86_64
     if (EXTERNAL_SSE(cpu_flags))
         s->exposure_func = ff_exposure_sse;
+
+    if (EXTERNAL_AVX2_FAST(cpu_flags))
+        s->exposure_func = ff_exposure_avx2;
 #endif
 }
