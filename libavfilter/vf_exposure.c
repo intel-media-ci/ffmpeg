@@ -26,23 +26,20 @@
 #include "formats.h"
 #include "internal.h"
 #include "video.h"
+#include "exposure.h"
 
-typedef struct ExposureContext {
-    const AVClass *class;
+static void exposure_c(float *ptr, int length, float black, float scale)
+{
+    int i;
 
-    float exposure;
-    float black;
-
-    float scale;
-    int (*do_slice)(AVFilterContext *s, void *arg,
-                    int jobnr, int nb_jobs);
-} ExposureContext;
+    for (i = 0; i < length; i++)
+            ptr[i] = (ptr[i] - black) * scale;
+}
 
 static int exposure_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     ExposureContext *s = ctx->priv;
     AVFrame *frame = arg;
-    const int width = frame->width;
     const int height = frame->height;
     const int slice_start = (height * jobnr) / nb_jobs;
     const int slice_end = (height * (jobnr + 1)) / nb_jobs;
@@ -52,15 +49,18 @@ static int exposure_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     for (int p = 0; p < 3; p++) {
         const int linesize = frame->linesize[p] / 4;
         float *ptr = (float *)frame->data[p] + slice_start * linesize;
-        for (int y = slice_start; y < slice_end; y++) {
-            for (int x = 0; x < width; x++)
-                ptr[x] = (ptr[x] - black) * scale;
-
-            ptr += linesize;
-        }
+        s->exposure_func(ptr, linesize * (slice_end - slice_start), black, scale);
     }
 
     return 0;
+}
+
+void ff_exposure_init(ExposureContext *s)
+{
+    s->exposure_func = exposure_c;
+
+    if (ARCH_X86)
+        ff_exposure_init_x86(s);
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
@@ -69,7 +69,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     ExposureContext *s = ctx->priv;
 
     s->scale = 1.f / (exp2f(-s->exposure) - s->black);
-    ff_filter_execute(ctx, s->do_slice, frame, NULL,
+    ff_filter_execute(ctx, exposure_slice, frame, NULL,
                       FFMIN(frame->height, ff_filter_get_nb_threads(ctx)));
 
     return ff_filter_frame(ctx->outputs[0], frame);
@@ -80,7 +80,7 @@ static av_cold int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     ExposureContext *s = ctx->priv;
 
-    s->do_slice = exposure_slice;
+    ff_exposure_init(s);
 
     return 0;
 }
