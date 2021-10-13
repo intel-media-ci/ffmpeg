@@ -34,6 +34,7 @@ FATE_CHECKASM = fate-checkasm-aacpsdsp                                  \
                 fate-checkasm-vf_blend                                  \
                 fate-checkasm-vf_colorspace                             \
                 fate-checkasm-vf_eq                                     \
+                fate-checkasm-vf_exposure                               \
                 fate-checkasm-vf_gblur                                  \
                 fate-checkasm-vf_hflip                                  \
                 fate-checkasm-vf_nlmeans                                \

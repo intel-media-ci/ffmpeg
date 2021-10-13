@@ -169,6 +169,9 @@ static const struct {
     #if CONFIG_EQ_FILTER
         { "vf_eq", checkasm_check_vf_eq },
     #endif
+    #if CONFIG_EXPOSURE_FILTER
+        { "vf_exposure", checkasm_check_vf_exposure },
+    #endif
     #if CONFIG_GBLUR_FILTER
         { "vf_gblur", checkasm_check_vf_gblur },
     #endif
