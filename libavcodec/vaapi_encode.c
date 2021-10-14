@@ -1158,7 +1158,8 @@ static int vaapi_encode_send_frame(AVCodecContext *avctx, AVFrame *frame)
         if (ctx->input_order == ctx->decode_delay)
             ctx->dts_pts_diff = pic->pts - ctx->first_pts;
         if (ctx->output_delay > 0)
-            ctx->ts_ring[ctx->input_order % (3 * ctx->output_delay)] = pic->pts;
+            ctx->ts_ring[ctx->input_order %
+                        (3 * ctx->output_delay + ctx->async_depth)] = pic->pts;
 
         pic->display_order = ctx->input_order;
         ++ctx->input_order;
@@ -1212,7 +1213,8 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
             return AVERROR(EAGAIN);
     }
 
-    while (av_fifo_size(ctx->encode_fifo) <= MAX_PICTURE_REFERENCES * sizeof(VAAPIEncodePicture *)) {
+    while (av_fifo_size(ctx->encode_fifo) <
+            MAX_ASYNC_DEPTH * sizeof(VAAPIEncodePicture *)) {
         pic = NULL;
         err = vaapi_encode_pick_next(avctx, &pic);
         if (err < 0)
@@ -1234,6 +1236,14 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
     if (!av_fifo_size(ctx->encode_fifo))
         return err;
 
+    if (av_fifo_size(ctx->encode_fifo) < ctx->async_depth * sizeof(VAAPIEncodePicture *) &&
+        !ctx->end_of_stream) {
+        av_fifo_generic_peek(ctx->encode_fifo, &pic, sizeof(pic), NULL);
+        err = vaapi_encode_wait(avctx, pic, 0);
+        if (err < 0)
+            return err;
+    }
+
     av_fifo_generic_read(ctx->encode_fifo, &pic, sizeof(pic), NULL);
     ctx->encode_order = pic->encode_order + 1;
 
@@ -1252,7 +1262,7 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
             pkt->dts = ctx->ts_ring[pic->encode_order] - ctx->dts_pts_diff;
     } else {
         pkt->dts = ctx->ts_ring[(pic->encode_order - ctx->decode_delay) %
-                                (3 * ctx->output_delay)];
+                                (3 * ctx->output_delay + ctx->async_depth)];
     }
     av_log(avctx, AV_LOG_DEBUG, "Output packet: pts %"PRId64" dts %"PRId64".\n",
            pkt->pts, pkt->dts);
@@ -2566,8 +2576,8 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
         }
     }
 
-    ctx->encode_fifo = av_fifo_alloc((MAX_PICTURE_REFERENCES + 1) *
-                                      sizeof(VAAPIEncodePicture *));
+    ctx->encode_fifo = av_fifo_alloc(MAX_ASYNC_DEPTH *
+                                     sizeof(VAAPIEncodePicture *));
     if (!ctx->encode_fifo)
         return AVERROR(ENOMEM);
 
