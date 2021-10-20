@@ -916,6 +916,16 @@ static int set_output_frame(AVCodecContext *avctx, AVFrame *frame,
         av_log2(s->operating_point_idc >> 8) > s->cur_frame.spatial_id)
         return 0;
 
+    /**
+     * Drop redundant frame data if there already exist one. Return 0 will
+     * make sure all frames can be decoded and maintainers a correct reference
+     * list.
+     */
+    if (*got_frame) {
+        av_log(avctx, AV_LOG_WARNING, "Redundant frame data dropped!\n");
+        return 0;
+    }
+
     ret = av_frame_ref(frame, srcframe);
     if (ret < 0)
         return ret;
