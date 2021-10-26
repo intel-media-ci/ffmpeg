@@ -156,15 +156,6 @@ static av_cold void qsvscale_uninit(AVFilterContext *ctx)
     s->nb_surface_ptrs_out = 0;
 }
 
-static int qsvscale_query_formats(AVFilterContext *ctx)
-{
-    static const enum AVPixelFormat pixel_formats[] = {
-        AV_PIX_FMT_QSV, AV_PIX_FMT_NONE,
-    };
-
-    return ff_set_common_formats_from_list(ctx, pixel_formats);
-}
-
 static int init_out_pool(AVFilterContext *ctx,
                          int out_width, int out_height)
 {
@@ -671,13 +662,14 @@ const AVFilter ff_vf_scale_qsv = {
 
     .init          = qsvscale_init,
     .uninit        = qsvscale_uninit,
-    .query_formats = qsvscale_query_formats,
 
     .priv_size = sizeof(QSVScaleContext),
     .priv_class = &qsvscale_class,
 
     FILTER_INPUTS(qsvscale_inputs),
     FILTER_OUTPUTS(qsvscale_outputs),
+
+    FILTER_SINGLE_PIXFMT(AV_PIX_FMT_QSV),
 
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };

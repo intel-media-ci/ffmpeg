@@ -787,6 +787,13 @@ static int prepare_input_packet(AVFormatContext *s, AVStream *st, AVPacket *pkt)
     if (sti->is_intra_only)
         pkt->flags |= AV_PKT_FLAG_KEY;
 
+    if (!pkt->data && !pkt->side_data_elems) {
+        /* Such empty packets signal EOS for the BSF API; so sanitize
+         * the packet by allocating data of size 0 (+ padding). */
+        av_buffer_unref(&pkt->buf);
+        return av_packet_make_refcounted(pkt);
+    }
+
     return 0;
 }
 
@@ -896,8 +903,8 @@ static int interleave_compare_dts(AVFormatContext *s, const AVPacket *next,
     return comp > 0;
 }
 
-int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
-                                 AVPacket *pkt, int flush)
+int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
+                                 int flush, int has_packet)
 {
     FFFormatContext *const si = ffformatcontext(s);
     int stream_count = 0;
@@ -905,7 +912,7 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
     int ret;
     int eof = flush;
 
-    if (pkt) {
+    if (has_packet) {
         if ((ret = ff_interleave_add_packet(s, pkt, interleave_compare_dts)) < 0)
             return ret;
     }
@@ -1002,7 +1009,7 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
         AVStream *const st = s->streams[pktl->pkt.stream_index];
         FFStream *const sti = ffstream(st);
 
-        *out = pktl->pkt;
+        *pkt = pktl->pkt;
 
         si->packet_buffer = pktl->next;
         if (!si->packet_buffer)
@@ -1048,20 +1055,16 @@ const AVPacket *ff_interleaved_peek(AVFormatContext *s, int stream)
 }
 
 /**
- * Interleave an AVPacket correctly so it can be muxed.
- * @param out the interleaved packet will be output here
- * @param in the input packet; will always be blank on return if not NULL
- * @param flush 1 if no further packets are available as input and all
- *              remaining packets should be output
- * @return 1 if a packet was output, 0 if no packet could be output,
- *         < 0 if an error occurred
+ * A wrapper around AVOutputFormat.interleave_packet.
+ * See its documentation for details.
  */
-static int interleave_packet(AVFormatContext *s, AVPacket *out, AVPacket *in, int flush)
+static int interleave_packet(AVFormatContext *s, AVPacket *pkt,
+                             int flush, int has_packet)
 {
     if (s->oformat->interleave_packet) {
-        return s->oformat->interleave_packet(s, out, in, flush);
+        return s->oformat->interleave_packet(s, pkt, flush, has_packet);
     } else
-        return ff_interleave_packet_per_dts(s, out, in, flush);
+        return ff_interleave_packet_per_dts(s, pkt, flush, has_packet);
 }
 
 static int check_bitstream(AVFormatContext *s, FFStream *sti, AVPacket *pkt)
@@ -1083,20 +1086,18 @@ static int check_bitstream(AVFormatContext *s, FFStream *sti, AVPacket *pkt)
     return 1;
 }
 
-static int interleaved_write_packet(AVFormatContext *s, AVPacket *pkt, int flush)
+static int interleaved_write_packet(AVFormatContext *s, AVPacket *pkt,
+                                    int flush, int has_packet)
 {
     for (;; ) {
-        AVPacket opkt;
-        int ret = interleave_packet(s, &opkt, pkt, flush);
+        int ret = interleave_packet(s, pkt, flush, has_packet);
         if (ret <= 0)
             return ret;
 
-        pkt = NULL;
+        has_packet = 0;
 
-        ret = write_packet(s, &opkt);
-
-        av_packet_unref(&opkt);
-
+        ret = write_packet(s, pkt);
+        av_packet_unref(pkt);
         if (ret < 0)
             return ret;
     }
@@ -1120,7 +1121,7 @@ static int write_packet_common(AVFormatContext *s, AVStream *st, AVPacket *pkt, 
     if (interleaved) {
         if (pkt->dts == AV_NOPTS_VALUE && !(s->oformat->flags & AVFMT_NOTIMESTAMPS))
             return AVERROR(EINVAL);
-        return interleaved_write_packet(s, pkt, 0);
+        return interleaved_write_packet(s, pkt, 0, 1);
     } else {
         return write_packet(s, pkt);
     }
@@ -1187,7 +1188,7 @@ static int write_packets_common(AVFormatContext *s, AVPacket *pkt, int interleav
 int av_write_frame(AVFormatContext *s, AVPacket *in)
 {
     FFFormatContext *const si = ffformatcontext(s);
-    AVPacket *pkt = si->pkt;
+    AVPacket *pkt = si->parse_pkt;
     int ret;
 
     if (!in) {
@@ -1209,8 +1210,6 @@ int av_write_frame(AVFormatContext *s, AVPacket *in)
          * The following avoids copying in's data unnecessarily.
          * Copying side data is unavoidable as a bitstream filter
          * may change it, e.g. free it on errors. */
-        av_packet_unref(pkt);
-        pkt->buf  = NULL;
         pkt->data = in->data;
         pkt->size = in->size;
         ret = av_packet_copy_props(pkt, in);
@@ -1244,27 +1243,28 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
         return ret;
     } else {
         av_log(s, AV_LOG_TRACE, "av_interleaved_write_frame FLUSH\n");
-        return interleaved_write_packet(s, NULL, 1/*flush*/);
+        return interleaved_write_packet(s, ffformatcontext(s)->parse_pkt, 1/*flush*/, 0);
     }
 }
 
 int av_write_trailer(AVFormatContext *s)
 {
     FFFormatContext *const si = ffformatcontext(s);
-    AVPacket *const pkt = si->pkt;
+    AVPacket *const pkt = si->parse_pkt;
     int ret1, ret = 0;
 
-    av_packet_unref(pkt);
     for (unsigned i = 0; i < s->nb_streams; i++) {
-        if (ffstream(s->streams[i])->bsfc) {
-            ret1 = write_packets_from_bsfs(s, s->streams[i], pkt, 1/*interleaved*/);
+        AVStream *const st  = s->streams[i];
+        FFStream *const sti = ffstream(st);
+        if (sti->bsfc) {
+            ret1 = write_packets_from_bsfs(s, st, pkt, 1/*interleaved*/);
             if (ret1 < 0)
                 av_packet_unref(pkt);
             if (ret >= 0)
                 ret = ret1;
         }
     }
-    ret1 = interleaved_write_packet(s, NULL, 1);
+    ret1 = interleaved_write_packet(s, pkt, 1, 0);
     if (ret >= 0)
         ret = ret1;
 
@@ -1291,6 +1291,7 @@ int av_write_trailer(AVFormatContext *s)
     if (s->oformat->priv_class)
         av_opt_free(s->priv_data);
     av_freep(&s->priv_data);
+    av_packet_unref(si->pkt);
     return ret;
 }
 
@@ -1343,7 +1344,7 @@ static int write_uncoded_frame_internal(AVFormatContext *s, int stream_index,
                                         AVFrame *frame, int interleaved)
 {
     FFFormatContext *const si = ffformatcontext(s);
-    AVPacket *pkt = si->pkt;
+    AVPacket *pkt = si->parse_pkt;
 
     av_assert0(s->oformat);
     if (!s->oformat->write_uncoded_frame) {
@@ -1359,7 +1360,6 @@ static int write_uncoded_frame_internal(AVFormatContext *s, int stream_index,
 
         if (!framep)
             goto fail;
-        av_packet_unref(pkt);
         pkt->buf = av_buffer_create((void *)framep, bufsize,
                                    uncoded_frame_free, NULL, 0);
         if (!pkt->buf) {

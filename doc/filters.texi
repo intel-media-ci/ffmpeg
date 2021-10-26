@@ -1325,7 +1325,32 @@ Set window size. Allowed range is from 16 to 131072.
 Default is @code{4096}
 
 @item win_func
-Set window function. Default is @code{hann}.
+Set window function.
+
+It accepts the following values:
+@table @samp
+@item rect
+@item bartlett
+@item hann, hanning
+@item hamming
+@item blackman
+@item welch
+@item flattop
+@item bharris
+@item bnuttall
+@item bhann
+@item sine
+@item nuttall
+@item lanczos
+@item gauss
+@item tukey
+@item dolph
+@item cauchy
+@item parzen
+@item poisson
+@item bohman
+@end table
+Default is @code{hann}.
 
 @item overlap
 Set window overlap. If set to 1, the recommended overlap for selected
@@ -2531,6 +2556,13 @@ noise removed from input signal.
 
 This filter supports the all above options as @ref{commands}.
 
+@section asdr
+Measure Audio Signal-to-Distortion Ratio.
+
+This filter takes two audio streams for input, and outputs first
+audio stream.
+Results are in dB per channel at end of either input.
+
 @section asetnsamples
 
 Set the number of samples per each output audio frame.
@@ -3129,7 +3161,7 @@ ffmpeg -i INPUT -af atrim=end_sample=1000
 @end itemize
 
 @section axcorrelate
-Calculate normalized cross-correlation between two input audio streams.
+Calculate normalized windowed cross-correlation between two input audio streams.
 
 Resulted samples are always between -1 and 1 inclusive.
 If result is 1 it means two input samples are highly correlated in that selected segment.
@@ -7531,22 +7563,27 @@ of @var{all_mode}. Default value is @code{normal}.
 Available values for component modes are:
 @table @samp
 @item addition
-@item grainmerge
 @item and
 @item average
+@item bleach
 @item burn
 @item darken
 @item difference
-@item grainextract
 @item divide
 @item dodge
-@item freeze
 @item exclusion
 @item extremity
+@item freeze
+@item geometric
 @item glow
+@item grainextract
+@item grainmerge
 @item hardlight
 @item hardmix
+@item hardoverlay
+@item harmonic
 @item heat
+@item interpolate
 @item lighten
 @item linearlight
 @item multiply
@@ -7559,7 +7596,9 @@ Available values for component modes are:
 @item pinlight
 @item reflect
 @item screen
+@item softdifference
 @item softlight
+@item stain
 @item subtract
 @item vividlight
 @item xor
@@ -8152,6 +8191,9 @@ means. For example, some MPEG based codecs export motion vectors through the
 The filter accepts the following option:
 
 @table @option
+@item block
+Display block partition structure using the luma plane.
+
 @item mv
 Set motion vectors to visualize.
 
@@ -8379,8 +8421,27 @@ Default is @code{1} for @var{aa}, and @code{0} for @var{ar}, @var{ag} and @var{a
 
 Allowed ranges for options are @code{[-2.0, 2.0]}.
 
-@item pl
-Preserve lightness when changing colors. Allowed range is from @code{[0.0, 1.0]}.
+@item pc
+Set preserve color mode. The accepted values are:
+@table @samp
+@item none
+Disable color preserving, this is default.
+@item lum
+Preserve luminance.
+@item max
+Preserve max value of RGB triplet.
+@item avg
+Preserve average value of RGB triplet.
+@item sum
+Preserve sum value of RGB triplet.
+@item nrm
+Preserve normalized value of RGB triplet.
+@item pwr
+Preserve power value of RGB triplet.
+@end table
+
+@item pa
+Set the preserve color amount when changing colors. Allowed range is from @code{[0.0, 1.0]}.
 Default is @code{0.0}, thus disabled.
 @end table
 
@@ -8540,6 +8601,25 @@ Adjust red, green, blue and alpha output white point.
 Allowed ranges for options are @code{[0, 1.0]}. Defaults are @code{1}.
 
 Output levels allows manual selection of a constrained output level range.
+
+@item preserve
+Set preserve color mode. The accepted values are:
+@table @samp
+@item none
+Disable color preserving, this is default.
+@item lum
+Preserve luminance.
+@item max
+Preserve max value of RGB triplet.
+@item avg
+Preserve average value of RGB triplet.
+@item sum
+Preserve sum value of RGB triplet.
+@item nrm
+Preserve normalized value of RGB triplet.
+@item pwr
+Preserve power value of RGB triplet.
+@end table
 @end table
 
 @subsection Examples
@@ -10218,6 +10298,7 @@ A number representing position of the first frame with respect to the telecine
 pattern. This is to be used if the stream is cut. The default value is @code{0}.
 @end table
 
+@anchor{dilation}
 @section dilation
 
 Apply dilation effect to the video.
@@ -11396,6 +11477,10 @@ will try to use a good random seed on a best effort basis.
 @item pal8
 Set pal8 output pixel format. This option does not work with codebook
 length greater than 256. Default is disabled.
+
+@item use_alpha
+Include alpha values in the quantization calculation. Allows creating
+palettized output images (e.g. PNG8) with multiple alpha smooth blending.
 @end table
 
 @section entropy
@@ -11534,6 +11619,7 @@ value.
 
 @end table
 
+@anchor{erosion}
 @section erosion
 
 Apply erosion effect to the video.
@@ -11877,6 +11963,10 @@ The width and height of the image.
 
 @item N
 The number of input frame, starting from 0.
+
+@item WS
+@item HS
+The size of FFT array for horizontal and vertical processing.
 @end table
 
 @subsection Examples
@@ -13413,6 +13503,20 @@ Set foreground opacity. Default is @code{0.7}.
 
 @item bgopacity
 Set background opacity. Default is @code{0.5}.
+
+@item colors_mode
+Set colors mode.
+It accepts the following values:
+@table @samp
+@item whiteonblack
+@item blackonwhite
+@item whiteongray
+@item blackongray
+@item coloronblack
+@item coloronwhite
+@item colorongray
+@end table
+Default is @code{whiteonblack}.
 @end table
 
 @subsection Examples
@@ -14402,6 +14506,37 @@ ffmpeg -i main.mpg -i ref.mkv -lavfi "[0:v]settb=AVTB,setpts=PTS-STARTPTS[main];
 @end example
 @end itemize
 
+@section limitdiff
+Apply limited difference filter using second and optionally third video stream.
+
+The filter accepts the following options:
+
+@table @option
+@item threshold
+Set the threshold to use when allowing certain differences between video streams.
+Any absolute difference value lower or exact than this threshold will pick pixel components from
+first video stream.
+
+@item elasticity
+Set the elasticity of soft thresholding when processing video streams.
+This value multiplied with first one sets second threshold.
+Any absolute difference value greater or exact than second threshold will pick pixel components
+from second video stream. For values between those two threshold
+linear interpolation between first and second video stream will be used.
+
+@item reference
+Enable the reference (third) video stream processing. By default is disabled.
+If set, this video stream will be used for calculating absolute difference with first video
+stream.
+
+@item planes
+Specify which planes will be processed. Defaults to all available.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands} except option @samp{reference}.
+
 @section limiter
 
 Limits the pixel components values to the specified range [min, max].
@@ -15308,6 +15443,46 @@ Default value is 0.
 @subsection Commands
 
 This filter supports the all above options as @ref{commands}.
+
+@section morpho
+
+This filter allows to apply main morphological grayscale transforms,
+erode and dilate with arbitrary structures set in second input stream.
+
+Unlike naive implementation and much slower performance in @ref{erosion}
+and @ref{dilation} filters, when speed is critical @code{morpho} filter
+should be used instead.
+
+A description of accepted options follows,
+
+@table @option
+@item mode
+Set morphological transform to apply, can be:
+
+@table @samp
+@item erode
+@item dilate
+@item open
+@item close
+@item gradient
+@item tophat
+@item blackhat
+@end table
+Default is @code{erode}.
+
+@item planes
+Set planes to filter, by default all planes except alpha are filtered.
+
+@item structure
+Set which structure video frames will be processed from second input stream,
+can be @var{first} or @var{all}. Default is @var{all}.
+@end table
+
+The @code{morpho} filter also supports the @ref{framesync} options.
+
+@subsection Commands
+
+This filter supports same @ref{commands} as options.
 
 @section mpdecimate
 
@@ -16454,6 +16629,9 @@ Compute new histogram for each frame.
 @end table
 
 Default value is @var{full}.
+@item use_alpha
+Create a palette of colors with alpha components.
+Setting this, will automatically disable 'reserve_transparent'.
 @end table
 
 The filter also exports the frame metadata @code{lavfi.color_quant_ratio}
@@ -16532,6 +16710,11 @@ will be treated as completely opaque, and values below this threshold will be
 treated as completely transparent.
 
 The option must be an integer value in the range [0,255]. Default is @var{128}.
+
+@item use_alpha
+Apply the palette by taking alpha values into account. Only useful with
+palettes that are containing multiple colors with alpha components.
+Setting this will automatically disable 'alpha_treshold'.
 @end table
 
 @subsection Examples
@@ -18803,6 +18986,23 @@ Keep the same colorspace property (default).
 @item chroma-derived-nc
 @item chroma-derived-c
 @item ictcp
+@end table
+@end table
+
+@section sharpen_npp
+Use the NVIDIA Performance Primitives (libnpp) to perform image sharpening with
+border control.
+
+The following additional options are accepted:
+@table @option
+
+@item border_type
+Type of sampling to be used ad frame borders. One of the following:
+@table @option
+
+@item replicate
+Replicate pixel values.
+
 @end table
 @end table
 
@@ -21412,6 +21612,9 @@ Set if output video needs to be transposed. Boolean value, by default disabled.
 
 @item alpha_mask
 Build mask in alpha plane for all unmapped pixels by marking them fully transparent. Boolean value, by default disabled.
+
+@item reset_rot
+Reset rotation of output video. Boolean value, by default disabled.
 @end table
 
 @subsection Examples
@@ -21500,6 +21703,27 @@ Threshold used depends also on each decomposition coefficients.
 
 Default is universal.
 @end table
+
+@section varblur
+Apply variable blur filter by using 2nd video stream to set blur radius.
+The 2nd stream must have the same dimensions.
+
+This filter accepts the following options:
+
+@table @option
+@item min_r
+Set min allowed radius. Allowed range is from 0 to 254. Default is 0.
+@item max_r
+Set max allowed radius. Allowed range is from 1 to 255. Default is 8.
+@item planes
+Set which planes to process. By default, all are used.
+@end table
+
+The @code{varblur} filter also supports the @ref{framesync} options.
+
+@subsection Commands
+
+This filter supports all the above options as @ref{commands}.
 
 @section vectorscope
 
@@ -22380,6 +22604,24 @@ Set the scaling dimension: @code{2} for @code{2xBR}, @code{3} for
 @code{3xBR} and @code{4} for @code{4xBR}.
 Default is @code{3}.
 @end table
+
+@section xcorrelate
+Apply normalized cross-correlation between first and second input video stream.
+
+Second input video stream dimensions must be lower than first input video stream.
+
+The filter accepts the following options:
+
+@table @option
+@item planes
+Set which planes to process.
+
+@item secondary
+Set which secondary video frames will be processed from second input video stream,
+can be @var{first} or @var{all}. Default is @var{all}.
+@end table
+
+The @code{xcorrelate} filter also supports the @ref{framesync} options.
 
 @section xfade
 
@@ -25710,6 +25952,15 @@ select='if(gt(random(0), 0.2), 1, 2)':n=2 [tmp], boxblur=2:2, [tmp] interleave
 @end example
 @end itemize
 
+@section latency, alatency
+Measure filtering latency.
+
+Report previous filter filtering latency, delay in number of audio samples for audio filters
+or number of video frames for video filters.
+
+On end of input stream, filter will report min and max measured latency for previous running filter
+in filtergraph.
+
 @section metadata, ametadata
 
 Manipulate frame metadata.
@@ -25970,27 +26221,27 @@ The sequential number of the last selected frame. It's NAN if undefined.
 The timebase of the input timestamps.
 
 @item pts
-The PTS (Presentation TimeStamp) of the filtered video frame,
+The PTS (Presentation TimeStamp) of the filtered frame,
 expressed in @var{TB} units. It's NAN if undefined.
 
 @item t
-The PTS of the filtered video frame,
+The PTS of the filtered frame,
 expressed in seconds. It's NAN if undefined.
 
 @item prev_pts
-The PTS of the previously filtered video frame. It's NAN if undefined.
+The PTS of the previously filtered frame. It's NAN if undefined.
 
 @item prev_selected_pts
-The PTS of the last previously filtered video frame. It's NAN if undefined.
+The PTS of the last previously filtered frame. It's NAN if undefined.
 
 @item prev_selected_t
-The PTS of the last previously selected video frame, expressed in seconds. It's NAN if undefined.
+The PTS of the last previously selected frame, expressed in seconds. It's NAN if undefined.
 
 @item start_pts
-The PTS of the first video frame in the video. It's NAN if undefined.
+The first PTS in the stream which is not NAN. It remains NAN if not found.
 
 @item start_t
-The time of the first video frame in the video. It's NAN if undefined.
+The first PTS, in seconds, in the stream which is not NAN. It remains NAN if not found.
 
 @item pict_type @emph{(video only)}
 The type of the filtered frame. It can assume one of the following

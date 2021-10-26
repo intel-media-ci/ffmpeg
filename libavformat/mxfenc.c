@@ -965,7 +965,6 @@ static void mxf_write_structural_component(AVFormatContext *s, AVStream *st, MXF
 {
     MXFContext *mxf = s->priv_data;
     AVIOContext *pb = s->pb;
-    int i;
 
     mxf_write_metadata_key(pb, 0x011100);
     PRINT_KEY(s, "sturctural component key", pb->buf_ptr - 16);
@@ -985,8 +984,7 @@ static void mxf_write_structural_component(AVFormatContext *s, AVStream *st, MXF
     // write source package uid, end of the reference
     mxf_write_local_tag(s, 32, 0x1101);
     if (!package->ref) {
-        for (i = 0; i < 4; i++)
-            avio_wb64(pb, 0);
+        ffio_fill(pb, 0, 32);
     } else
         mxf_write_umid(s, package->ref->instance);
 
@@ -3098,7 +3096,7 @@ static void mxf_deinit(AVFormatContext *s)
     }
 }
 
-static int mxf_interleave_get_packet(AVFormatContext *s, AVPacket *out, AVPacket *pkt, int flush)
+static int mxf_interleave_get_packet(AVFormatContext *s, AVPacket *out, int flush)
 {
     FFFormatContext *const si = ffformatcontext(s);
     int i, stream_count = 0;
@@ -3163,16 +3161,17 @@ static int mxf_compare_timestamps(AVFormatContext *s, const AVPacket *next,
         (next->dts == pkt->dts && sc->order < sc2->order);
 }
 
-static int mxf_interleave(AVFormatContext *s, AVPacket *out, AVPacket *pkt, int flush)
+static int mxf_interleave(AVFormatContext *s, AVPacket *pkt,
+                          int flush, int has_packet)
 {
     int ret;
-    if (pkt) {
+    if (has_packet) {
         MXFStreamContext *sc = s->streams[pkt->stream_index]->priv_data;
         pkt->pts = pkt->dts = sc->pkt_cnt++;
         if ((ret = ff_interleave_add_packet(s, pkt, mxf_compare_timestamps)) < 0)
             return ret;
     }
-    return mxf_interleave_get_packet(s, out, NULL, flush);
+    return mxf_interleave_get_packet(s, pkt, flush);
 }
 
 #define MXF_COMMON_OPTIONS \

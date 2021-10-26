@@ -888,6 +888,10 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
             exit_program(1);
         }
 
+        ist->pkt = av_packet_alloc();
+        if (!ist->pkt)
+            exit_program(1);
+
         if (o->bitexact)
             ist->dec_ctx->flags |= AV_CODEC_FLAG_BITEXACT;
 
@@ -1515,6 +1519,10 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
         av_log(NULL, AV_LOG_ERROR, "Error allocating the encoding parameters.\n");
         exit_program(1);
     }
+
+    ost->pkt = av_packet_alloc();
+    if (!ost->pkt)
+        exit_program(1);
 
     if (ost->enc) {
         AVIOContext *s = NULL;
@@ -2205,7 +2213,6 @@ static int open_output_file(OptionsContext *o, const char *filename)
     InputStream  *ist;
     AVDictionary *unused_opts = NULL;
     AVDictionaryEntry *e = NULL;
-    int format_flags = 0;
 
     if (o->stop_time != INT64_MAX && o->recording_time != INT64_MAX) {
         o->stop_time = INT64_MAX;
@@ -2250,13 +2257,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
 
     oc->interrupt_callback = int_cb;
 
-    e = av_dict_get(o->g->format_opts, "fflags", NULL, 0);
-    if (e) {
-        const AVOption *o = av_opt_find(oc, "fflags", NULL, 0, 0);
-        av_opt_eval_flags(oc, o, e->value, &format_flags);
-    }
     if (o->bitexact) {
-        format_flags |= AVFMT_FLAG_BITEXACT;
         oc->flags    |= AVFMT_FLAG_BITEXACT;
     }
 

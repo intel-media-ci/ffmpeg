@@ -270,6 +270,7 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
             h_align = 4;
         }
         if (s->codec_id == AV_CODEC_ID_JV ||
+            s->codec_id == AV_CODEC_ID_ARGO ||
             s->codec_id == AV_CODEC_ID_INTERPLAY_VIDEO) {
             w_align = 8;
             h_align = 8;
@@ -296,6 +297,12 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
         if (s->codec_id == AV_CODEC_ID_CINEPAK) {
             w_align = 4;
             h_align = 4;
+        }
+        break;
+    case AV_PIX_FMT_BGR0:
+        if (s->codec_id == AV_CODEC_ID_ARGO) {
+            w_align = 8;
+            h_align = 8;
         }
         break;
     default:

@@ -871,7 +871,6 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int u
         main_return_code = 1;
         close_all_output_streams(ost, MUXER_FINISHED | ENCODER_FINISHED, ENCODER_FINISHED);
     }
-    av_packet_unref(pkt);
 }
 
 static void close_output_stream(OutputStream *ost)
@@ -1034,7 +1033,6 @@ static void do_audio_out(OutputFile *of, OutputStream *ost,
         goto error;
 
     while (1) {
-        av_packet_unref(pkt);
         ret = avcodec_receive_packet(enc, pkt);
         if (ret == AVERROR(EAGAIN))
             break;
@@ -1379,7 +1377,6 @@ static void do_video_out(OutputFile *of,
         av_frame_remove_side_data(in_picture, AV_FRAME_DATA_A53_CC);
 
         while (1) {
-            av_packet_unref(pkt);
             ret = avcodec_receive_packet(enc, pkt);
             update_benchmark("encode_video %d.%d", ost->file_index, ost->index);
             if (ret == AVERROR(EAGAIN))
@@ -1536,9 +1533,6 @@ static int reap_filters(int flush)
         if (av_buffersink_get_type(filter) == AVMEDIA_TYPE_AUDIO)
             init_output_stream_wrapper(ost, NULL, 1);
 
-        if (!ost->pkt && !(ost->pkt = av_packet_alloc())) {
-            return AVERROR(ENOMEM);
-        }
         if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
             return AVERROR(ENOMEM);
         }
@@ -1995,7 +1989,6 @@ static void flush_encoders(void)
 
             update_benchmark(NULL);
 
-            av_packet_unref(pkt);
             while ((ret = avcodec_receive_packet(enc, pkt)) == AVERROR(EAGAIN)) {
                 ret = avcodec_send_frame(enc, NULL);
                 if (ret < 0) {
@@ -2598,8 +2591,6 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output,
     for (i = 0; i < nb_output_streams; i++) {
         OutputStream *ost = output_streams[i];
 
-        if (!ost->pkt && !(ost->pkt = av_packet_alloc()))
-            exit_program(1);
         if (!check_output_constraints(ist, ost) || !ost->encoding_needed
             || ost->enc->type != AVMEDIA_TYPE_SUBTITLE)
             continue;
@@ -2635,11 +2626,7 @@ static int process_input_packet(InputStream *ist, const AVPacket *pkt, int no_eo
     int repeating = 0;
     int eof_reached = 0;
 
-    AVPacket *avpkt;
-
-    if (!ist->pkt && !(ist->pkt = av_packet_alloc()))
-        return AVERROR(ENOMEM);
-    avpkt = ist->pkt;
+    AVPacket *avpkt = ist->pkt;
 
     if (!ist->saw_first_ts) {
         ist->first_dts =
@@ -2810,8 +2797,6 @@ static int process_input_packet(InputStream *ist, const AVPacket *pkt, int no_eo
     for (i = 0; i < nb_output_streams; i++) {
         OutputStream *ost = output_streams[i];
 
-        if (!ost->pkt && !(ost->pkt = av_packet_alloc()))
-            exit_program(1);
         if (!check_output_constraints(ist, ost) || ost->encoding_needed)
             continue;
 

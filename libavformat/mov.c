@@ -28,6 +28,7 @@
 #include <stdint.h>
 
 #include "libavutil/attributes.h"
+#include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
@@ -2443,6 +2444,8 @@ static int mov_finalize_stsd_codec(MOVContext *c, AVIOContext *pb,
         sti->need_parsing = AVSTREAM_PARSE_FULL;
         break;
     case AV_CODEC_ID_AV1:
+        /* field_order detection of H264 requires parsing */
+    case AV_CODEC_ID_H264:
         sti->need_parsing = AVSTREAM_PARSE_HEADERS;
         break;
     default:
@@ -5120,7 +5123,7 @@ static int mov_read_sidx(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     // See if the remaining bytes are just an mfra which we can ignore.
     is_complete = offset == stream_size;
-    if (!is_complete && (pb->seekable & AVIO_SEEKABLE_NORMAL)) {
+    if (!is_complete && (pb->seekable & AVIO_SEEKABLE_NORMAL) && stream_size > 0 ) {
         int64_t ret;
         int64_t original_pos = avio_tell(pb);
         if (!c->have_read_mfra_size) {
@@ -5131,7 +5134,7 @@ static int mov_read_sidx(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             if ((ret = avio_seek(pb, original_pos, SEEK_SET)) < 0)
                 return ret;
         }
-        if (offset + c->mfra_size == stream_size)
+        if (offset == stream_size - c->mfra_size)
             is_complete = 1;
     }
 
@@ -6595,14 +6598,13 @@ static int mov_read_dfla(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
-static int cenc_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *sample, uint8_t *input, int size)
+static int cenc_scheme_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *sample, uint8_t *input, int size)
 {
     int i, ret;
-
-    if (sample->scheme != MKBETAG('c','e','n','c') || sample->crypt_byte_block != 0 || sample->skip_byte_block != 0) {
-        av_log(c->fc, AV_LOG_ERROR, "Only the 'cenc' encryption scheme is supported\n");
-        return AVERROR_PATCHWELCOME;
-    }
+    int bytes_of_protected_data;
+    int partially_encrypted_block_size;
+    uint8_t *partially_encrypted_block;
+    uint8_t block[16];
 
     if (!sc->cenc.aes_ctr) {
         /* initialize the cipher */
@@ -6625,6 +6627,8 @@ static int cenc_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *s
         return 0;
     }
 
+    partially_encrypted_block_size = 0;
+
     for (i = 0; i < sample->subsample_count; i++) {
         if (sample->subsamples[i].bytes_of_clear_data + sample->subsamples[i].bytes_of_protected_data > size) {
             av_log(c->fc, AV_LOG_ERROR, "subsample size exceeds the packet size left\n");
@@ -6636,7 +6640,90 @@ static int cenc_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *s
         size -= sample->subsamples[i].bytes_of_clear_data;
 
         /* decrypt the encrypted bytes */
-        av_aes_ctr_crypt(sc->cenc.aes_ctr, input, input, sample->subsamples[i].bytes_of_protected_data);
+
+        if (partially_encrypted_block_size) {
+            memcpy(block, partially_encrypted_block, partially_encrypted_block_size);
+            memcpy(block+partially_encrypted_block_size, input, 16-partially_encrypted_block_size);
+            av_aes_ctr_crypt(sc->cenc.aes_ctr, block, block, 16);
+            memcpy(partially_encrypted_block, block, partially_encrypted_block_size);
+            memcpy(input, block+partially_encrypted_block_size, 16-partially_encrypted_block_size);
+            input += 16-partially_encrypted_block_size;
+            size -= 16-partially_encrypted_block_size;
+            bytes_of_protected_data = sample->subsamples[i].bytes_of_protected_data - (16-partially_encrypted_block_size);
+        } else {
+            bytes_of_protected_data = sample->subsamples[i].bytes_of_protected_data;
+        }
+
+        if (i < sample->subsample_count-1) {
+            int num_of_encrypted_blocks = bytes_of_protected_data/16;
+            partially_encrypted_block_size = bytes_of_protected_data%16;
+            if (partially_encrypted_block_size)
+                partially_encrypted_block = input + 16*num_of_encrypted_blocks;
+            av_aes_ctr_crypt(sc->cenc.aes_ctr, input, input, 16*num_of_encrypted_blocks);
+        } else {
+            av_aes_ctr_crypt(sc->cenc.aes_ctr, input, input, bytes_of_protected_data);
+        }
+
+        input += bytes_of_protected_data;
+        size -= bytes_of_protected_data;
+    }
+
+    if (size > 0) {
+        av_log(c->fc, AV_LOG_ERROR, "leftover packet bytes after subsample processing\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    return 0;
+}
+
+static int cbc1_scheme_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *sample, uint8_t *input, int size)
+{
+    int i, ret;
+    int num_of_encrypted_blocks;
+    uint8_t iv[16];
+
+    if (!sc->cenc.aes_ctx) {
+        /* initialize the cipher */
+        sc->cenc.aes_ctx = av_aes_alloc();
+        if (!sc->cenc.aes_ctx) {
+            return AVERROR(ENOMEM);
+        }
+
+        ret = av_aes_init(sc->cenc.aes_ctx, c->decryption_key, 16 * 8, 1);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+
+    memcpy(iv, sample->iv, 16);
+
+    /* whole-block full sample encryption */
+    if (!sample->subsample_count) {
+        /* decrypt the whole packet */
+        av_aes_crypt(sc->cenc.aes_ctx, input, input, size/16, iv, 1);
+        return 0;
+    }
+
+    for (i = 0; i < sample->subsample_count; i++) {
+        if (sample->subsamples[i].bytes_of_clear_data + sample->subsamples[i].bytes_of_protected_data > size) {
+            av_log(c->fc, AV_LOG_ERROR, "subsample size exceeds the packet size left\n");
+            return AVERROR_INVALIDDATA;
+        }
+
+        if (sample->subsamples[i].bytes_of_protected_data % 16) {
+            av_log(c->fc, AV_LOG_ERROR, "subsample BytesOfProtectedData is not a multiple of 16\n");
+            return AVERROR_INVALIDDATA;
+        }
+
+        /* skip the clear bytes */
+        input += sample->subsamples[i].bytes_of_clear_data;
+        size -= sample->subsamples[i].bytes_of_clear_data;
+
+        /* decrypt the encrypted bytes */
+        num_of_encrypted_blocks = sample->subsamples[i].bytes_of_protected_data/16;
+        if (num_of_encrypted_blocks > 0) {
+            av_aes_crypt(sc->cenc.aes_ctx, input, input, num_of_encrypted_blocks, iv, 1);
+        }
         input += sample->subsamples[i].bytes_of_protected_data;
         size -= sample->subsamples[i].bytes_of_protected_data;
     }
@@ -6647,6 +6734,153 @@ static int cenc_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *s
     }
 
     return 0;
+}
+
+static int cens_scheme_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *sample, uint8_t *input, int size)
+{
+    int i, ret, rem_bytes;
+    uint8_t *data;
+
+    if (!sc->cenc.aes_ctr) {
+        /* initialize the cipher */
+        sc->cenc.aes_ctr = av_aes_ctr_alloc();
+        if (!sc->cenc.aes_ctr) {
+            return AVERROR(ENOMEM);
+        }
+
+        ret = av_aes_ctr_init(sc->cenc.aes_ctr, c->decryption_key);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+
+    av_aes_ctr_set_full_iv(sc->cenc.aes_ctr, sample->iv);
+
+    /* whole-block full sample encryption */
+    if (!sample->subsample_count) {
+        /* decrypt the whole packet */
+        av_aes_ctr_crypt(sc->cenc.aes_ctr, input, input, size);
+        return 0;
+    } else if (!sample->crypt_byte_block && !sample->skip_byte_block) {
+        av_log(c->fc, AV_LOG_ERROR, "pattern encryption is not present in 'cens' scheme\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    for (i = 0; i < sample->subsample_count; i++) {
+        if (sample->subsamples[i].bytes_of_clear_data + sample->subsamples[i].bytes_of_protected_data > size) {
+            av_log(c->fc, AV_LOG_ERROR, "subsample size exceeds the packet size left\n");
+            return AVERROR_INVALIDDATA;
+        }
+
+        /* skip the clear bytes */
+        input += sample->subsamples[i].bytes_of_clear_data;
+        size -= sample->subsamples[i].bytes_of_clear_data;
+
+        /* decrypt the encrypted bytes */
+        data = input;
+        rem_bytes = sample->subsamples[i].bytes_of_protected_data;
+        while (rem_bytes > 0) {
+            if (rem_bytes < 16*sample->crypt_byte_block) {
+                break;
+            }
+            av_aes_ctr_crypt(sc->cenc.aes_ctr, data, data, 16*sample->crypt_byte_block);
+            data += 16*sample->crypt_byte_block;
+            rem_bytes -= 16*sample->crypt_byte_block;
+            data += FFMIN(16*sample->skip_byte_block, rem_bytes);
+            rem_bytes -= FFMIN(16*sample->skip_byte_block, rem_bytes);
+        }
+        input += sample->subsamples[i].bytes_of_protected_data;
+        size -= sample->subsamples[i].bytes_of_protected_data;
+    }
+
+    if (size > 0) {
+        av_log(c->fc, AV_LOG_ERROR, "leftover packet bytes after subsample processing\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    return 0;
+}
+
+static int cbcs_scheme_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *sample, uint8_t *input, int size)
+{
+    int i, ret, rem_bytes;
+    uint8_t iv[16];
+    uint8_t *data;
+
+    if (!sc->cenc.aes_ctx) {
+        /* initialize the cipher */
+        sc->cenc.aes_ctx = av_aes_alloc();
+        if (!sc->cenc.aes_ctx) {
+            return AVERROR(ENOMEM);
+        }
+
+        ret = av_aes_init(sc->cenc.aes_ctx, c->decryption_key, 16 * 8, 1);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+
+    /* whole-block full sample encryption */
+    if (!sample->subsample_count) {
+        /* decrypt the whole packet */
+        memcpy(iv, sample->iv, 16);
+        av_aes_crypt(sc->cenc.aes_ctx, input, input, size/16, iv, 1);
+        return 0;
+    } else if (!sample->crypt_byte_block && !sample->skip_byte_block) {
+        av_log(c->fc, AV_LOG_ERROR, "pattern encryption is not present in 'cbcs' scheme\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    for (i = 0; i < sample->subsample_count; i++) {
+        if (sample->subsamples[i].bytes_of_clear_data + sample->subsamples[i].bytes_of_protected_data > size) {
+            av_log(c->fc, AV_LOG_ERROR, "subsample size exceeds the packet size left\n");
+            return AVERROR_INVALIDDATA;
+        }
+
+        /* skip the clear bytes */
+        input += sample->subsamples[i].bytes_of_clear_data;
+        size -= sample->subsamples[i].bytes_of_clear_data;
+
+        /* decrypt the encrypted bytes */
+        memcpy(iv, sample->iv, 16);
+        data = input;
+        rem_bytes = sample->subsamples[i].bytes_of_protected_data;
+        while (rem_bytes > 0) {
+            if (rem_bytes < 16*sample->crypt_byte_block) {
+                break;
+            }
+            av_aes_crypt(sc->cenc.aes_ctx, data, data, sample->crypt_byte_block, iv, 1);
+            data += 16*sample->crypt_byte_block;
+            rem_bytes -= 16*sample->crypt_byte_block;
+            data += FFMIN(16*sample->skip_byte_block, rem_bytes);
+            rem_bytes -= FFMIN(16*sample->skip_byte_block, rem_bytes);
+        }
+        input += sample->subsamples[i].bytes_of_protected_data;
+        size -= sample->subsamples[i].bytes_of_protected_data;
+    }
+
+    if (size > 0) {
+        av_log(c->fc, AV_LOG_ERROR, "leftover packet bytes after subsample processing\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    return 0;
+}
+
+static int cenc_decrypt(MOVContext *c, MOVStreamContext *sc, AVEncryptionInfo *sample, uint8_t *input, int size)
+{
+    if (sample->scheme == MKBETAG('c','e','n','c') && !sample->crypt_byte_block && !sample->skip_byte_block) {
+        return cenc_scheme_decrypt(c, sc, sample, input, size);
+    } else if (sample->scheme == MKBETAG('c','b','c','1') && !sample->crypt_byte_block && !sample->skip_byte_block) {
+        return cbc1_scheme_decrypt(c, sc, sample, input, size);
+    } else if (sample->scheme == MKBETAG('c','e','n','s')) {
+        return cens_scheme_decrypt(c, sc, sample, input, size);
+    } else if (sample->scheme == MKBETAG('c','b','c','s')) {
+        return cbcs_scheme_decrypt(c, sc, sample, input, size);
+    } else {
+        av_log(c->fc, AV_LOG_ERROR, "invalid encryption scheme\n");
+        return AVERROR_INVALIDDATA;
+    }
 }
 
 static int cenc_filter(MOVContext *mov, AVStream* st, MOVStreamContext *sc, AVPacket *pkt, int current_index)
@@ -6663,7 +6897,9 @@ static int cenc_filter(MOVContext *mov, AVStream* st, MOVStreamContext *sc, AVPa
         // Note this only supports encryption info in the first sample descriptor.
         if (mov->fragment.stsd_id == 1) {
             if (frag_stream_info->encryption_index) {
-                encrypted_index = current_index - frag_stream_info->index_entry;
+                if (!current_index && frag_stream_info->index_entry)
+                    sc->cenc.frag_index_entry_base = frag_stream_info->index_entry;
+                encrypted_index = current_index - (frag_stream_info->index_entry - sc->cenc.frag_index_entry_base);
                 encryption_index = frag_stream_info->encryption_index;
             } else {
                 encryption_index = sc->cenc.encryption_index;
@@ -6851,6 +7087,95 @@ static int mov_read_dvcc_dvvc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+static int mov_read_kind(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    AVFormatContext *ctx = c->fc;
+    AVStream *st = NULL;
+    AVBPrint scheme_buf, value_buf;
+    int64_t scheme_str_len = 0, value_str_len = 0;
+    int version, flags, ret = AVERROR_BUG;
+    int64_t size = atom.size;
+
+    if (atom.size < 6)
+        // 4 bytes for version + flags, 2x 1 byte for null
+        return AVERROR_INVALIDDATA;
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+
+    version = avio_r8(pb);
+    flags   = avio_rb24(pb);
+    size   -= 4;
+
+    if (version != 0 || flags != 0) {
+        av_log(ctx, AV_LOG_ERROR,
+               "Unsupported 'kind' box with version %d, flags: %x",
+               version, flags);
+        return AVERROR_INVALIDDATA;
+    }
+
+    av_bprint_init(&scheme_buf, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprint_init(&value_buf,  0, AV_BPRINT_SIZE_UNLIMITED);
+
+    if ((scheme_str_len = ff_read_string_to_bprint_overwrite(pb, &scheme_buf,
+                                                             size)) < 0) {
+        ret = scheme_str_len;
+        goto cleanup;
+    }
+
+    if (scheme_str_len + 1 >= size) {
+        // we need to have another string, even if nullptr.
+        // we check with + 1 since we expect that if size was not hit,
+        // an additional null was read.
+        ret = AVERROR_INVALIDDATA;
+        goto cleanup;
+    }
+
+    size -= scheme_str_len + 1;
+
+    if ((value_str_len = ff_read_string_to_bprint_overwrite(pb, &value_buf,
+                                                            size)) < 0) {
+        ret = value_str_len;
+        goto cleanup;
+    }
+
+    if (value_str_len == size) {
+        // in case of no trailing null, box is not valid.
+        ret = AVERROR_INVALIDDATA;
+        goto cleanup;
+    }
+
+    av_log(ctx, AV_LOG_TRACE,
+           "%s stream %d KindBox(scheme: %s, value: %s)\n",
+           av_get_media_type_string(st->codecpar->codec_type),
+           st->index,
+           scheme_buf.str, value_buf.str);
+
+    for (int i = 0; ff_mov_track_kind_table[i].scheme_uri; i++) {
+        const struct MP4TrackKindMapping map = ff_mov_track_kind_table[i];
+        if (!av_strstart(scheme_buf.str, map.scheme_uri, NULL))
+            continue;
+
+        for (int j = 0; map.value_maps[j].disposition; j++) {
+            const struct MP4TrackKindValueMapping value_map = map.value_maps[j];
+            if (!av_strstart(value_buf.str, value_map.value, NULL))
+                continue;
+
+            st->disposition |= value_map.disposition;
+        }
+    }
+
+    ret = 0;
+
+cleanup:
+
+    av_bprint_finalize(&scheme_buf, NULL);
+    av_bprint_finalize(&value_buf,  NULL);
+
+    return ret;
+}
+
 static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('A','C','L','R'), mov_read_aclr },
 { MKTAG('A','P','R','G'), mov_read_avid },
@@ -6948,6 +7273,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('c','l','l','i'), mov_read_clli },
 { MKTAG('d','v','c','C'), mov_read_dvcc_dvvc },
 { MKTAG('d','v','v','C'), mov_read_dvcc_dvvc },
+{ MKTAG('k','i','n','d'), mov_read_kind },
 { 0, NULL }
 };
 
@@ -7663,12 +7989,15 @@ static int mov_read_header(AVFormatContext *s)
             AVStream *st = s->streams[i];
             MOVStreamContext *sc = st->priv_data;
             if (st->duration > 0) {
-                if (sc->data_size > INT64_MAX / sc->time_scale / 8) {
-                    av_log(s, AV_LOG_ERROR, "Overflow during bit rate calculation %"PRId64" * 8 * %d\n",
+                /* Akin to sc->data_size * 8 * sc->time_scale / st->duration but accounting for overflows. */
+                st->codecpar->bit_rate = av_rescale(sc->data_size, ((int64_t) sc->time_scale) * 8, st->duration);
+                if (st->codecpar->bit_rate == INT64_MIN) {
+                    av_log(s, AV_LOG_WARNING, "Overflow during bit rate calculation %"PRId64" * 8 * %d\n",
                            sc->data_size, sc->time_scale);
-                    return AVERROR_INVALIDDATA;
+                    st->codecpar->bit_rate = 0;
+                    if (s->error_recognition & AV_EF_EXPLODE)
+                        return AVERROR_INVALIDDATA;
                 }
-                st->codecpar->bit_rate = sc->data_size * 8 * sc->time_scale / st->duration;
             }
         }
     }
@@ -7678,13 +8007,15 @@ static int mov_read_header(AVFormatContext *s)
             AVStream *st = s->streams[i];
             MOVStreamContext *sc = st->priv_data;
             if (sc->duration_for_fps > 0) {
-                if (sc->data_size > INT64_MAX / sc->time_scale / 8) {
-                    av_log(s, AV_LOG_ERROR, "Overflow during bit rate calculation %"PRId64" * 8 * %d\n",
+                /* Akin to sc->data_size * 8 * sc->time_scale / sc->duration_for_fps but accounting for overflows. */
+                st->codecpar->bit_rate = av_rescale(sc->data_size, ((int64_t) sc->time_scale) * 8, sc->duration_for_fps);
+                if (st->codecpar->bit_rate == INT64_MIN) {
+                    av_log(s, AV_LOG_WARNING, "Overflow during bit rate calculation %"PRId64" * 8 * %d\n",
                            sc->data_size, sc->time_scale);
-                    return AVERROR_INVALIDDATA;
+                    st->codecpar->bit_rate = 0;
+                    if (s->error_recognition & AV_EF_EXPLODE)
+                        return AVERROR_INVALIDDATA;
                 }
-                st->codecpar->bit_rate = sc->data_size * 8 * sc->time_scale /
-                    sc->duration_for_fps;
             }
         }
     }

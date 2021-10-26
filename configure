@@ -1446,9 +1446,11 @@ test_pkg_config(){
     test_cmd $pkg_config --exists --print-errors $pkg_version || return
     pkg_cflags=$($pkg_config --cflags $pkg_config_flags $pkg)
     pkg_libs=$($pkg_config --libs $pkg_config_flags $pkg)
+    pkg_incdir=$($pkg_config --variable=includedir $pkg_config_flags $pkg)
     check_func_headers "$headers" "$funcs" $pkg_cflags $pkg_libs "$@" &&
         enable $name &&
         set_sanitized "${name}_cflags"    $pkg_cflags &&
+        set_sanitized "${name}_incdir"    $pkg_incdir &&
         set_sanitized "${name}_extralibs" $pkg_libs
 }
 
@@ -1466,7 +1468,8 @@ test_pkg_config_cpp(){
     pkg_incdir=$($pkg_config --variable=includedir $pkg_config_flags $pkg)
     test_cpp_condition "$pkg_incdir/$headers" "$cond" "$@" &&
         enable $name &&
-        set_sanitized "${name}_cflags" $pkg_cflags
+        set_sanitized "${name}_cflags" $pkg_cflags &&
+        set_sanitized "${name}_incdir" $pkg_incdir
 }
 
 check_pkg_config(){
@@ -3094,6 +3097,7 @@ thumbnail_cuda_filter_deps_any="cuda_nvcc cuda_llvm"
 transpose_npp_filter_deps="ffnvcodec libnpp"
 overlay_cuda_filter_deps="ffnvcodec"
 overlay_cuda_filter_deps_any="cuda_nvcc cuda_llvm"
+sharpen_npp_filter_deps="ffnvcodec libnpp"
 
 amf_deps_any="libdl LoadLibrary"
 nvenc_deps="ffnvcodec"
@@ -6444,8 +6448,8 @@ enabled libmodplug        && require_pkg_config libmodplug libmodplug libmodplug
 enabled libmp3lame        && require "libmp3lame >= 3.98.3" lame/lame.h lame_set_VBR_quality -lmp3lame $libm_extralibs
 enabled libmysofa         && { check_pkg_config libmysofa libmysofa mysofa.h mysofa_neighborhood_init_withstepdefine ||
                                require libmysofa mysofa.h mysofa_neighborhood_init_withstepdefine -lmysofa $zlib_extralibs; }
-enabled libnpp            && { check_lib libnpp npp.h nppGetLibVersion -lnppig -lnppicc -lnppc -lnppidei ||
-                               check_lib libnpp npp.h nppGetLibVersion -lnppi -lnppc -lnppidei ||
+enabled libnpp            && { check_lib libnpp npp.h nppGetLibVersion -lnppig -lnppicc -lnppc -lnppidei -lnppif ||
+                               check_lib libnpp npp.h nppGetLibVersion -lnppi -lnppif -lnppc -lnppidei ||
                                die "ERROR: libnpp not found"; }
 enabled libopencore_amrnb && require libopencore_amrnb opencore-amrnb/interf_dec.h Decoder_Interface_init -lopencore-amrnb
 enabled libopencore_amrwb && require libopencore_amrwb opencore-amrwb/dec_if.h D_IF_init -lopencore-amrwb

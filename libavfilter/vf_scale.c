@@ -341,37 +341,35 @@ static av_cold void uninit(AVFilterContext *ctx)
 static int query_formats(AVFilterContext *ctx)
 {
     AVFilterFormats *formats;
+    const AVPixFmtDescriptor *desc;
     enum AVPixelFormat pix_fmt;
     int ret;
 
-    if (ctx->inputs[0]) {
-        const AVPixFmtDescriptor *desc = NULL;
-        formats = NULL;
-        while ((desc = av_pix_fmt_desc_next(desc))) {
-            pix_fmt = av_pix_fmt_desc_get_id(desc);
-            if ((sws_isSupportedInput(pix_fmt) ||
-                 sws_isSupportedEndiannessConversion(pix_fmt))
-                && (ret = ff_add_format(&formats, pix_fmt)) < 0) {
-                return ret;
-            }
-        }
-        if ((ret = ff_formats_ref(formats, &ctx->inputs[0]->outcfg.formats)) < 0)
+    desc    = NULL;
+    formats = NULL;
+    while ((desc = av_pix_fmt_desc_next(desc))) {
+        pix_fmt = av_pix_fmt_desc_get_id(desc);
+        if ((sws_isSupportedInput(pix_fmt) ||
+             sws_isSupportedEndiannessConversion(pix_fmt))
+            && (ret = ff_add_format(&formats, pix_fmt)) < 0) {
             return ret;
-    }
-    if (ctx->outputs[0]) {
-        const AVPixFmtDescriptor *desc = NULL;
-        formats = NULL;
-        while ((desc = av_pix_fmt_desc_next(desc))) {
-            pix_fmt = av_pix_fmt_desc_get_id(desc);
-            if ((sws_isSupportedOutput(pix_fmt) || pix_fmt == AV_PIX_FMT_PAL8 ||
-                 sws_isSupportedEndiannessConversion(pix_fmt))
-                && (ret = ff_add_format(&formats, pix_fmt)) < 0) {
-                return ret;
-            }
         }
-        if ((ret = ff_formats_ref(formats, &ctx->outputs[0]->incfg.formats)) < 0)
-            return ret;
     }
+    if ((ret = ff_formats_ref(formats, &ctx->inputs[0]->outcfg.formats)) < 0)
+        return ret;
+
+    desc    = NULL;
+    formats = NULL;
+    while ((desc = av_pix_fmt_desc_next(desc))) {
+        pix_fmt = av_pix_fmt_desc_get_id(desc);
+        if ((sws_isSupportedOutput(pix_fmt) || pix_fmt == AV_PIX_FMT_PAL8 ||
+             sws_isSupportedEndiannessConversion(pix_fmt))
+            && (ret = ff_add_format(&formats, pix_fmt)) < 0) {
+            return ret;
+        }
+    }
+    if ((ret = ff_formats_ref(formats, &ctx->outputs[0]->incfg.formats)) < 0)
+        return ret;
 
     return 0;
 }
@@ -996,11 +994,11 @@ const AVFilter ff_vf_scale = {
     .description     = NULL_IF_CONFIG_SMALL("Scale the input video size and/or convert the image format."),
     .init_dict       = init_dict,
     .uninit          = uninit,
-    .query_formats   = query_formats,
     .priv_size       = sizeof(ScaleContext),
     .priv_class      = &scale_class,
     FILTER_INPUTS(avfilter_vf_scale_inputs),
     FILTER_OUTPUTS(avfilter_vf_scale_outputs),
+    FILTER_QUERY_FUNC(query_formats),
     .process_command = process_command,
 };
 
@@ -1037,10 +1035,10 @@ const AVFilter ff_vf_scale2ref = {
     .description     = NULL_IF_CONFIG_SMALL("Scale the input video size and/or convert the image format to the given reference."),
     .init_dict       = init_dict,
     .uninit          = uninit,
-    .query_formats   = query_formats,
     .priv_size       = sizeof(ScaleContext),
     .priv_class      = &scale_class,
     FILTER_INPUTS(avfilter_vf_scale2ref_inputs),
     FILTER_OUTPUTS(avfilter_vf_scale2ref_outputs),
+    FILTER_QUERY_FUNC(query_formats),
     .process_command = process_command,
 };

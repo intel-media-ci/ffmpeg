@@ -420,23 +420,18 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int query_formats(AVFilterContext *ctx)
-{
-    static const enum AVPixelFormat pix_fmts[] = {
-        AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY9, AV_PIX_FMT_GRAY10,
-        AV_PIX_FMT_GRAY12, AV_PIX_FMT_GRAY14, AV_PIX_FMT_GRAY16,
-        AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV444P,
-        AV_PIX_FMT_YUV440P, AV_PIX_FMT_YUV411P, AV_PIX_FMT_YUV410P,
-        AV_PIX_FMT_YUVJ411P, AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUVJ422P,
-        AV_PIX_FMT_YUVJ440P, AV_PIX_FMT_YUVJ444P,
-        AV_PIX_FMT_GBRP,
+static const enum AVPixelFormat pix_fmts[] = {
+    AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY9, AV_PIX_FMT_GRAY10,
+    AV_PIX_FMT_GRAY12, AV_PIX_FMT_GRAY14, AV_PIX_FMT_GRAY16,
+    AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV444P,
+    AV_PIX_FMT_YUV440P, AV_PIX_FMT_YUV411P, AV_PIX_FMT_YUV410P,
+    AV_PIX_FMT_YUVJ411P, AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUVJ422P,
+    AV_PIX_FMT_YUVJ440P, AV_PIX_FMT_YUVJ444P,
+    AV_PIX_FMT_GBRP,
 #define PF(suf) AV_PIX_FMT_YUV420##suf,  AV_PIX_FMT_YUV422##suf,  AV_PIX_FMT_YUV444##suf, AV_PIX_FMT_GBR##suf
-        PF(P9), PF(P10), PF(P12), PF(P14), PF(P16),
-        AV_PIX_FMT_NONE
-    };
-
-    return ff_set_common_formats_from_list(ctx, pix_fmts);
-}
+    PF(P9), PF(P10), PF(P12), PF(P14), PF(P16),
+    AV_PIX_FMT_NONE
+};
 
 static int config_input_ref(AVFilterLink *inlink)
 {
@@ -591,11 +586,11 @@ const AVFilter ff_vf_ssim = {
     .preinit       = ssim_framesync_preinit,
     .init          = init,
     .uninit        = uninit,
-    .query_formats = query_formats,
     .activate      = activate,
     .priv_size     = sizeof(SSIMContext),
     .priv_class    = &ssim_class,
     FILTER_INPUTS(ssim_inputs),
     FILTER_OUTPUTS(ssim_outputs),
+    FILTER_PIXFMTS_ARRAY(pix_fmts),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
 };

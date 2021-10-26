@@ -107,7 +107,8 @@ typedef struct FFFormatContext {
     struct PacketList *parse_queue_end;
     /**
      * The generic code uses this as a temporary packet
-     * to parse packets; it may also be used for other means
+     * to parse packets or for muxing, especially flushing.
+     * For demuxers, it may also be used for other means
      * for short periods that are guaranteed not to overlap
      * with calls to av_read_frame() (or ff_read_packet())
      * or with each other.
@@ -120,7 +121,9 @@ typedef struct FFFormatContext {
     AVPacket *parse_pkt;
 
     /**
-     * Used to hold temporary packets.
+     * Used to hold temporary packets for the generic demuxing code.
+     * When muxing, it may be used by muxers to hold packets (even
+     * permanent ones).
      */
     AVPacket *pkt;
     /**
@@ -746,18 +749,10 @@ int ff_add_attached_pic(AVFormatContext *s, AVStream *st, AVIOContext *pb,
 
 /**
  * Interleave an AVPacket per dts so it can be muxed.
- *
- * @param s   an AVFormatContext for output. pkt resp. out will be added to
- *            resp. taken from its packet buffer.
- * @param out the interleaved packet will be output here
- * @param pkt the input packet; will be blank on return if not NULL
- * @param flush 1 if no further packets are available as input and all
- *              remaining packets should be output
- * @return 1 if a packet was output, 0 if no packet could be output
- *         (in which case out may be uninitialized), < 0 if an error occurred
+ * See the documentation of AVOutputFormat.interleave_packet for details.
  */
-int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
-                                 AVPacket *pkt, int flush);
+int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
+                                 int flush, int has_packet);
 
 void ff_free_stream(AVFormatContext *s, AVStream *st);
 
@@ -907,7 +902,7 @@ void ff_format_io_close(AVFormatContext *s, AVIOContext **pb);
  * @param s AVFormatContext
  * @param filename URL or file name to open for writing
  */
-int ff_is_http_proto(char *filename);
+int ff_is_http_proto(const char *filename);
 
 /**
  * Parse creation_time in AVFormatContext metadata if exists and warn if the

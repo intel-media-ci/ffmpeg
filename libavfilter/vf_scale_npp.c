@@ -143,14 +143,6 @@ static void nppscale_uninit(AVFilterContext *ctx)
     av_frame_free(&s->tmp_frame);
 }
 
-static int nppscale_query_formats(AVFilterContext *ctx)
-{
-    static const enum AVPixelFormat pixel_formats[] = {
-        AV_PIX_FMT_CUDA, AV_PIX_FMT_NONE,
-    };
-    return ff_set_common_formats_from_list(ctx, pixel_formats);
-}
-
 static int init_stage(NPPScaleStageContext *stage, AVBufferRef *device_ctx)
 {
     AVBufferRef *out_ref = NULL;
@@ -479,12 +471,15 @@ static int nppscale_scale(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
         src        = s->stages[i].frame;
         last_stage = i;
     }
-
     if (last_stage < 0)
         return AVERROR_BUG;
+
     ret = av_hwframe_get_buffer(src->hw_frames_ctx, s->tmp_frame, 0);
     if (ret < 0)
         return ret;
+
+    s->tmp_frame->width  = src->width;
+    s->tmp_frame->height = src->height;
 
     av_frame_move_ref(out, src);
     av_frame_move_ref(src, s->tmp_frame);
@@ -594,13 +589,14 @@ const AVFilter ff_vf_scale_npp = {
 
     .init          = nppscale_init,
     .uninit        = nppscale_uninit,
-    .query_formats = nppscale_query_formats,
 
     .priv_size = sizeof(NPPScaleContext),
     .priv_class = &nppscale_class,
 
     FILTER_INPUTS(nppscale_inputs),
     FILTER_OUTPUTS(nppscale_outputs),
+
+    FILTER_SINGLE_PIXFMT(AV_PIX_FMT_CUDA),
 
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };
