@@ -134,7 +134,8 @@ static int vaapi_encode_make_misc_param_buffer(AVCodecContext *avctx,
 }
 
 static int vaapi_encode_wait(AVCodecContext *avctx,
-                             VAAPIEncodePicture *pic)
+                             VAAPIEncodePicture *pic,
+                             uint8_t wait)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
     VAStatus vas;
@@ -150,11 +151,43 @@ static int vaapi_encode_wait(AVCodecContext *avctx,
            "(input surface %#x).\n", pic->display_order,
            pic->encode_order, pic->input_surface);
 
-    vas = vaSyncSurface(ctx->hwctx->display, pic->input_surface);
-    if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to sync to picture completion: "
-               "%d (%s).\n", vas, vaErrorStr(vas));
+#if VA_CHECK_VERSION(1, 9, 0)
+    // Try vaSyncBuffer.
+    vas = vaSyncBuffer(ctx->hwctx->display,
+                       pic->output_buffer,
+                       wait ? VA_TIMEOUT_INFINITE : 0);
+    if (vas == VA_STATUS_ERROR_TIMEDOUT) {
+        return AVERROR(EAGAIN);
+    } else if (vas != VA_STATUS_SUCCESS && vas != VA_STATUS_ERROR_UNIMPLEMENTED) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to sync to output buffer completion: "
+                "%d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR(EIO);
+    } else if (vas == VA_STATUS_ERROR_UNIMPLEMENTED)
+    // If vaSyncBuffer is not implemented, try old version API.
+#endif
+    {
+        if (!wait) {
+            VASurfaceStatus surface_status;
+            vas = vaQuerySurfaceStatus(ctx->hwctx->display,
+                                    pic->input_surface,
+                                    &surface_status);
+            if (vas == VA_STATUS_SUCCESS &&
+                surface_status != VASurfaceReady &&
+                surface_status != VASurfaceSkipped) {
+                return AVERROR(EAGAIN);
+            } else if (vas != VA_STATUS_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "Failed to query surface status: "
+                    "%d (%s).\n", vas, vaErrorStr(vas));
+                return AVERROR(EIO);
+            }
+        } else {
+            vas = vaSyncSurface(ctx->hwctx->display, pic->input_surface);
+            if (vas != VA_STATUS_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "Failed to sync to picture completion: "
+                    "%d (%s).\n", vas, vaErrorStr(vas));
+                return AVERROR(EIO);
+            }
+        }
     }
 
     // Input is definitely finished with now.
@@ -633,7 +666,7 @@ static int vaapi_encode_output(AVCodecContext *avctx,
     uint8_t *ptr;
     int err;
 
-    err = vaapi_encode_wait(avctx, pic);
+    err = vaapi_encode_wait(avctx, pic, 1);
     if (err < 0)
         return err;
 
@@ -695,7 +728,7 @@ fail:
 static int vaapi_encode_discard(AVCodecContext *avctx,
                                 VAAPIEncodePicture *pic)
 {
-    vaapi_encode_wait(avctx, pic);
+    vaapi_encode_wait(avctx, pic, 1);
 
     if (pic->output_buffer_ref) {
         av_log(avctx, AV_LOG_DEBUG, "Discard output for pic "
