@@ -227,6 +227,14 @@ typedef struct AVHWFramesContext {
      * Must be set by the user before calling av_hwframe_ctx_init().
      */
     int width, height;
+
+    /**
+     * The real dimensions of the frames in this pool.
+     *
+     * Must be set by the user before calling av_hwframe_ctx_init().
+     * They will be ignored if one of them is 0
+     */
+    int rw, rh;
 } AVHWFramesContext;
 
 /**

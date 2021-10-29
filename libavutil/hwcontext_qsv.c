@@ -497,9 +497,9 @@ static int qsv_init_surface(AVHWFramesContext *ctx, mfxFrameSurface1 *surf)
 
     surf->Info.FourCC         = fourcc;
     surf->Info.Width          = FFALIGN(ctx->width, 16);
-    surf->Info.CropW          = ctx->width;
+    surf->Info.CropW          = ctx->rw ? ctx->rw : ctx->width;
     surf->Info.Height         = FFALIGN(ctx->height, 16);
-    surf->Info.CropH          = ctx->height;
+    surf->Info.CropH          = ctx->rh ? ctx->rh : ctx->height;
     surf->Info.FrameRateExtN  = 25;
     surf->Info.FrameRateExtD  = 1;
     surf->Info.PicStruct      = MFX_PICSTRUCT_PROGRESSIVE;

@@ -279,6 +279,8 @@ static int qsv_decode_preinit(AVCodecContext *avctx, QSVContext *q, enum AVPixel
         hwframes_ctx->sw_format         = avctx->sw_pix_fmt;
         hwframes_ctx->initial_pool_size = 64 + avctx->extra_hw_frames;
         frames_hwctx->frame_type        = MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET;
+        hwframes_ctx->rw                = avctx->width;
+        hwframes_ctx->rh                = avctx->height;
 
         ret = av_hwframe_ctx_init(avctx->hw_frames_ctx);
 
