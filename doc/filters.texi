@@ -13515,6 +13515,9 @@ It accepts the following values:
 @item coloronblack
 @item coloronwhite
 @item colorongray
+@item blackoncolor
+@item whiteoncolor
+@item grayoncolor
 @end table
 Default is @code{whiteonblack}.
 @end table
@@ -13732,15 +13735,15 @@ The filter accepts the following options:
 
 @table @option
 @item hue
-Set the hue value which will be used if color difference calculation.
+Set the hue value which will be used in color difference calculation.
 Allowed range is from -360 to 360. Default value is 0.
 
 @item sat
-Set the saturation value which will be used if color difference calculation.
+Set the saturation value which will be used in color difference calculation.
 Allowed range is from -1 to 1. Default value is 0.
 
 @item val
-Set the value which will be used if color difference calculation.
+Set the value which will be used in color difference calculation.
 Allowed range is from -1 to 1. Default value is 0.
 
 @item similarity
@@ -13770,15 +13773,15 @@ The filter accepts the following options:
 
 @table @option
 @item hue
-Set the hue value which will be used if color difference calculation.
+Set the hue value which will be used in color difference calculation.
 Allowed range is from -360 to 360. Default value is 0.
 
 @item sat
-Set the saturation value which will be used if color difference calculation.
+Set the saturation value which will be used in color difference calculation.
 Allowed range is from -1 to 1. Default value is 0.
 
 @item val
-Set the value which will be used if color difference calculation.
+Set the value which will be used in color difference calculation.
 Allowed range is from -1 to 1. Default value is 0.
 
 @item similarity
@@ -13903,6 +13906,62 @@ The command accepts the same syntax of the corresponding option.
 
 If the specified expression is not valid, it is kept at its current
 value.
+@end table
+
+@section huesaturation
+Apply hue-saturation-intensity adjustments to input video stream.
+
+This filter operates in RGB colorspace.
+
+This filter accepts the following options:
+
+@table @option
+@item hue
+Set the hue shift in degrees to apply. Default is 0.
+Allowed range is from -180 to 180.
+
+@item saturation
+Set the saturation shift. Default is 0.
+Allowed range is from -1 to 1.
+
+@item intensity
+Set the intensity shift. Default is 0.
+Allowed range is from -1 to 1.
+
+@item colors
+Set which primary and complementary colors are going to be adjusted.
+This options is set by providing one or multiple values.
+This can select multiple colors at once. By default all colors are selected.
+@table @samp
+@item r
+Adjust reds.
+@item y
+Adjust yellows.
+@item g
+Adjust greens.
+@item c
+Adjust cyans.
+@item b
+Adjust blues.
+@item m
+Adjust magentas.
+@item a
+Adjust all colors.
+@end table
+
+@item strength
+Set strength of filtering. Allowed range is from 0 to 100.
+Default value is 1.
+
+@item rw, gw, bw
+Set weight for each RGB component. Allowed range is from 0 to 1.
+By default is set to 0.333, 0.334, 0.333.
+Those options are used in saturation and lightess processing.
+
+@item lightness
+Set preserving lightness, by default is disabled.
+Adjusting hues can change lightness from original RGB triplet,
+with this option enabled lightness is kept at same value.
 @end table
 
 @section hysteresis
@@ -15551,6 +15610,19 @@ Negate (invert) the input video.
 It accepts the following option:
 
 @table @option
+@item components
+Set components to negate.
+
+Available values for components are:
+@table @samp
+@item y
+@item u
+@item v
+@item a
+@item r
+@item g
+@item b
+@end table
 
 @item negate_alpha
 With value 1, it negates the alpha component, if present. Default value is 0.
