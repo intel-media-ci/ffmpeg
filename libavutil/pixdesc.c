@@ -236,6 +236,18 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
         },
         .flags = AV_PIX_FMT_FLAG_RGB,
     },
+    [AV_PIX_FMT_RGBP] = {
+        .name = "rgbp",
+        .nb_components = 3,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 1, 0, 0, 8 },        /* R */
+            { 1, 1, 0, 0, 8 },        /* G */
+            { 2, 1, 0, 0, 8 },        /* B */
+        },
+        .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB,
+    },
     [AV_PIX_FMT_BGR24] = {
         .name = "bgr24",
         .nb_components = 3,
