@@ -59,10 +59,9 @@ static int av1_parser_parse(AVCodecParserContext *ctx,
     const CodedBitstreamAV1Context *av1 = s->cbc->priv_data;
     const AV1RawSequenceHeader *seq;
     const AV1RawColorConfig *color;
+    int pic_found = 0;
+    int next = 0;
     int ret;
-
-    *out_data = data;
-    *out_size = size;
 
     ctx->key_frame         = -1;
     ctx->pict_type         = AV_PICTURE_TYPE_NONE;
@@ -100,6 +99,8 @@ static int av1_parser_parse(AVCodecParserContext *ctx,
         const AV1RawOBU *obu = unit->content;
         const AV1RawFrameHeader *frame;
 
+        next += unit->data_size;
+
         if (unit->type == AV1_OBU_FRAME)
             frame = &obu->obu.frame.header;
         else if (unit->type == AV1_OBU_FRAME_HEADER)
@@ -112,6 +113,12 @@ static int av1_parser_parse(AVCodecParserContext *ctx,
 
         if (!frame->show_frame && !frame->show_existing_frame)
             continue;
+
+        /* split data if it contains multi show frames */
+        if (pic_found) {
+            next -= unit->data_size;
+            break;
+        }
 
         ctx->width  = frame->frame_width_minus_1 + 1;
         ctx->height = frame->frame_height_minus_1 + 1;
@@ -131,7 +138,11 @@ static int av1_parser_parse(AVCodecParserContext *ctx,
             break;
         }
         ctx->picture_structure = AV_PICTURE_STRUCTURE_FRAME;
+        pic_found = 1;
     }
+
+    *out_size = next;
+    *out_data = data;
 
     switch (av1->bit_depth) {
     case 8:
@@ -171,7 +182,7 @@ end:
 
     s->cbc->log_ctx = NULL;
 
-    return size;
+    return next;
 }
 
 static const CodedBitstreamUnitType decompose_unit_types[] = {
