@@ -38,8 +38,8 @@ typedef enum {DNN_FLOAT = 1, DNN_UINT8 = 4} DNNDataType;
 
 typedef enum {
     DCO_NONE,
-    DCO_BGR,
-    DCO_RGB,
+    DCO_BGR_PACKED,
+    DCO_RGB_PACKED,
 } DNNColorOrder;
 
 typedef enum {
