@@ -176,9 +176,9 @@ static enum AVPixelFormat get_pixel_format(DNNData *data)
 {
     if (data->dt == DNN_UINT8) {
         switch (data->order) {
-        case DCO_BGR:
+        case DCO_BGR_PACKED:
             return AV_PIX_FMT_BGR24;
-        case DCO_RGB:
+        case DCO_RGB_PACKED:
             return AV_PIX_FMT_RGB24;
         default:
             av_assert0(!"unsupported data pixel format.\n");
