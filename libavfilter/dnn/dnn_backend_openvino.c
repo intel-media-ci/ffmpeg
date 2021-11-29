@@ -156,7 +156,7 @@ static DNNReturnType fill_model_input_ov(OVModel *ov_model, OVRequestItem *reque
     input.dt = precision_to_datatype(precision);
     // all models in openvino open model zoo use BGR as input,
     // change to be an option when necessary.
-    input.order = DCO_BGR;
+    input.format = AV_PIX_FMT_BGR24;
 
     for (int i = 0; i < ctx->options.batch_size; ++i) {
         lltask = ff_queue_pop_front(ov_model->lltask_queue);

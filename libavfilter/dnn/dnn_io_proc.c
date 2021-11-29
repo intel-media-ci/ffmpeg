@@ -172,24 +172,6 @@ DNNReturnType ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, void *lo
     return DNN_SUCCESS;
 }
 
-static enum AVPixelFormat get_pixel_format(DNNData *data)
-{
-    if (data->dt == DNN_UINT8) {
-        switch (data->order) {
-        case DCO_BGR:
-            return AV_PIX_FMT_BGR24;
-        case DCO_RGB:
-            return AV_PIX_FMT_RGB24;
-        default:
-            av_assert0(!"unsupported data pixel format.\n");
-            return AV_PIX_FMT_BGR24;
-        }
-    }
-
-    av_assert0(!"unsupported data type.\n");
-    return AV_PIX_FMT_BGR24;
-}
-
 DNNReturnType ff_frame_to_dnn_classify(AVFrame *frame, DNNData *input, uint32_t bbox_index, void *log_ctx)
 {
     const AVPixFmtDescriptor *desc;
@@ -212,7 +194,7 @@ DNNReturnType ff_frame_to_dnn_classify(AVFrame *frame, DNNData *input, uint32_t 
     top = bbox->y;
     height = bbox->h;
 
-    fmt = get_pixel_format(input);
+    fmt = input->format;
     sws_ctx = sws_getContext(width, height, frame->format,
                              input->width, input->height, fmt,
                              SWS_FAST_BILINEAR, NULL, NULL, NULL);
@@ -253,7 +235,7 @@ DNNReturnType ff_frame_to_dnn_detect(AVFrame *frame, DNNData *input, void *log_c
 {
     struct SwsContext *sws_ctx;
     int linesizes[4];
-    enum AVPixelFormat fmt = get_pixel_format(input);
+    enum AVPixelFormat fmt = input->format;
     sws_ctx = sws_getContext(frame->width, frame->height, frame->format,
                              input->width, input->height, fmt,
                              SWS_FAST_BILINEAR, NULL, NULL, NULL);

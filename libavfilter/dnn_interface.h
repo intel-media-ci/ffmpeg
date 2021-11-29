@@ -37,12 +37,6 @@ typedef enum {DNN_NATIVE, DNN_TF, DNN_OV} DNNBackendType;
 typedef enum {DNN_FLOAT = 1, DNN_UINT8 = 4} DNNDataType;
 
 typedef enum {
-    DCO_NONE,
-    DCO_BGR,
-    DCO_RGB,
-} DNNColorOrder;
-
-typedef enum {
     DAST_FAIL,              // something wrong
     DAST_EMPTY_QUEUE,       // no more inference result to get
     DAST_NOT_READY,         // all queued inferences are not finished
@@ -59,9 +53,9 @@ typedef enum {
 typedef struct DNNData{
     void *data;
     int width, height, channels;
-    // dt and order together decide the color format
+    // dt and format together decide the color format
+    enum AVPixelFormat format;
     DNNDataType dt;
-    DNNColorOrder order;
 } DNNData;
 
 typedef struct DNNExecBaseParams {
