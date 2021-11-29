@@ -94,6 +94,7 @@ static const FormatEntry format_entries[] = {
     [AV_PIX_FMT_YUV420P]     = { 1, 1 },
     [AV_PIX_FMT_YUYV422]     = { 1, 1 },
     [AV_PIX_FMT_RGB24]       = { 1, 1 },
+    [AV_PIX_FMT_RGBP]        = { 1, 1 },
     [AV_PIX_FMT_BGR24]       = { 1, 1 },
     [AV_PIX_FMT_YUV422P]     = { 1, 1 },
     [AV_PIX_FMT_YUV444P]     = { 1, 1 },
