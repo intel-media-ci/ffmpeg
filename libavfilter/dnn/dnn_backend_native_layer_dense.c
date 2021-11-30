@@ -133,10 +133,10 @@ int ff_dnn_execute_layer_dense(DnnOperand *operands, const int32_t *input_operan
                     output[n_filter] = FFMAX(output[n_filter], 0.0);
                     break;
                 case TANH:
-                    output[n_filter] = 2.0f  / (1.0f + exp(-2.0f * output[n_filter])) - 1.0f;
+                    output[n_filter] = 2.0f  / (1.0f + expf(-2.0f * output[n_filter])) - 1.0f;
                     break;
                 case SIGMOID:
-                    output[n_filter] = 1.0f / (1.0f + exp(-output[n_filter]));
+                    output[n_filter] = 1.0f / (1.0f + expf(-output[n_filter]));
                     break;
                 case NONE:
                     break;
