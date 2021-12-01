@@ -1123,6 +1123,7 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
     int iopattern = 0;
     int opaque_alloc = 0;
     int ret;
+    AVContentLightMetadata light_meta;
 
     q->param.AsyncDepth = q->async_depth;
 
@@ -1223,6 +1224,87 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
         ret = qsv_init_opaque_alloc(avctx, q);
         if (ret < 0)
             return ret;
+    }
+
+    if (q->qsv_opts) {
+        AVDictionaryEntry *en = NULL;
+        AVMasteringDisplayMetadata hdr_meta;
+        memset(&hdr_meta, 0, sizeof(AVMasteringDisplayMetadata));
+        memset(&light_meta, 0, sizeof(AVContentLightMetadata));
+        while ((en = av_dict_get(q->qsv_opts, "", en, AV_DICT_IGNORE_SUFFIX))) {
+            int parse_ret = ff_qsv_validate_params(en->key, en->value);
+            switch (parse_ret) {
+                case QSV_PARAM_VALID:
+                    if (!strcmp(en->key, "master-display")) {
+                        ff_qsv_extract_display_values(en->value, &hdr_meta);
+                        break;
+                    }
+                    if (!strcmp(en->key, "range")) {
+                        avctx->color_range = ff_qsv_extract_range_value(en->value);
+                        break;
+                    }
+                    if (!strcmp(en->key, "max-cll")) {
+                         ff_qsv_get_content_light_level(en->value, &light_meta);
+                         break;
+                    }
+                    if (!strcmp(en->key, "colorprim")) {
+                        avctx->color_primaries = av_color_primaries_from_name(en->value);
+                        break;
+                    }
+                    if (!strcmp(en->key, "colormatrix")) {
+                        avctx->colorspace = av_color_space_from_name(en->value);
+                        break;
+                    }
+                    if (!strcmp(en->key, "transfer")) {
+                        avctx->color_trc = av_color_transfer_from_name(en->value);
+                        break;
+                    }
+                case QSV_PARAM_BAD_VALUE:
+                    av_log(q, AV_LOG_ERROR,
+                        "Invalid value for %s: %s.\n", en->key, en->value);
+                    return ff_qsv_print_error(avctx, MFX_ERR_INVALID_VIDEO_PARAM,
+                                  "Invalid value");
+                case QSV_PARAM_BAD_NAME:
+                    av_log(q, AV_LOG_ERROR,
+                        "Invalid value for %s: %s.\n", en->key, en->value);
+                    return ff_qsv_print_error(avctx, MFX_ERR_INVALID_VIDEO_PARAM,
+                                  "Invalid parameter name");
+            }
+        }
+#if QSV_HAVE_HDR_METADATA
+        if (hdr_meta.has_primaries) {
+            q->master_display_volume_data.Header.BufferId = MFX_EXTBUFF_MASTERING_DISPLAY_COLOUR_VOLUME;
+            q->master_display_volume_data.Header.BufferSz = sizeof(q->master_display_volume_data);
+            q->master_display_volume_data.InsertPayloadToggle = MFX_PAYLOAD_IDR;
+            q->master_display_volume_data.DisplayPrimariesX[0] = (int)av_q2d(hdr_meta.display_primaries[0][0]);
+            q->master_display_volume_data.DisplayPrimariesX[1] = (int)av_q2d(hdr_meta.display_primaries[1][0]);
+            q->master_display_volume_data.DisplayPrimariesX[2] = (int)av_q2d(hdr_meta.display_primaries[2][0]);
+            q->master_display_volume_data.DisplayPrimariesY[0] = (int)av_q2d(hdr_meta.display_primaries[0][1]);
+            q->master_display_volume_data.DisplayPrimariesY[1] = (int)av_q2d(hdr_meta.display_primaries[1][1]);
+            q->master_display_volume_data.DisplayPrimariesY[2] = (int)av_q2d(hdr_meta.display_primaries[2][1]);
+            q->master_display_volume_data.WhitePointX = (int)av_q2d(hdr_meta.white_point[0]);
+            q->master_display_volume_data.WhitePointY = (int)av_q2d(hdr_meta.white_point[1]);
+            q->master_display_volume_data.MaxDisplayMasteringLuminance = (int)av_q2d(hdr_meta.max_luminance);
+            q->master_display_volume_data.MinDisplayMasteringLuminance = (int)av_q2d(hdr_meta.min_luminance);
+
+            q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->master_display_volume_data;
+            q->param.ExtParam[q->param.NumExtParam++] = (mfxExtBuffer*)&q->master_display_volume_data;
+
+#if QSV_HAVE_VIDEO_SIGNAL_INFO
+            q->extvsi.Header.BufferId = MFX_EXTBUFF_VIDEO_SIGNAL_INFO;
+            q->extvsi.Header.BufferSz = sizeof(q->extvsi);
+            q->extvsi.VideoFormat = VIDEO_SIGNAL_FORMAT_UNSPECIFIED;
+            q->extvsi.VideoFullRange = ff_avcol_range_to_mfx_col_range(avctx->color_range);
+            q->extvsi.ColourDescriptionPresent = VIDEO_SIGNAL_COLOR_DESCRIPTION_PRESENT;
+            q->extvsi.ColourPrimaries = avctx->color_primaries;
+            q->extvsi.TransferCharacteristics = avctx->color_trc;
+            q->extvsi.MatrixCoefficients = avctx->colorspace;
+
+            q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extvsi;
+            q->param.ExtParam[q->param.NumExtParam++] = (mfxExtBuffer*)&q->extvsi;
+#endif
+        }
+#endif
     }
 
     ret = MFXVideoENCODE_Init(q->session, &q->param);
@@ -1650,3 +1732,341 @@ const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[] = {
     HW_CONFIG_ENCODER_DEVICE(P010, QSV),
     NULL,
 };
+
+int ff_qsv_extract_values(char *input_value, int *output_values)
+{
+    char *p;
+    int i;
+    int res[2];
+    char input_array[QSV_PARAMS_BUFFER_LENGTH];
+    strcpy(input_array, input_value);
+    for (i = 1, p = strtok(input_array, ","); p != NULL; p = strtok(NULL, ","), i++) {
+        for (int j = 0; j < strlen(p); j++) {
+            if (!isdigit(p[j])) {
+                return AVERROR(EINVAL);
+            }
+        }
+        res[i-1] = (int) strtol(p, (char **)NULL, 10);
+    }
+    output_values[0] = res[0];
+    output_values[1] = res[1];
+
+    return 0;
+}
+
+int ff_qsv_validate_cll(char * value)
+{
+    int n = strlen(value);
+    int res[LIGHT_LEVEL_DATA_LENGTH];
+    const int maximum_cll = 1000;
+    const int minimum_cll = 400;
+    if (!ff_qsv_extract_values(value, res)) {
+        if (n > QSV_PARAMS_BUFFER_LENGTH) {
+            return AVERROR(EINVAL);
+        }
+    }
+    if (res[1] >= minimum_cll && res[0] <= maximum_cll) {
+        return 0;
+    }
+
+    return AVERROR(EINVAL);
+}
+
+void ff_build_sub_string(char *input_string, char *output, int start_index)
+{
+    int n = strlen(input_string);
+    for (int i = start_index; i < n; i++) {
+        if (input_string[i] != '(' && input_string[i] != ')' && input_string[i] != ' ' &&
+            input_string[i] != 'P') {
+            strncat(output, &input_string[i], 1);
+        }
+        if (input_string[i] ==')') {
+            break;
+        }
+    }
+}
+
+int ff_qsv_validate_display(char *value)
+{
+    int n = strlen(value);
+    int ret = 0;
+    char *red_values = NULL;
+    char *blue_values = NULL;
+    char *green_values = NULL;
+    char *white_point_values = NULL;
+    char *light_info_values = NULL;
+    int xy_red_values[RGB_CHANNEL_LENGTH] ;
+    int xy_green_values[RGB_CHANNEL_LENGTH];
+    int xy_blue_values[RGB_CHANNEL_LENGTH];
+    int xy_white_point_values[WHITE_POINT_DATA_LENGTH];
+    int luminousity_values[LIGHT_LEVEL_DATA_LENGTH];
+
+    if (!(red_values = (char*)av_calloc(n + 1, sizeof(red_values))))
+        return AVERROR(ENOMEM);
+    if (!(green_values = (char*)av_calloc(n + 1, sizeof(green_values))))
+        return AVERROR(ENOMEM);
+    if (!(blue_values = (char*)av_calloc(n + 1, sizeof(blue_values))))
+        return AVERROR(ENOMEM);
+    if (!(white_point_values = (char*)av_calloc(n + 1, sizeof(white_point_values))))
+        return AVERROR(ENOMEM);
+    if (!(light_info_values = (char*)av_calloc(n + 1, sizeof(light_info_values))))
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i < n; i++) {
+        char current_char = value[i];
+        switch (current_char) {
+            case 'R':
+                ff_build_sub_string(value, red_values, i+1);
+            break;
+            case 'G':
+                ff_build_sub_string(value, green_values, i+1);
+            break;
+            case 'B':
+                ff_build_sub_string(value, blue_values, i+1);
+            break;
+            case 'W':
+                ff_build_sub_string(value, white_point_values, i+1);
+            break;
+            case 'L':
+                ff_build_sub_string(value, light_info_values, i+1);
+            break;
+            default:
+            break;
+        }
+    }
+
+    if (!ff_qsv_extract_values(red_values, xy_red_values) &&
+        !ff_qsv_validate_display_color_range(xy_red_values) &&
+        !ff_qsv_extract_values(green_values, xy_green_values) &&
+        !ff_qsv_validate_display_color_range(xy_green_values) &&
+        !ff_qsv_extract_values(blue_values, xy_blue_values) &&
+        !ff_qsv_validate_display_color_range(xy_blue_values) &&
+        !ff_qsv_extract_values(white_point_values, xy_white_point_values) &&
+        !ff_qsv_validate_display_color_range(xy_white_point_values) &&
+        !ff_qsv_extract_values(light_info_values, luminousity_values) &&
+        !ff_qsv_validate_display_luminousity_range(luminousity_values)) {
+            goto end;
+    } else {
+        ret = AVERROR(EINVAL);
+    }
+
+end:
+    av_free(red_values);
+    av_free(green_values);
+    av_free(blue_values);
+    av_free(white_point_values);
+    av_free(light_info_values);
+
+    return ret;
+}
+
+int ff_qsv_validate_params(char *key, char *value)
+{
+    int key_is_valid = 0;
+    int value_is_valid = 0;
+    int key_index;
+    int n = sizeof(qsv_key_names)/sizeof(qsv_key_names[0]);
+    for (int i = 0;i < n; i++) {
+        if (!strcmp(key, qsv_key_names[i])) {
+            key_is_valid = 1;
+            key_index = i;
+        }
+    }
+    if (key_is_valid) {
+        switch (key_index) {
+            case 0:
+                for (int i = 0; i < (sizeof(qsv_color_range_names)/sizeof(qsv_color_range_names[0])); i++) {
+                    if (!strcmp(value, qsv_color_range_names[i])) {
+                        value_is_valid = 1;
+                        break;
+                    }
+                }
+                break;
+            case 1:
+                for(int i = 0; i < (sizeof(qsv_colorprim_names)/sizeof(qsv_colorprim_names[0])); i++) {
+                    if (!strcmp(value, qsv_colorprim_names[i])) {
+                        value_is_valid = 1;
+                        break;
+                    }
+                }
+                break;
+            case 2:
+                for(int i = 0; i < (sizeof(qsv_transfer_names)/sizeof(qsv_transfer_names[0])); i++) {
+                    if (!strcmp(value, qsv_transfer_names[i])) {
+                        value_is_valid = 1;
+                        break;
+                    }
+                }
+                break;
+            case 3:
+                for(int i = 0; i < (sizeof(qsv_colmatrix_names)/sizeof(qsv_colmatrix_names[0])); i++) {
+                    if (!strcmp(value, qsv_colmatrix_names[i])) {
+                        value_is_valid = 1;
+                        break;
+                    }
+                }
+                break;
+            case 4:
+                value_is_valid = (!ff_qsv_validate_display(value)) ? 1 : 0;
+                break;
+            case 5:
+                value_is_valid = (!ff_qsv_validate_cll(value)) ? 1 : 0;
+                break;
+            default:
+                break;
+        }
+    }
+    if (!key_is_valid) {
+        return QSV_PARAM_BAD_NAME;
+    }
+    if (!value_is_valid) {
+        return QSV_PARAM_BAD_VALUE;
+    }
+    return QSV_PARAM_VALID;
+}
+
+int ff_qsv_validate_display_color_range(int *input_colors)
+{
+    const int display_color_minimum = 0;
+    const int display_color_maximum = 50000;
+    if (( input_colors[0] >= display_color_minimum && input_colors[0] <= display_color_maximum) &&
+        input_colors[1] >= display_color_minimum && input_colors[1] <= display_color_maximum) {
+            return 0;
+    }
+
+    return AVERROR(EINVAL);
+}
+
+int ff_qsv_validate_display_luminousity_range(int *input_luminousity)
+{
+    const int display_primary_luminous_minimum = 50;
+    const int display_primary_luminous_maximum = 10000000;
+    if (input_luminousity[0] >= display_primary_luminous_minimum &&
+        input_luminousity[1] <= display_primary_luminous_maximum) {
+            return 0;
+    }
+
+    return AVERROR(EINVAL);
+}
+
+int ff_qsv_extract_range_value(char *value)
+{
+    if (!strcmp(value, "limited")) {
+        return AVCOL_RANGE_MPEG;
+    }
+    if (!strcmp(value, "full")) {
+         return AVCOL_RANGE_JPEG;
+    }
+
+    return AVCOL_PRI_UNSPECIFIED;
+}
+
+int ff_qsv_extract_display_values(char *value, AVMasteringDisplayMetadata *hdr_meta)
+{
+    int n = strlen(value);
+    int ret = 0;
+    char *red_values = NULL;
+    char *blue_values = NULL;
+    char *green_values = NULL;
+    char *light_info_values = NULL;
+    char *white_point_values = NULL;
+    int hdr_data_red[RGB_CHANNEL_LENGTH];
+    int hdr_data_green[RGB_CHANNEL_LENGTH];
+    int hdr_data_blue[RGB_CHANNEL_LENGTH];
+    int hdr_data_light_level[LIGHT_LEVEL_DATA_LENGTH];
+    int hdr_data_white_point[WHITE_POINT_DATA_LENGTH];
+    if (!(red_values = (char*)av_calloc(n + 1, sizeof(red_values))))
+        return AVERROR(ENOMEM);
+    if (!(green_values = (char*)av_calloc(n + 1, sizeof(green_values))))
+        return AVERROR(ENOMEM);
+    if (!(blue_values = (char*)av_calloc(n + 1, sizeof(blue_values))))
+        return AVERROR(ENOMEM);
+    if (!(white_point_values = (char*)av_calloc(n + 1, sizeof(white_point_values))))
+        return AVERROR(ENOMEM);
+    if (!(light_info_values = (char*)av_calloc(n + 1, sizeof(light_info_values))))
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i < n; i++) {
+        char current_char = value[i];
+        switch (current_char) {
+            case 'R':
+                ff_build_sub_string(value, red_values, i+1);
+            break;
+            case 'G':
+                ff_build_sub_string(value, green_values, i+1);
+            break;
+            case 'B':
+                ff_build_sub_string(value, blue_values, i+1);
+            break;
+            case 'W':
+                ff_build_sub_string(value, white_point_values, i+1);
+            break;
+            case 'L':
+                ff_build_sub_string(value, light_info_values, i+1);
+            break;
+            default:
+            break;
+        }
+    }
+
+    if (!ff_qsv_extract_values(red_values, hdr_data_red) &&
+        !ff_qsv_extract_values(green_values, hdr_data_green) &&
+        !ff_qsv_extract_values(blue_values, hdr_data_blue) &&
+        !ff_qsv_extract_values(white_point_values, hdr_data_white_point) &&
+        !ff_qsv_extract_values(light_info_values, hdr_data_light_level)) {
+            hdr_meta->display_primaries[0][0] = (AVRational) { hdr_data_red[0], 1 };
+            hdr_meta->display_primaries[0][1] = (AVRational) { hdr_data_red[1], 1 };
+            hdr_meta->display_primaries[1][0] = (AVRational) { hdr_data_green[0], 1 };
+            hdr_meta->display_primaries[1][1] = (AVRational) { hdr_data_green[1], 1 };
+            hdr_meta->display_primaries[2][0] = (AVRational) { hdr_data_blue[0], 1 };
+            hdr_meta->display_primaries[2][1] = (AVRational) { hdr_data_blue[1], 1 };
+            hdr_meta->white_point[0] = (AVRational) { hdr_data_white_point[0], 1 };
+            hdr_meta->white_point[1] = (AVRational) { hdr_data_white_point[1], 1 };
+            hdr_meta->min_luminance = (AVRational) { hdr_data_light_level[1], 1 };
+            hdr_meta->max_luminance =(AVRational) { hdr_data_light_level[0], 1 };
+            hdr_meta->has_primaries = 1;
+            hdr_meta->has_luminance = 1;
+
+            goto end;
+    }else {
+        ret = AVERROR(EINVAL);
+    }
+
+end:
+    av_free(red_values);
+    av_free(green_values);
+    av_free(blue_values);
+    av_free(white_point_values);
+    av_free(light_info_values);
+
+    return ret;
+}
+
+int ff_qsv_get_content_light_level(char *value, AVContentLightMetadata *light_meta)
+{
+    int n = strlen(value);
+    int results[2];
+    if (!ff_qsv_extract_values(value, results)) {
+        if (n > QSV_PARAMS_BUFFER_LENGTH) {
+            return AVERROR(EINVAL);
+        }
+    }
+    light_meta->MaxCLL = results[0];
+    light_meta->MaxFALL = results[1];
+
+    return 0;
+}
+
+int ff_avcol_range_to_mfx_col_range(int color_range)
+{
+    switch (color_range) {
+        case AVCOL_RANGE_JPEG:
+            return MFX_NOMINALRANGE_0_255;
+            break;
+        case AVCOL_RANGE_MPEG:
+            return MFX_NOMINALRANGE_16_235;
+            break;
+        default:
+            return MFX_NOMINALRANGE_UNKNOWN;
+    }
+}

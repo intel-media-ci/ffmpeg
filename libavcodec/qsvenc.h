@@ -25,11 +25,19 @@
 
 #include <stdint.h>
 #include <sys/types.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 #include <mfx/mfxvideo.h>
 
 #include "libavutil/avutil.h"
 #include "libavutil/fifo.h"
+#include "libavutil/mastering_display_metadata.h"
+#include "libavutil/rational.h"
+#include "libavutil/parseutils.h"
+#include "libavutil/pixdesc.h"
+
 
 #include "avcodec.h"
 #include "hwconfig.h"
@@ -38,6 +46,9 @@
 #define QSV_HAVE_CO2 QSV_VERSION_ATLEAST(1, 6)
 #define QSV_HAVE_CO3 QSV_VERSION_ATLEAST(1, 11)
 #define QSV_HAVE_CO_VPS  QSV_VERSION_ATLEAST(1, 17)
+#define QSV_HAVE_HDR_METADATA QSV_VERSION_ATLEAST(1, 26)
+#define QSV_HAVE_VIDEO_SIGNAL_INFO QSV_VERSION_ATLEAST(1, 3)
+
 
 #define QSV_HAVE_EXT_HEVC_TILES QSV_VERSION_ATLEAST(1, 13)
 #define QSV_HAVE_EXT_VP9_PARAM QSV_VERSION_ATLEAST(1, 26)
@@ -74,6 +85,16 @@
 #define MFX_LOOKAHEAD_DS_4x 0
 #endif
 
+#define QSV_PARAM_BAD_NAME (-1)
+#define QSV_PARAM_BAD_VALUE (-2)
+#define QSV_PARAMS_BUFFER_LENGTH 100
+#define QSV_PARAM_VALID (0)
+#define VIDEO_SIGNAL_COLOR_DESCRIPTION_PRESENT (1)
+#define VIDEO_SIGNAL_FORMAT_UNSPECIFIED (5)
+#define RGB_CHANNEL_LENGTH (2)
+#define LIGHT_LEVEL_DATA_LENGTH (2)
+#define WHITE_POINT_DATA_LENGTH (2)
+
 #define QSV_COMMON_OPTS \
 { "async_depth", "Maximum processing parallelism", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = ASYNC_DEPTH_DEFAULT }, 1, INT_MAX, VE },                          \
 { "avbr_accuracy",    "Accuracy of the AVBR ratecontrol (unit of tenth of percent)",    OFFSET(qsv.avbr_accuracy),    AV_OPT_TYPE_INT, { .i64 = 1 }, 1, UINT16_MAX, VE }, \
@@ -97,6 +118,18 @@
 { "b_strategy",     "Strategy to choose between I/P/B-frames", OFFSET(qsv.b_strategy),    AV_OPT_TYPE_INT, { .i64 = -1 }, -1,          1, VE },                         \
 { "forced_idr",     "Forcing I frames as IDR frames",         OFFSET(qsv.forced_idr),     AV_OPT_TYPE_BOOL,{ .i64 = 0  },  0,          1, VE },                         \
 { "low_power", "enable low power mode(experimental: many limitations by mfx version, BRC modes, etc.)", OFFSET(qsv.low_power), AV_OPT_TYPE_BOOL, { .i64 = -1}, -1, 1, VE},\
+{ "qsv_params", "set the qsv configuration using a :-separated list of key=value parameters", OFFSET(qsv.qsv_opts), AV_OPT_TYPE_DICT, { 0 }, 0, 0, VE },\
+
+/* String keys and values accepted by qsv_param_keys*/
+static const char * const qsv_color_range_names[] = { "limited", "full", 0 };
+static const char * const qsv_colorprim_names[] = { "reserved", "bt709", "unknown",
+                                                    "reserved", "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", "bt2020", "smpte428", "smpte431", "smpte432", 0 };
+static const char * const qsv_transfer_names[] = { "reserved", "bt709", "unknown", "reserved", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear", "log100",
+                                                    "log316", "iec61966-2-4", "bt1361e", "iec61966-2-1", "bt2020-10", "bt2020-12",
+                                                    "smpte2084", "smpte428", "arib-std-b67", 0 };
+static const char * const qsv_colmatrix_names[] = { "gbr", "bt709", "unknown", "", "fcc", "bt470bg", "smpte170m", "smpte240m",
+                                                      "ycgco", "bt2020nc", "bt2020c", "smpte2085", "chroma-derived-nc", "chroma-derived-c", "ictcp", 0 };
+static const char * const qsv_key_names[] = { "range", "colorprim", "transfer", "colormatrix", "master-display", "max-cll" };
 
 extern const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[];
 
@@ -131,6 +164,9 @@ typedef struct QSVEncContext {
 #if QSV_HAVE_EXT_HEVC_TILES
     mfxExtHEVCTiles exthevctiles;
 #endif
+#if QSV_HAVE_HDR_METADATA
+    mfxExtMasteringDisplayColourVolume master_display_volume_data;
+#endif
 #if QSV_HAVE_EXT_VP9_PARAM
     mfxExtVP9Param  extvp9param;
 #endif
@@ -141,7 +177,7 @@ typedef struct QSVEncContext {
 
     mfxExtVideoSignalInfo extvsi;
 
-    mfxExtBuffer  *extparam_internal[3 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + (QSV_HAVE_MF * 2)];
+    mfxExtBuffer  *extparam_internal[3 + QSV_HAVE_CO2 + QSV_HAVE_CO3 + (QSV_HAVE_MF * 2) + QSV_HAVE_HDR_METADATA + QSV_HAVE_VIDEO_SIGNAL_INFO];
     int         nb_extparam_internal;
 
     mfxExtBuffer **extparam;
@@ -196,6 +232,7 @@ typedef struct QSVEncContext {
     int gpb;
 
     int a53_cc;
+	AVDictionary *qsv_opts;
 
 #if QSV_HAVE_MF
     int mfmode;
@@ -211,5 +248,74 @@ int ff_qsv_encode(AVCodecContext *avctx, QSVEncContext *q,
                   AVPacket *pkt, const AVFrame *frame, int *got_packet);
 
 int ff_qsv_enc_close(AVCodecContext *avctx, QSVEncContext *q);
+
+/**
+ * Verify a key that specifies a specific qsv parameter exists and its value
+ * is valid
+ */
+int ff_qsv_validate_params(char *key, char *value);
+
+/**
+ * validate master display values provided as input and check if they are within HDR
+ * range
+ */
+int ff_qsv_validate_display(char *value);
+
+/**
+ * Extract the display_color values once verified and store in an AVMasteringDisplayMetadata
+ * struct
+ */
+int ff_qsv_extract_display_values(char *value, AVMasteringDisplayMetadata *aVMasteringDisplayMetadata);
+
+/**
+ * Verify content light level is within acceptable HDR range
+ */
+int ff_qsv_validate_cll(char *value);
+
+/**
+ * Parse and extract values from a string and store them in an array as integers
+ */
+int ff_qsv_extract_values(char *input_value, int *output_values);
+
+/**
+ * validate display's RGB and white point color levels
+ * @param input_colors an array representation of the X and Y values of the color.
+ */
+int ff_qsv_validate_display_color_range(int *input_colors);
+
+/**
+ * validate display's luminousity
+ * @param input_luminousity an array representation of the min and max values of the display luminousity.
+ */
+
+int ff_qsv_validate_display_luminousity_range(int *input_luminousity);
+
+/**
+ * Obtain video range value from the acceptable strings
+ * @param value a predefined string defining the video color range as per ISO/IEC TR 23091-4.
+ */
+
+int ff_qsv_extract_range_value(char *value);
+
+/**
+ * Obtain source video light level and assign these values to AVContentLightMetadata reference
+ * @param value a predefined string defining the light level.
+ * @param light_meta AVContentLightMetadata reference.
+ */
+ int ff_qsv_get_content_light_level(char *value, AVContentLightMetadata *light_meta);
+
+/**
+ * convert AVCodecContext color range value to equivalent mfx color range
+ * @param AVCodecContext color range
+ */
+int ff_avcol_range_to_mfx_col_range(int color_range);
+
+/**
+* Extract a substring from a string from a specified index
+ * @param start_index, where the target substring offset begins
+ * @param input_string, pointer to the first character of the original long string
+ * @param ouput_string,  pointer to the first character of the string variable that will hold the result substring
+ */
+void ff_build_sub_string(char *input_string, char *ouput_string, int start_index);
 
 #endif /* AVCODEC_QSVENC_H */
