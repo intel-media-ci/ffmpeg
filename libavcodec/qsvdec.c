@@ -92,6 +92,7 @@ typedef struct QSVContext {
 
     mfxExtBuffer **ext_buffers;
     int         nb_ext_buffers;
+    int complete_pkt;
 } QSVContext;
 
 static const AVCodecHWConfigInternal *const qsv_hw_configs[] = {
@@ -349,7 +350,7 @@ static int qsv_decode_header(AVCodecContext *avctx, QSVContext *q,
         bs.DataLength = avpkt->size;
         bs.MaxLength  = bs.DataLength;
         bs.TimeStamp  = PTS_TO_MFX_PTS(avpkt->pts, avctx->pkt_timebase);
-        if (avctx->field_order == AV_FIELD_PROGRESSIVE)
+        if (q->complete_pkt)
             bs.DataFlag   |= MFX_BITSTREAM_COMPLETE_FRAME;
     } else
         return AVERROR_INVALIDDATA;
@@ -514,7 +515,7 @@ static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
         bs.DataLength = avpkt->size;
         bs.MaxLength  = bs.DataLength;
         bs.TimeStamp  = PTS_TO_MFX_PTS(avpkt->pts, avctx->pkt_timebase);
-        if (avctx->field_order == AV_FIELD_PROGRESSIVE)
+        if (q->complete_pkt)
             bs.DataFlag   |= MFX_BITSTREAM_COMPLETE_FRAME;
     }
 
@@ -940,6 +941,8 @@ static const AVOption options[] = {
         { "default", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_DEFAULT }, 0, 0, VD, "gpu_copy"},
         { "on",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_ON },      0, 0, VD, "gpu_copy"},
         { "off",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_OFF },     0, 0, VD, "gpu_copy"},
+
+    { "low_latency", "Enabling this option to reduce latency if the input packet contain complete frame.", OFFSET(qsv.complete_pkt), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VD },
     { NULL },
 };
 
