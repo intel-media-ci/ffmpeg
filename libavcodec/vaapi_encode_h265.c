@@ -307,11 +307,14 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
     ptl->general_profile_idc   = avctx->profile;
     ptl->general_tier_flag     = priv->tier;
 
-    if (chroma_format == 1) {
-        ptl->general_profile_compatibility_flag[1] = bit_depth ==  8;
-        ptl->general_profile_compatibility_flag[2] = bit_depth <= 10;
+    ptl->general_profile_compatibility_flag[ptl->general_profile_idc] = 1;
+
+    if (ptl->general_profile_compatibility_flag[1])
+        ptl->general_profile_compatibility_flag[2] = 1;
+    if (ptl->general_profile_compatibility_flag[3]) {
+        ptl->general_profile_compatibility_flag[1] = 1;
+        ptl->general_profile_compatibility_flag[2] = 1;
     }
-    ptl->general_profile_compatibility_flag[4] = 1;
 
     ptl->general_progressive_source_flag    = 1;
     ptl->general_interlaced_source_flag     = 0;
