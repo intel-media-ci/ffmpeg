@@ -4290,7 +4290,6 @@ static void param_write_hex(AVIOContext *pb, const char *name, const uint8_t *va
     char buf[150];
     len = FFMIN(sizeof(buf) / 2 - 1, len);
     ff_data_to_hex(buf, value, len, 0);
-    buf[2 * len] = '\0';
     avio_printf(pb, "<param name=\"%s\" value=\"%s\" valuetype=\"data\"/>\n", name, buf);
 }
 
@@ -6458,8 +6457,6 @@ static void mov_free(AVFormatContext *s)
     MOVMuxContext *mov = s->priv_data;
     int i;
 
-    av_packet_free(&mov->pkt);
-
     if (!mov->tracks)
         return;
 
@@ -6569,6 +6566,7 @@ static int mov_init(AVFormatContext *s)
     int i, ret;
 
     mov->fc = s;
+    mov->pkt = ffformatcontext(s)->pkt;
 
     /* Default mode == MP4 */
     mov->mode = MODE_MP4;
@@ -6713,10 +6711,6 @@ static int mov_init(AVFormatContext *s)
 
         mov->nb_streams += mov->nb_meta_tmcd;
     }
-
-    mov->pkt = av_packet_alloc();
-    if (!mov->pkt)
-        return AVERROR(ENOMEM);
 
     // Reserve an extra stream for chapters for the case where chapters
     // are written in the trailer
@@ -7343,10 +7337,10 @@ static int mov_write_trailer(AVFormatContext *s)
     return res;
 }
 
-static int mov_check_bitstream(struct AVFormatContext *s, const AVPacket *pkt)
+static int mov_check_bitstream(AVFormatContext *s, AVStream *st,
+                               const AVPacket *pkt)
 {
     int ret = 1;
-    AVStream *st = s->streams[pkt->stream_index];
 
     if (st->codecpar->codec_id == AV_CODEC_ID_AAC) {
         if (pkt->size > 2 && (AV_RB16(pkt->data) & 0xfff0) == 0xfff0)

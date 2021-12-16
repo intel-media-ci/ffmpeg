@@ -30,6 +30,7 @@
 #include "internal.h"
 #include "get_bits.h"
 #include "libavutil/imgutils.h"
+#include "thread.h"
 
 struct BitpackedContext {
     int (*decode)(AVCodecContext *avctx, AVFrame *frame,
@@ -64,11 +65,12 @@ static int bitpacked_decode_yuv422p10(AVCodecContext *avctx, AVFrame *frame,
 {
     uint64_t frame_size = (uint64_t)avctx->width * (uint64_t)avctx->height * 20;
     uint64_t packet_size = (uint64_t)avpkt->size * 8;
+    ThreadFrame tframe = { .f = frame };
     GetBitContext bc;
     uint16_t *y, *u, *v;
     int ret, i, j;
 
-    ret = ff_get_buffer(avctx, frame, 0);
+    ret = ff_thread_get_buffer(avctx, &tframe, 0);
     if (ret < 0)
         return ret;
 
@@ -129,12 +131,12 @@ static int bitpacked_decode(AVCodecContext *avctx, void *data, int *got_frame,
     AVFrame *frame = data;
     int res;
 
-    frame->pict_type = AV_PICTURE_TYPE_I;
-    frame->key_frame = 1;
-
     res = bc->decode(avctx, frame, avpkt);
     if (res)
         return res;
+
+    frame->pict_type = AV_PICTURE_TYPE_I;
+    frame->key_frame = 1;
 
     *got_frame = 1;
     return buf_size;
@@ -149,7 +151,7 @@ const AVCodec ff_bitpacked_decoder = {
     .priv_data_size        = sizeof(struct BitpackedContext),
     .init = bitpacked_init_decoder,
     .decode = bitpacked_decode,
-    .capabilities = AV_CODEC_CAP_EXPERIMENTAL,
+    .capabilities   = AV_CODEC_CAP_FRAME_THREADS,
     .codec_tags     = (const uint32_t []){
         MKTAG('U', 'Y', 'V', 'Y'),
         FF_CODEC_TAGS_END,

@@ -979,6 +979,7 @@ static int mov_read_adrm(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     uint8_t output[64];
     uint8_t file_checksum[20];
     uint8_t calculated_checksum[20];
+    char checksum_string[2 * sizeof(file_checksum) + 1];
     struct AVSHA *sha;
     int i;
     int ret = 0;
@@ -1003,10 +1004,9 @@ static int mov_read_adrm(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     avio_read(pb, output, 4); // go to offset 4, absolute position 0x28d
     avio_read(pb, file_checksum, 20);
 
-    av_log(c->fc, AV_LOG_INFO, "[aax] file checksum == "); // required by external tools
-    for (i = 0; i < 20; i++)
-        av_log(c->fc, AV_LOG_INFO, "%02x", file_checksum[i]);
-    av_log(c->fc, AV_LOG_INFO, "\n");
+    // required by external tools
+    ff_data_to_hex(checksum_string, file_checksum, sizeof(file_checksum), 1);
+    av_log(c->fc, AV_LOG_INFO, "[aax] file checksum == %s\n", checksum_string);
 
     /* verify activation data */
     if (!activation_bytes) {
@@ -1930,6 +1930,8 @@ static int mov_read_glbl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         // wrap a whole fiel atom inside of a glbl atom.
         unsigned size = avio_rb32(pb);
         unsigned type = avio_rl32(pb);
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
         avio_seek(pb, -8, SEEK_CUR);
         if (type == MKTAG('f','i','e','l') && size == atom.size)
             return mov_read_default(c, pb, atom);
@@ -2536,6 +2538,10 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
             mov_parse_stsd_audio(c, pb, st, sc);
             if (st->codecpar->sample_rate < 0) {
                 av_log(c->fc, AV_LOG_ERROR, "Invalid sample rate %d\n", st->codecpar->sample_rate);
+                return AVERROR_INVALIDDATA;
+            }
+            if (st->codecpar->channels < 0) {
+                av_log(c->fc, AV_LOG_ERROR, "Invalid channels %d\n", st->codecpar->channels);
                 return AVERROR_INVALIDDATA;
             }
         } else if (st->codecpar->codec_type==AVMEDIA_TYPE_SUBTITLE){
@@ -5401,6 +5407,9 @@ static int mov_read_smdm(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         av_log(c->fc, AV_LOG_WARNING, "Unsupported Mastering Display Metadata box version %d\n", version);
         return 0;
     }
+    if (sc->mastering)
+        return AVERROR_INVALIDDATA;
+
     avio_skip(pb, 3); /* flags */
 
     sc->mastering = av_mastering_display_metadata_alloc();

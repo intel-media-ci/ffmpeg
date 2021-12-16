@@ -646,7 +646,7 @@ int avio_read(AVIOContext *s, unsigned char *buf, int size)
     while (size > 0) {
         len = FFMIN(s->buf_end - s->buf_ptr, size);
         if (len == 0 || s->write_flag) {
-            if((s->direct || size > s->buffer_size) && !s->update_checksum) {
+            if((s->direct || size > s->buffer_size) && !s->update_checksum && s->read_packet) {
                 // bypass the buffer and read data directly into buf
                 len = read_packet_wrapper(s, buf, size);
                 if (len == AVERROR_EOF) {
@@ -977,18 +977,19 @@ int ffio_fdopen(AVIOContext **s, URLContext *h)
                             (int (*)(void *, uint8_t *, int))  ffurl_read,
                             (int (*)(void *, uint8_t *, int))  ffurl_write,
                             (int64_t (*)(void *, int64_t, int))ffurl_seek);
-    if (!*s)
-        goto fail;
-
+    if (!*s) {
+        av_freep(&buffer);
+        return AVERROR(ENOMEM);
+    }
     (*s)->protocol_whitelist = av_strdup(h->protocol_whitelist);
     if (!(*s)->protocol_whitelist && h->protocol_whitelist) {
         avio_closep(s);
-        goto fail;
+        return AVERROR(ENOMEM);
     }
     (*s)->protocol_blacklist = av_strdup(h->protocol_blacklist);
     if (!(*s)->protocol_blacklist && h->protocol_blacklist) {
         avio_closep(s);
-        goto fail;
+        return AVERROR(ENOMEM);
     }
     (*s)->direct = h->flags & AVIO_FLAG_DIRECT;
 
@@ -1006,9 +1007,6 @@ int ffio_fdopen(AVIOContext **s, URLContext *h)
     ((FFIOContext*)(*s))->short_seek_get = (int (*)(void *))ffurl_get_short_seek;
     (*s)->av_class = &ff_avio_class;
     return 0;
-fail:
-    av_freep(&buffer);
-    return AVERROR(ENOMEM);
 }
 
 URLContext* ffio_geturlcontext(AVIOContext *s)
@@ -1231,6 +1229,7 @@ int avio_close(AVIOContext *s)
 {
     FFIOContext *const ctx = ffiocontext(s);
     URLContext *h;
+    int ret, error;
 
     if (!s)
         return 0;
@@ -1249,9 +1248,14 @@ int avio_close(AVIOContext *s)
                ctx->bytes_read, ctx->seek_count);
     av_opt_free(s);
 
+    error = s->error;
     avio_context_free(&s);
 
-    return ffurl_close(h);
+    ret = ffurl_close(h);
+    if (ret < 0)
+        return ret;
+
+    return error;
 }
 
 int avio_closep(AVIOContext **s)

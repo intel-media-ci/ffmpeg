@@ -322,6 +322,7 @@
 #include "libavformat/version.h"
 
 struct AVFormatContext;
+struct AVStream;
 
 struct AVDeviceInfoList;
 struct AVDeviceCapabilitiesQuery;
@@ -623,9 +624,13 @@ typedef struct AVOutputFormat {
     /**
      * Set up any necessary bitstream filtering and extract any extra data needed
      * for the global header.
+     *
+     * @note pkt might have been directly forwarded by a meta-muxer; therefore
+     *       pkt->stream_index as well as the pkt's timebase might be invalid.
      * Return 0 if more packets from this stream must be checked; 1 if not.
      */
-    int (*check_bitstream)(struct AVFormatContext *, const AVPacket *pkt);
+    int (*check_bitstream)(struct AVFormatContext *s, struct AVStream *st,
+                           const AVPacket *pkt);
 } AVOutputFormat;
 /**
  * @}
@@ -1781,6 +1786,19 @@ typedef struct AVFormatContext {
      * - decoding: set by user
      */
     int max_probe_packets;
+
+    /**
+     * A callback for closing the streams opened with AVFormatContext.io_open().
+     *
+     * Using this is preferred over io_close, because this can return an error.
+     * Therefore this callback is used instead of io_close by the generic
+     * libavformat code if io_close is NULL or the default.
+     *
+     * @param s the format context
+     * @param pb IO context to be closed and freed
+     * @return 0 on success, a negative AVERROR code on failure
+     */
+    int (*io_close2)(struct AVFormatContext *s, AVIOContext *pb);
 } AVFormatContext;
 
 /**

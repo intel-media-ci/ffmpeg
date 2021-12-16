@@ -62,7 +62,7 @@ typedef struct LibplaceboContext {
     float polar_cutoff;
     int disable_linear;
     int disable_builtin;
-    int force_3dlut;
+    int force_icc_lut;
     int force_dither;
     int disable_fbos;
 
@@ -275,64 +275,18 @@ static void libplacebo_uninit(AVFilterContext *avctx)
     s->gpu = NULL;
 }
 
-static int wrap_vkframe(pl_gpu gpu, const AVFrame *frame, int plane, pl_tex *tex)
-{
-    AVVkFrame *vkf = (AVVkFrame *) frame->data[0];
-    const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
-    const AVVulkanFramesContext *vkfc = hwfc->hwctx;
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
-    const VkFormat *vk_fmt = av_vkfmt_from_pixfmt(hwfc->sw_format);
-    const int chroma = plane == 1 || plane == 2;
-
-    *tex = pl_vulkan_wrap(gpu, pl_vulkan_wrap_params(
-        .image = vkf->img[plane],
-        .format = vk_fmt[plane],
-        .width = AV_CEIL_RSHIFT(frame->width, chroma ? desc->log2_chroma_w : 0),
-        .height = AV_CEIL_RSHIFT(frame->height, chroma ? desc->log2_chroma_h : 0),
-        .usage = vkfc->usage,
-    ));
-
-    if (!*tex)
-        return AVERROR(ENOMEM);
-
-    pl_vulkan_release(gpu, *tex, vkf->layout[plane], (pl_vulkan_sem) {
-        .sem = vkf->sem[plane],
-        .value = vkf->sem_value[plane]
-    });
-    return 0;
-}
-
-static int unwrap_vkframe(pl_gpu gpu, AVFrame *frame, int plane, pl_tex *tex)
-{
-    AVVkFrame *vkf = (AVVkFrame *) frame->data[0];
-    int ok = pl_vulkan_hold_raw(gpu, *tex, &vkf->layout[plane],
-                                (pl_vulkan_sem) { vkf->sem[plane], vkf->sem_value[plane] + 1 });
-    vkf->access[plane] = 0;
-    vkf->sem_value[plane] += !!ok;
-    return ok ? 0 : AVERROR_EXTERNAL;
-}
-
-static void set_sample_depth(struct pl_frame *out_frame, const AVFrame *frame)
-{
-    const AVHWFramesContext *hwfc = (AVHWFramesContext *) frame->hw_frames_ctx->data;
-    pl_fmt fmt = out_frame->planes[0].texture->params.format;
-    struct pl_bit_encoding *bits = &out_frame->repr.bits;
-    bits->sample_depth = fmt->component_depth[0];
-
-    switch (hwfc->sw_format) {
-    case AV_PIX_FMT_P010: bits->bit_shift = 6; break;
-    default: break;
-    }
-}
-
 static int process_frames(AVFilterContext *avctx, AVFrame *out, AVFrame *in)
 {
-    int err = 0;
+    int err = 0, ok;
     LibplaceboContext *s = avctx->priv;
     struct pl_render_params params;
     struct pl_frame image, target;
-    pl_frame_from_avframe(&image, in);
-    pl_frame_from_avframe(&target, out);
+    ok = pl_map_avframe(s->gpu, &image, NULL, in);
+    ok &= pl_map_avframe(s->gpu, &target, NULL, out);
+    if (!ok) {
+        err = AVERROR_EXTERNAL;
+        goto fail;
+    }
 
     if (!s->apply_filmgrain)
         image.film_grain.type = PL_FILM_GRAIN_NONE;
@@ -403,7 +357,7 @@ static int process_frames(AVFilterContext *avctx, AVFrame *out, AVFrame *in)
         .polar_cutoff = s->polar_cutoff,
         .disable_linear_scaling = s->disable_linear,
         .disable_builtin_scalers = s->disable_builtin,
-        .force_3dlut = s->force_3dlut,
+        .force_icc_lut = s->force_icc_lut,
         .force_dither = s->force_dither,
         .disable_fbos = s->disable_fbos,
     };
@@ -411,38 +365,17 @@ static int process_frames(AVFilterContext *avctx, AVFrame *out, AVFrame *in)
     RET(find_scaler(avctx, &params.upscaler, s->upscaler));
     RET(find_scaler(avctx, &params.downscaler, s->downscaler));
 
-    /* Ideally, we would persistently wrap all of these AVVkFrames into pl_tex
-     * objects, but for now we'll just create and destroy a wrapper per frame.
-     * Note that doing it this way is suboptimal, since it results in the
-     * creation and destruction of a VkSampler and VkFramebuffer per frame.
-     *
-     * FIXME: Can we do better? */
-    for (int i = 0; i < image.num_planes; i++)
-        RET(wrap_vkframe(s->gpu, in, i, &image.planes[i].texture));
-    for (int i = 0; i < target.num_planes; i++)
-        RET(wrap_vkframe(s->gpu, out, i, &target.planes[i].texture));
-
-    /* Since we-re mapping vkframes manually, the pl_frame helpers don't know
-     * about the mismatch between the sample format and the color depth. */
-    set_sample_depth(&image, in);
-    set_sample_depth(&target, out);
-
     pl_render_image(s->renderer, &image, &target, &params);
-
-    for (int i = 0; i < image.num_planes; i++)
-        RET(unwrap_vkframe(s->gpu, in, i, &image.planes[i].texture));
-    for (int i = 0; i < target.num_planes; i++)
-        RET(unwrap_vkframe(s->gpu, out, i, &target.planes[i].texture));
+    pl_unmap_avframe(s->gpu, &image);
+    pl_unmap_avframe(s->gpu, &target);
 
     /* Flush the command queues for performance */
     pl_gpu_flush(s->gpu);
+    return 0;
 
-    /* fall through */
 fail:
-    for (int i = 0; i < image.num_planes; i++)
-        pl_tex_destroy(s->gpu, &image.planes[i].texture);
-    for (int i = 0; i < target.num_planes; i++)
-        pl_tex_destroy(s->gpu, &target.planes[i].texture);
+    pl_unmap_avframe(s->gpu, &image);
+    pl_unmap_avframe(s->gpu, &target);
     return err;
 }
 
@@ -690,7 +623,7 @@ static const AVOption libplacebo_options[] = {
     { "polar_cutoff", "Polar LUT cutoff", OFFSET(polar_cutoff), AV_OPT_TYPE_FLOAT, {.i64 = 0}, 0.0, 1.0, DYNAMIC },
     { "disable_linear", "Disable linear scaling", OFFSET(disable_linear), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
     { "disable_builtin", "Disable built-in scalers", OFFSET(disable_builtin), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
-    { "force_3dlut", "Force the use of a full 3DLUT", OFFSET(force_3dlut), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
+    { "force_icc_lut", "Force the use of a full ICC 3DLUT for color mapping", OFFSET(force_icc_lut), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
     { "force_dither", "Force dithering", OFFSET(force_dither), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
     { "disable_fbos", "Force-disable FBOs", OFFSET(disable_fbos), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
     { NULL },

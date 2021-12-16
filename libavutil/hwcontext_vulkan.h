@@ -138,11 +138,28 @@ typedef struct AVVulkanDeviceContext {
 } AVVulkanDeviceContext;
 
 /**
+ * Defines the behaviour of frame allocation.
+ */
+typedef enum AVVkFrameFlags {
+    /* Unless this flag is set, autodetected flags will be OR'd based on the
+     * device and tiling during av_hwframe_ctx_init(). */
+    AV_VK_FRAME_FLAG_NONE              = (1ULL << 0),
+
+    /* Image planes will be allocated in a single VkDeviceMemory, rather
+     * than as per-plane VkDeviceMemory allocations. Required for exporting
+     * to VAAPI on Intel devices. */
+    AV_VK_FRAME_FLAG_CONTIGUOUS_MEMORY = (1ULL << 1),
+} AVVkFrameFlags;
+
+/**
  * Allocated as AVHWFramesContext.hwctx, used to set pool-specific options
  */
 typedef struct AVVulkanFramesContext {
     /**
-     * Controls the tiling of allocated frames.
+     * Controls the tiling of allocated frames. If left as optimal tiling,
+     * then during av_hwframe_ctx_init() will decide based on whether the device
+     * supports DRM modifiers, or if the linear_images flag is set, otherwise
+     * will allocate optimally-tiled images.
      */
     VkImageTiling tiling;
 
@@ -154,6 +171,12 @@ typedef struct AVVulkanFramesContext {
 
     /**
      * Extension data for image creation.
+     * If VkImageDrmFormatModifierListCreateInfoEXT is present in the chain,
+     * and the device supports DRM modifiers, then images will be allocated
+     * with the specific requested DRM modifiers.
+     * Additional structures may be added at av_hwframe_ctx_init() time,
+     * which will be freed automatically on uninit(), so users need only free
+     * any structures they've allocated themselves.
      */
     void *create_pnext;
 
@@ -165,6 +188,13 @@ typedef struct AVVulkanFramesContext {
      * extensions are present in enabled_dev_extensions.
      */
     void *alloc_pnext[AV_NUM_DATA_POINTERS];
+
+    /**
+     * A combination of AVVkFrameFlags. Unless AV_VK_FRAME_FLAG_NONE is set,
+     * autodetected flags will be OR'd based on the device and tiling during
+     * av_hwframe_ctx_init().
+     */
+    AVVkFrameFlags flags;
 } AVVulkanFramesContext;
 
 /*
@@ -192,8 +222,9 @@ typedef struct AVVkFrame {
     VkImageTiling tiling;
 
     /**
-     * Memory backing the images. Could be less than the amount of images
-     * if importing from a DRM or VAAPI frame.
+     * Memory backing the images. Could be less than the amount of planes,
+     * in which case the offset value will indicate the binding offset of
+     * each plane in the memory.
      */
     VkDeviceMemory mem[AV_NUM_DATA_POINTERS];
     size_t size[AV_NUM_DATA_POINTERS];
@@ -210,12 +241,10 @@ typedef struct AVVkFrame {
     VkImageLayout layout[AV_NUM_DATA_POINTERS];
 
     /**
-     * Synchronization timeline semaphores. Must not be freed manually.
-     * Must be waited on at every submission using the value in sem_value,
-     * and must be signalled at every submission, using an incremented value.
-     *
-     * Could be less than the amount of images: either one per VkDeviceMemory
-     * or one for the entire frame. All others will be set to VK_NULL_HANDLE.
+     * Synchronization timeline semaphores, one for each sw_format plane.
+     * Must not be freed manually. Must be waited on at every submission using
+     * the value in sem_value, and must be signalled at every submission,
+     * using an incremented value.
      */
     VkSemaphore sem[AV_NUM_DATA_POINTERS];
 
@@ -230,6 +259,11 @@ typedef struct AVVkFrame {
      * Internal data.
      */
     struct AVVkFrameInternal *internal;
+
+    /**
+     * Describes the binding offset of each plane to the VkDeviceMemory.
+     */
+    ptrdiff_t offset[AV_NUM_DATA_POINTERS];
 } AVVkFrame;
 
 /**

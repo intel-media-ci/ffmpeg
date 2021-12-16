@@ -52,9 +52,6 @@ const char *av_get_colorspace_name(enum AVColorSpace val)
 #endif
 static void get_frame_defaults(AVFrame *frame)
 {
-    if (frame->extended_data != frame->data)
-        av_freep(&frame->extended_data);
-
     memset(frame, 0, sizeof(*frame));
 
     frame->pts                   =
@@ -63,6 +60,7 @@ static void get_frame_defaults(AVFrame *frame)
     frame->pkt_duration        = 0;
     frame->pkt_pos             = -1;
     frame->pkt_size            = -1;
+    frame->time_base           = (AVRational){ 0, 1 };
     frame->key_frame           = 1;
     frame->sample_aspect_ratio = (AVRational){ 0, 1 };
     frame->format              = -1; /* unknown */
@@ -98,12 +96,11 @@ static void wipe_side_data(AVFrame *frame)
 
 AVFrame *av_frame_alloc(void)
 {
-    AVFrame *frame = av_mallocz(sizeof(*frame));
+    AVFrame *frame = av_malloc(sizeof(*frame));
 
     if (!frame)
         return NULL;
 
-    frame->extended_data = NULL;
     get_frame_defaults(frame);
 
     return frame;
@@ -278,6 +275,7 @@ static int frame_copy_props(AVFrame *dst, const AVFrame *src, int force_copy)
     dst->pkt_pos                = src->pkt_pos;
     dst->pkt_size               = src->pkt_size;
     dst->pkt_duration           = src->pkt_duration;
+    dst->time_base              = src->time_base;
     dst->reordered_opaque       = src->reordered_opaque;
     dst->quality                = src->quality;
     dst->best_effort_timestamp  = src->best_effort_timestamp;
@@ -455,6 +453,9 @@ void av_frame_unref(AVFrame *frame)
     av_buffer_unref(&frame->opaque_ref);
     av_buffer_unref(&frame->private_ref);
 
+    if (frame->extended_data != frame->data)
+        av_freep(&frame->extended_data);
+
     get_frame_defaults(frame);
 }
 
@@ -466,7 +467,6 @@ void av_frame_move_ref(AVFrame *dst, AVFrame *src)
     *dst = *src;
     if (src->extended_data == src->data)
         dst->extended_data = dst->data;
-    memset(src, 0, sizeof(*src));
     get_frame_defaults(src);
 }
 

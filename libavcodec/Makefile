@@ -243,7 +243,8 @@ OBJS-$(CONFIG_BINK_DECODER)            += bink.o binkdsp.o
 OBJS-$(CONFIG_BINKAUDIO_DCT_DECODER)   += binkaudio.o
 OBJS-$(CONFIG_BINKAUDIO_RDFT_DECODER)  += binkaudio.o
 OBJS-$(CONFIG_BINTEXT_DECODER)         += bintext.o cga_data.o
-OBJS-$(CONFIG_BITPACKED_DECODER)       += bitpacked.o
+OBJS-$(CONFIG_BITPACKED_DECODER)       += bitpacked_dec.o
+OBJS-$(CONFIG_BITPACKED_ENCODER)       += bitpacked_enc.o
 OBJS-$(CONFIG_BMP_DECODER)             += bmp.o msrledec.o
 OBJS-$(CONFIG_BMP_ENCODER)             += bmpenc.o
 OBJS-$(CONFIG_BMV_AUDIO_DECODER)       += bmvaudio.o
@@ -975,6 +976,7 @@ OBJS-$(CONFIG_VP9_DXVA2_HWACCEL)          += dxva2_vp9.o
 OBJS-$(CONFIG_VP9_NVDEC_HWACCEL)          += nvdec_vp9.o
 OBJS-$(CONFIG_VP9_VAAPI_HWACCEL)          += vaapi_vp9.o
 OBJS-$(CONFIG_VP9_VDPAU_HWACCEL)          += vdpau_vp9.o
+OBJS-$(CONFIG_VP9_VIDEOTOOLBOX_HWACCEL)   += videotoolbox_vp9.o
 OBJS-$(CONFIG_VP8_QSV_HWACCEL)            += qsvdec.o
 
 # libavformat dependencies

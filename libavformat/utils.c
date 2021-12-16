@@ -1151,6 +1151,7 @@ char *ff_data_to_hex(char *buff, const uint8_t *src, int s, int lowercase)
         buff[i * 2]     = hex_table[src[i] >> 4];
         buff[i * 2 + 1] = hex_table[src[i] & 0xF];
     }
+    buff[2 * s] = '\0';
 
     return buff;
 }
@@ -1263,7 +1264,7 @@ void ff_parse_key_value(const char *str, ff_parse_key_val_cb callback_get_buf,
     }
 }
 
-int ff_find_stream_index(AVFormatContext *s, int id)
+int ff_find_stream_index(const AVFormatContext *s, int id)
 {
     for (unsigned i = 0; i < s->nb_streams; i++)
         if (s->streams[i]->id == id)
@@ -1406,8 +1407,9 @@ AVRational av_guess_frame_rate(AVFormatContext *format, AVStream *st, AVFrame *f
  *         0  if st is NOT a matching stream
  *         >0 if st is a matching stream
  */
-static int match_stream_specifier(AVFormatContext *s, AVStream *st,
-                                  const char *spec, const char **indexptr, AVProgram **p)
+static int match_stream_specifier(const AVFormatContext *s, const AVStream *st,
+                                  const char *spec, const char **indexptr,
+                                  const AVProgram **p)
 {
     int match = 1;                      /* Stores if the specifier matches so far. */
     while (*spec) {
@@ -1474,32 +1476,32 @@ static int match_stream_specifier(AVFormatContext *s, AVStream *st,
                 return AVERROR(EINVAL);
             return match && (stream_id == st->id);
         } else if (*spec == 'm' && *(spec + 1) == ':') {
-            AVDictionaryEntry *tag;
+            const AVDictionaryEntry *tag;
             char *key, *val;
             int ret;
 
             if (match) {
-               spec += 2;
-               val = strchr(spec, ':');
+                spec += 2;
+                val = strchr(spec, ':');
 
-               key = val ? av_strndup(spec, val - spec) : av_strdup(spec);
-               if (!key)
-                   return AVERROR(ENOMEM);
+                key = val ? av_strndup(spec, val - spec) : av_strdup(spec);
+                if (!key)
+                    return AVERROR(ENOMEM);
 
-               tag = av_dict_get(st->metadata, key, NULL, 0);
-               if (tag) {
-                   if (!val || !strcmp(tag->value, val + 1))
-                       ret = 1;
-                   else
-                       ret = 0;
-               } else
-                   ret = 0;
+                tag = av_dict_get(st->metadata, key, NULL, 0);
+                if (tag) {
+                    if (!val || !strcmp(tag->value, val + 1))
+                        ret = 1;
+                    else
+                        ret = 0;
+                } else
+                    ret = 0;
 
-               av_freep(&key);
+                av_freep(&key);
             }
             return match && ret;
         } else if (*spec == 'u' && *(spec + 1) == '\0') {
-            AVCodecParameters *par = st->codecpar;
+            const AVCodecParameters *par = st->codecpar;
             int val;
             switch (par->codec_type) {
             case AVMEDIA_TYPE_AUDIO:
@@ -1535,7 +1537,7 @@ int avformat_match_stream_specifier(AVFormatContext *s, AVStream *st,
     int ret, index;
     char *endptr;
     const char *indexptr = NULL;
-    AVProgram *p = NULL;
+    const AVProgram *p = NULL;
     int nb_streams;
 
     ret = match_stream_specifier(s, st, spec, &indexptr, &p);
@@ -1558,7 +1560,7 @@ int avformat_match_stream_specifier(AVFormatContext *s, AVStream *st,
     /* If we requested a matching stream index, we have to ensure st is that. */
     nb_streams = p ? p->nb_stream_indexes : s->nb_streams;
     for (int i = 0; i < nb_streams && index >= 0; i++) {
-        AVStream *candidate = p ? s->streams[p->stream_index[i]] : s->streams[i];
+        const AVStream *candidate = s->streams[p ? p->stream_index[i] : i];
         ret = match_stream_specifier(s, candidate, spec, NULL, NULL);
         if (ret < 0)
             goto error;
@@ -1829,11 +1831,22 @@ int ff_format_output_open(AVFormatContext *s, const char *url, AVDictionary **op
     return 0;
 }
 
-void ff_format_io_close(AVFormatContext *s, AVIOContext **pb)
+void ff_format_io_close_default(AVFormatContext *s, AVIOContext *pb)
 {
-    if (*pb)
-        s->io_close(s, *pb);
+    avio_close(pb);
+}
+
+int ff_format_io_close(AVFormatContext *s, AVIOContext **pb)
+{
+    int ret = 0;
+    if (*pb) {
+        if (s->io_close == ff_format_io_close_default || s->io_close == NULL)
+            ret = s->io_close2(s, *pb);
+        else
+            s->io_close(s, *pb);
+    }
     *pb = NULL;
+    return ret;
 }
 
 int ff_is_http_proto(const char *filename) {

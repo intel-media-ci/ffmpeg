@@ -1259,7 +1259,7 @@ static void free_encoder_ctrl_payloads(mfxEncodeCtrl* enc_ctrl)
     if (enc_ctrl) {
         int i;
         for (i = 0; i < enc_ctrl->NumPayload && i < QSV_MAX_ENC_PAYLOAD; i++) {
-            av_free(enc_ctrl->Payload[i]);
+            av_freep(&enc_ctrl->Payload[i]);
         }
         enc_ctrl->NumPayload = 0;
     }
@@ -1273,6 +1273,7 @@ static void clear_unused_frames(QSVEncContext *q)
             free_encoder_ctrl_payloads(&cur->enc_ctrl);
             //do not reuse enc_ctrl from previous frame
             memset(&cur->enc_ctrl, 0, sizeof(cur->enc_ctrl));
+            cur->enc_ctrl.Payload = cur->payloads;
             if (cur->frame->format == AV_PIX_FMT_QSV) {
                 av_frame_unref(cur->frame);
             }
@@ -1309,11 +1310,7 @@ static int get_free_frame(QSVEncContext *q, QSVFrame **f)
         av_freep(&frame);
         return AVERROR(ENOMEM);
     }
-    frame->enc_ctrl.Payload = av_mallocz(sizeof(mfxPayload*) * QSV_MAX_ENC_PAYLOAD);
-    if (!frame->enc_ctrl.Payload) {
-        av_freep(&frame);
-        return AVERROR(ENOMEM);
-    }
+    frame->enc_ctrl.Payload = frame->payloads;
     *last = frame;
 
     *f = frame;
@@ -1615,7 +1612,7 @@ int ff_qsv_enc_close(AVCodecContext *avctx, QSVEncContext *q)
     while (cur) {
         q->work_frames = cur->next;
         av_frame_free(&cur->frame);
-        av_free(cur->enc_ctrl.Payload);
+        free_encoder_ctrl_payloads(&cur->enc_ctrl);
         av_freep(&cur);
         cur = q->work_frames;
     }
@@ -1629,6 +1626,14 @@ int ff_qsv_enc_close(AVCodecContext *avctx, QSVEncContext *q)
         av_fifo_generic_read(q->async_fifo, &sync, sizeof(sync), NULL);
         av_fifo_generic_read(q->async_fifo, &bs,   sizeof(bs),   NULL);
 
+#if QSV_VERSION_ATLEAST(1, 26)
+        if (avctx->codec_id == AV_CODEC_ID_H264) {
+            mfxExtBuffer **enc_buf = bs->ExtParam;
+            mfxExtAVCEncodedFrameInfo *enc_info = (mfxExtAVCEncodedFrameInfo *)(*bs->ExtParam);
+            av_freep(&enc_info);
+            av_freep(&enc_buf);
+        }
+#endif
         av_freep(&sync);
         av_freep(&bs);
         av_packet_unref(&pkt);

@@ -284,8 +284,8 @@ static void write_metadata(AVFormatContext *s, unsigned int ts)
     avio_w8(pb, FLV_TAG_TYPE_META);            // tag type META
     flv->metadata_size_pos = avio_tell(pb);
     avio_wb24(pb, 0);           // size of data part (sum of all parts below)
-    avio_wb24(pb, ts);          // timestamp
-    avio_wb32(pb, 0);           // reserved
+    put_timestamp(pb, ts);      // timestamp
+    avio_wb24(pb, 0);           // reserved
 
     /* now data of data_size size */
 
@@ -1083,10 +1083,10 @@ fail:
     return ret;
 }
 
-static int flv_check_bitstream(struct AVFormatContext *s, const AVPacket *pkt)
+static int flv_check_bitstream(AVFormatContext *s, AVStream *st,
+                               const AVPacket *pkt)
 {
     int ret = 1;
-    AVStream *st = s->streams[pkt->stream_index];
 
     if (st->codecpar->codec_id == AV_CODEC_ID_AAC) {
         if (pkt->size > 2 && (AV_RB16(pkt->data) & 0xfff0) == 0xfff0)

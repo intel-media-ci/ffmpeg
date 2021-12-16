@@ -843,6 +843,102 @@ Compute derivative/integral of audio stream.
 
 Applying both filters one after another produces original audio.
 
+@section adynamicequalizer
+
+Apply dynamic equalization to input audio stream.
+
+A description of the accepted options follows.
+
+@table @option
+@item threshold
+Set the detection threshold used to trigger equalization.
+Threshold detection is using bandpass filter.
+Default value is 0. Allowed range is from 0 to 100.
+
+@item dfrequency
+Set the detection frequency in Hz used for bandpass filter used to trigger equalization.
+Default value is 1000 Hz. Allowed range is between 2 and 1000000 Hz.
+
+@item dqfactor
+Set the detection resonance factor for bandpass filter used to trigger equalization.
+Default value is 1. Allowed range is from 0.001 to 1000.
+
+@item tfrequency
+Set the target frequency of equalization filter.
+Default value is 1000 Hz. Allowed range is between 2 and 1000000 Hz.
+
+@item tqfactor
+Set the target resonance factor for target equalization filter.
+Default value is 1. Allowed range is from 0.001 to 1000.
+
+@item attack
+Set the amount of milliseconds the signal from detection has to rise above
+the detection threshold before equalization starts.
+Default is 20. Allowed range is between 1 and 2000.
+
+@item release
+Set the amount of milliseconds the signal from detection has to fall below the
+detection threshold before equalization ends.
+Default is 200. Allowed range is between 1 and 2000.
+
+@item knee
+Curve the sharp knee around the detection threshold to calculate
+equalization gain more softly.
+Default is 1. Allowed range is between 0 and 8.
+
+@item ratio
+Set the ratio by which the equalization gain is raised.
+Default is 1. Allowed range is between 1 and 20.
+
+@item makeup
+Set the makeup offset in dB by which the equalization gain is raised.
+Default is 0. Allowed range is between 0 and 30.
+
+@item range
+Set the max allowed cut/boost amount in dB. Default is 0.
+Allowed range is from 0 to 200.
+
+@item slew
+Set the slew factor. Default is 1. Allowed range is from 1 to 200.
+
+@item mode
+Set the mode of filter operation, can be one of the following:
+
+@table @samp
+@item listen
+Output only isolated bandpass signal.
+@item cut
+Cut frequencies above detection threshold.
+@item boost
+Boost frequencies bellow detection threshold.
+@end table
+Default mode is @samp{cut}.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
+@section adynamicsmooth
+
+Apply dynamic smoothing to input audio stream.
+
+A description of the accepted options follows.
+
+@table @option
+@item sensitivity
+Set an amount of sensitivity to frequency fluctations. Default is 2.
+Allowed range is from 0 to 1e+06.
+
+@item basefreq
+Set a base frequency for smoothing. Default value is 22050.
+Allowed range is from 2 to 1e+06.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section aecho
 
 Apply echoing to the input audio.
@@ -1885,6 +1981,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -2694,6 +2791,69 @@ Set oversampling factor.
 
 This filter supports the all above options as @ref{commands}.
 
+@section aspectralstats
+
+Display frequency domain statistical information about the audio channels.
+Statistics are calculated and stored as metadata for each audio channel and for each audio frame.
+
+It accepts the following option:
+@table @option
+@item win_size
+Set the window length in samples. Default value is 2048.
+Allowed range is from 32 to 65536.
+
+@item win_func
+Set window function.
+
+It accepts the following values:
+@table @samp
+@item rect
+@item bartlett
+@item hann, hanning
+@item hamming
+@item blackman
+@item welch
+@item flattop
+@item bharris
+@item bnuttall
+@item bhann
+@item sine
+@item nuttall
+@item lanczos
+@item gauss
+@item tukey
+@item dolph
+@item cauchy
+@item parzen
+@item poisson
+@item bohman
+@end table
+Default is @code{hann}.
+
+@item overlap
+Set window overlap. Allowed range is from @code{0}
+to @code{1}. Default value is @code{0.5}.
+
+@end table
+
+A list of each metadata key follows:
+
+@table @option
+@item mean
+@item variance
+@item centroid
+@item spread
+@item skewness
+@item kurtosis
+@item entropy
+@item flatness
+@item crest
+@item flux
+@item slope
+@item decrease
+@item rolloff
+@end table
+
 @section asr
 Automatic Speech Recognition
 
@@ -2802,16 +2962,17 @@ this @code{lavfi.astats.Overall.Peak_count}.
 For description what each key means read below.
 
 @item reset
-Set number of frame after which stats are going to be recalculated.
+Set the number of frames over which cumulative stats are calculated before
+being reset
 Default is disabled.
 
 @item measure_perchannel
-Select the entries which need to be measured per channel. The metadata keys can
+Select the parameters which are measured per channel. The metadata keys can
 be used as flags, default is @option{all} which measures everything.
 @option{none} disables all per channel measurement.
 
 @item measure_overall
-Select the entries which need to be measured overall. The metadata keys can
+Select the parameters which are measured overall. The metadata keys can
 be used as flags, default is @option{all} which measures everything.
 @option{none} disables all overall measurement.
 
@@ -3249,6 +3410,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -3336,6 +3498,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -3433,6 +3596,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -3515,6 +3679,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -4265,6 +4430,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -4766,6 +4932,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -5116,6 +5283,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -6340,6 +6508,7 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@item svf
 @end table
 
 @item precision, r
@@ -22897,6 +23066,7 @@ Default transition effect is fade.
 
 @item duration
 Set cross fade duration in seconds.
+Range is 0 to 60 seconds.
 Default duration is 1 second.
 
 @item offset
@@ -28386,6 +28556,15 @@ timestamps.
 
 @item dec_threads
 Specifies the number of threads for decoding
+
+@item format_opts
+Specify format options for the opened file. Format options can be specified
+as a list of @var{key}=@var{value} pairs separated by ':'. The following example
+shows how to add protocol_whitelist and protocol_blacklist options:
+@example
+ffplay -f lavfi
+"movie=filename='1.sdp':format_opts='protocol_whitelist=file,rtp,udp\:protocol_blacklist=http'"
+@end example
 @end table
 
 It allows overlaying a second video on top of the main input of
