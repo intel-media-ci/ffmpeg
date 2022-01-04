@@ -104,6 +104,7 @@ typedef struct X264Context {
     int chroma_offset;
     int scenechange_threshold;
     int noise_reduction;
+    int udu_sei;
 
     AVDictionary *x264_params;
 
@@ -464,28 +465,30 @@ static int X264_frame(AVCodecContext *ctx, AVPacket *pkt, const AVFrame *frame,
             }
         }
 
-        for (int j = 0; j < frame->nb_side_data; j++) {
-            AVFrameSideData *side_data = frame->side_data[j];
-            void *tmp;
-            x264_sei_payload_t *sei_payload;
-            if (side_data->type != AV_FRAME_DATA_SEI_UNREGISTERED)
-                continue;
-            tmp = av_fast_realloc(sei->payloads, &sei_data_size, (sei->num_payloads + 1) * sizeof(*sei_payload));
-            if (!tmp) {
-                free_picture(ctx);
-                return AVERROR(ENOMEM);
+        if (x4->udu_sei) {
+            for (int j = 0; j < frame->nb_side_data; j++) {
+                AVFrameSideData *side_data = frame->side_data[j];
+                void *tmp;
+                x264_sei_payload_t *sei_payload;
+                if (side_data->type != AV_FRAME_DATA_SEI_UNREGISTERED)
+                    continue;
+                tmp = av_fast_realloc(sei->payloads, &sei_data_size, (sei->num_payloads + 1) * sizeof(*sei_payload));
+                if (!tmp) {
+                    free_picture(ctx);
+                    return AVERROR(ENOMEM);
+                }
+                sei->payloads = tmp;
+                sei->sei_free = av_free;
+                sei_payload = &sei->payloads[sei->num_payloads];
+                sei_payload->payload = av_memdup(side_data->data, side_data->size);
+                if (!sei_payload->payload) {
+                    free_picture(ctx);
+                    return AVERROR(ENOMEM);
+                }
+                sei_payload->payload_size = side_data->size;
+                sei_payload->payload_type = SEI_TYPE_USER_DATA_UNREGISTERED;
+                sei->num_payloads++;
             }
-            sei->payloads = tmp;
-            sei->sei_free = av_free;
-            sei_payload = &sei->payloads[sei->num_payloads];
-            sei_payload->payload = av_memdup(side_data->data, side_data->size);
-            if (!sei_payload->payload) {
-                free_picture(ctx);
-                return AVERROR(ENOMEM);
-            }
-            sei_payload->payload_size = side_data->size;
-            sei_payload->payload_type = SEI_TYPE_USER_DATA_UNREGISTERED;
-            sei->num_payloads++;
         }
     }
 
@@ -1168,7 +1171,7 @@ static const AVOption options[] = {
     { "chromaoffset", "QP difference between chroma and luma",            OFFSET(chroma_offset), AV_OPT_TYPE_INT, { .i64 = 0 }, INT_MIN, INT_MAX, VE },
     { "sc_threshold", "Scene change threshold",                           OFFSET(scenechange_threshold), AV_OPT_TYPE_INT, { .i64 = -1 }, INT_MIN, INT_MAX, VE },
     { "noise_reduction", "Noise reduction",                               OFFSET(noise_reduction), AV_OPT_TYPE_INT, { .i64 = -1 }, INT_MIN, INT_MAX, VE },
-
+    { "udu_sei",      "Use user data unregistered SEI if available",      OFFSET(udu_sei),  AV_OPT_TYPE_BOOL,   { .i64 = 0 }, 0, 1, VE },
     { "x264-params",  "Override the x264 configuration using a :-separated list of key=value parameters", OFFSET(x264_params), AV_OPT_TYPE_DICT, { 0 }, 0, 0, VE },
     { NULL },
 };

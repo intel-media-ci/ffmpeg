@@ -138,6 +138,7 @@ OBJS-$(CONFIG_BINKA_DEMUXER)             += binka.o
 OBJS-$(CONFIG_BINTEXT_DEMUXER)           += bintext.o sauce.o
 OBJS-$(CONFIG_BIT_DEMUXER)               += bit.o
 OBJS-$(CONFIG_BIT_MUXER)                 += bit.o
+OBJS-$(CONFIG_BITPACKED_DEMUXER)         += rawvideodec.o
 OBJS-$(CONFIG_BMV_DEMUXER)               += bmv.o
 OBJS-$(CONFIG_BOA_DEMUXER)               += boadec.o
 OBJS-$(CONFIG_BFSTM_DEMUXER)             += brstm.o
@@ -285,6 +286,7 @@ OBJS-$(CONFIG_IMAGE_WEBP_PIPE_DEMUXER)    += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_XBM_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_XPM_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_XWD_PIPE_DEMUXER)     += img2dec.o img2.o
+OBJS-$(CONFIG_IMF_DEMUXER)               += imfdec.o imf_cpl.o
 OBJS-$(CONFIG_INGENIENT_DEMUXER)         += ingenientdec.o rawdec.o
 OBJS-$(CONFIG_IPMOVIE_DEMUXER)           += ipmovie.o
 OBJS-$(CONFIG_IPU_DEMUXER)               += ipudec.o rawdec.o
@@ -683,6 +685,7 @@ OBJS-$(CONFIG_IEC61883_INDEV)            += dv.o
 # Windows resource file
 SLIBOBJS-$(HAVE_GNU_WINDRES)             += avformatres.o
 
+SKIPHEADERS-$(CONFIG_IMF_DEMUXER)        += imf.h
 SKIPHEADERS-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += rtmpdh.h
 SKIPHEADERS-$(CONFIG_NETWORK)            += network.h rtsp.h
 
@@ -696,6 +699,7 @@ TESTPROGS-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += rtmpdh
 TESTPROGS-$(CONFIG_MOV_MUXER)            += movenc
 TESTPROGS-$(CONFIG_NETWORK)              += noproxy
 TESTPROGS-$(CONFIG_SRTP)                 += srtp
+TESTPROGS-$(CONFIG_IMF_DEMUXER)          += imf
 
 TOOLS     = aviocat                                                     \
             ismindex                                                    \
