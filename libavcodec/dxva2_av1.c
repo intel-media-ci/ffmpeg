@@ -244,11 +244,11 @@ static int fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *c
             pp->film_grain.scaling_points_cr[i][1] = film_grain->point_cr_scaling[i];
         }
         for (i = 0; i < 24; i++) {
-            pp->film_grain.ar_coeffs_y[i] = film_grain->ar_coeffs_y_plus_128[i];
+            pp->film_grain.ar_coeffs_y[i] = film_grain->ar_coeffs_y_plus_128[i] - 128;
         }
         for (i = 0; i < 25; i++) {
-            pp->film_grain.ar_coeffs_cb[i] = film_grain->ar_coeffs_cb_plus_128[i];
-            pp->film_grain.ar_coeffs_cr[i] = film_grain->ar_coeffs_cr_plus_128[i];
+            pp->film_grain.ar_coeffs_cb[i] = film_grain->ar_coeffs_cb_plus_128[i] - 128;
+            pp->film_grain.ar_coeffs_cr[i] = film_grain->ar_coeffs_cr_plus_128[i] - 128;
         }
         pp->film_grain.cb_mult      = film_grain->cb_mult;
         pp->film_grain.cb_luma_mult = film_grain->cb_luma_mult;
