@@ -19,9 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/thread.h"
 #include "avfilter.h"
-#include "config.h"
 
 extern const AVFilter ff_af_abench;
 extern const AVFilter ff_af_acompressor;
@@ -183,6 +181,7 @@ extern const AVFilter ff_vf_bitplanenoise;
 extern const AVFilter ff_vf_blackdetect;
 extern const AVFilter ff_vf_blackframe;
 extern const AVFilter ff_vf_blend;
+extern const AVFilter ff_vf_blend_vulkan;
 extern const AVFilter ff_vf_bm3d;
 extern const AVFilter ff_vf_boxblur;
 extern const AVFilter ff_vf_boxblur_opencl;

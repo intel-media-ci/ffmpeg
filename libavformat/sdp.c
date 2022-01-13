@@ -481,7 +481,7 @@ static int latm_context2config(AVFormatContext *s, const AVCodecParameters *par,
     *out = NULL;
 
     for (rate_index = 0; rate_index < 16; rate_index++)
-        if (avpriv_mpeg4audio_sample_rates[rate_index] == par->sample_rate)
+        if (ff_mpeg4audio_sample_rates[rate_index] == par->sample_rate)
             break;
     if (rate_index == 16) {
         av_log(s, AV_LOG_ERROR, "Unsupported sample rate\n");
@@ -728,9 +728,12 @@ static int sdp_write_media_attributes(char *buff, int size, const AVStream *st,
         av_strlcatf(buff, size, "a=rtpmap:%d raw/90000\r\n"
                                 "a=fmtp:%d sampling=%s; "
                                 "width=%d; height=%d; "
-                                "depth=%d\r\n",
+                                "depth=%d",
                                 payload_type, payload_type,
                                 pix_fmt, p->width, p->height, bit_depth);
+        if (p->field_order != AV_FIELD_PROGRESSIVE)
+            av_strlcatf(buff, size, "; interlace");
+        av_strlcatf(buff, size, "\r\n");
         break;
     }
 

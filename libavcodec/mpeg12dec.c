@@ -33,6 +33,7 @@
 #include "libavutil/internal.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/stereo3d.h"
+#include "libavutil/timecode.h"
 #include "libavutil/video_enc_params.h"
 
 #include "avcodec.h"
@@ -1065,7 +1066,6 @@ static av_cold int mpeg_decode_init(AVCodecContext *avctx)
 
     s2->chroma_format              = 1;
     s->mpeg_enc_ctx_allocated      = 0;
-    s->mpeg_enc_ctx.picture_number = 0;
     s->repeat_field                = 0;
     avctx->color_range             = AVCOL_RANGE_MPEG;
     return 0;
@@ -1090,9 +1090,6 @@ static int mpeg_decode_update_thread_context(AVCodecContext *avctx,
 
     if (!ctx->mpeg_enc_ctx_allocated)
         memcpy(s + 1, s1 + 1, sizeof(Mpeg1Context) - sizeof(MpegEncContext));
-
-    if (!(s->pict_type == AV_PICTURE_TYPE_B || s->low_delay))
-        s->picture_number++;
 
     return 0;
 }
@@ -1789,13 +1786,13 @@ static int mpeg_decode_slice(MpegEncContext *s, int mb_y,
     if (s->mb_y == 0 && s->mb_x == 0 && (s->first_field || s->picture_structure == PICT_FRAME)) {
         if (s->avctx->debug & FF_DEBUG_PICT_INFO) {
             av_log(s->avctx, AV_LOG_DEBUG,
-                   "qp:%d fc:%2d%2d%2d%2d %s %s %s %s %s dc:%d pstruct:%d fdct:%d cmv:%d qtype:%d ivlc:%d rff:%d %s\n",
+                   "qp:%d fc:%2d%2d%2d%2d %c %s %s %s %s dc:%d pstruct:%d fdct:%d cmv:%d qtype:%d ivlc:%d rff:%d %s\n",
                    s->qscale,
                    s->mpeg_f_code[0][0], s->mpeg_f_code[0][1],
                    s->mpeg_f_code[1][0], s->mpeg_f_code[1][1],
-                   s->pict_type  == AV_PICTURE_TYPE_I ? "I" :
-                   (s->pict_type == AV_PICTURE_TYPE_P ? "P" :
-                   (s->pict_type == AV_PICTURE_TYPE_B ? "B" : "S")),
+                   s->pict_type  == AV_PICTURE_TYPE_I ? 'I' :
+                   (s->pict_type == AV_PICTURE_TYPE_P ? 'P' :
+                   (s->pict_type == AV_PICTURE_TYPE_B ? 'B' : 'S')),
                    s->progressive_sequence ? "ps"  : "",
                    s->progressive_frame    ? "pf"  : "",
                    s->alternate_scan       ? "alt" : "",
@@ -2071,10 +2068,7 @@ static int slice_end(AVCodecContext *avctx, AVFrame *pict)
             ff_print_debug_info(s, s->current_picture_ptr, pict);
             ff_mpv_export_qp_table(s, pict, s->current_picture_ptr, FF_QSCALE_TYPE_MPEG2);
         } else {
-            if (avctx->active_thread_type & FF_THREAD_FRAME)
-                s->picture_number++;
             /* latency of 1 frame for I- and P-frames */
-            /* XXX: use another variable than picture_number */
             if (s->last_picture_ptr) {
                 int ret = av_frame_ref(pict, s->last_picture_ptr->f);
                 if (ret < 0)
@@ -2832,7 +2826,7 @@ static int mpeg_decode_frame(AVCodecContext *avctx, void *data,
     }
 #endif
 
-    s2->codec_tag = avpriv_toupper4(avctx->codec_tag);
+    s2->codec_tag = ff_toupper4(avctx->codec_tag);
     if (s->mpeg_enc_ctx_allocated == 0 && (   s2->codec_tag == AV_RL32("VCR2")
                                            || s2->codec_tag == AV_RL32("BW10")
                                           ))

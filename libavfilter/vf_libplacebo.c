@@ -47,6 +47,7 @@ typedef struct LibplaceboContext {
     int force_divisible_by;
     int normalize_sar;
     int apply_filmgrain;
+    int apply_dovi;
     int colorspace;
     int color_range;
     int color_primaries;
@@ -281,8 +282,16 @@ static int process_frames(AVFilterContext *avctx, AVFrame *out, AVFrame *in)
     LibplaceboContext *s = avctx->priv;
     struct pl_render_params params;
     struct pl_frame image, target;
-    ok = pl_map_avframe(s->gpu, &image, NULL, in);
-    ok &= pl_map_avframe(s->gpu, &target, NULL, out);
+    ok = pl_map_avframe_ex(s->gpu, &image, pl_avframe_params(
+        .frame    = in,
+        .map_dovi = s->apply_dovi,
+    ));
+
+    ok &= pl_map_avframe_ex(s->gpu, &target, pl_avframe_params(
+        .frame    = out,
+        .map_dovi = false,
+    ));
+
     if (!ok) {
         err = AVERROR_EXTERNAL;
         goto fail;
@@ -381,7 +390,7 @@ fail:
 
 static int filter_frame(AVFilterLink *link, AVFrame *in)
 {
-    int err;
+    int err, changed_csp;
     AVFilterContext *ctx = link->dst;
     LibplaceboContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -400,6 +409,14 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     out->width = outlink->w;
     out->height = outlink->h;
 
+    if (s->apply_dovi && av_frame_get_side_data(in, AV_FRAME_DATA_DOVI_METADATA)) {
+        /* Output of dovi reshaping is always BT.2020+PQ, so infer the correct
+         * output colorspace defaults */
+        out->colorspace = AVCOL_SPC_BT2020_NCL;
+        out->color_primaries = AVCOL_PRI_BT2020;
+        out->color_trc = AVCOL_TRC_SMPTE2084;
+    }
+
     if (s->colorspace >= 0)
         out->colorspace = s->colorspace;
     if (s->color_range >= 0)
@@ -409,10 +426,24 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     if (s->color_primaries >= 0)
         out->color_primaries = s->color_primaries;
 
-    RET(process_frames(ctx, out, in));
+    changed_csp = in->colorspace      != out->colorspace     ||
+                  in->color_range     != out->color_range    ||
+                  in->color_trc       != out->color_trc      ||
+                  in->color_primaries != out->color_primaries;
 
+    /* Strip side data if no longer relevant */
+    if (changed_csp) {
+        av_frame_remove_side_data(out, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
+        av_frame_remove_side_data(out, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
+    }
+    if (s->apply_dovi || changed_csp) {
+        av_frame_remove_side_data(out, AV_FRAME_DATA_DOVI_RPU_BUFFER);
+        av_frame_remove_side_data(out, AV_FRAME_DATA_DOVI_METADATA);
+    }
     if (s->apply_filmgrain)
         av_frame_remove_side_data(out, AV_FRAME_DATA_FILM_GRAIN_PARAMS);
+
+    RET(process_frames(ctx, out, in));
 
     av_frame_free(&in);
 
@@ -559,6 +590,7 @@ static const AVOption libplacebo_options[] = {
     { "antiringing", "Antiringing strength (for non-EWA filters)", OFFSET(antiringing), AV_OPT_TYPE_FLOAT, {.dbl = 0.0}, 0.0, 1.0, DYNAMIC },
     { "sigmoid", "Enable sigmoid upscaling", OFFSET(sigmoid), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, DYNAMIC },
     { "apply_filmgrain", "Apply film grain metadata", OFFSET(apply_filmgrain), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, DYNAMIC },
+    { "apply_dolbyvision", "Apply Dolby Vision metadata", OFFSET(apply_dovi), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, DYNAMIC },
 
     { "deband", "Enable debanding", OFFSET(deband), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, DYNAMIC },
     { "deband_iterations", "Deband iterations", OFFSET(deband_iterations), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 16, DYNAMIC },

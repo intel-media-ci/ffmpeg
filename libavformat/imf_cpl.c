@@ -688,7 +688,7 @@ int ff_imf_parse_cpl_from_xml_dom(xmlDocPtr doc, FFIMFCPL **cpl)
     }
 
     cpl_element = xmlDocGetRootElement(doc);
-    if (xmlStrcmp(cpl_element->name, "CompositionPlaylist")) {
+    if (!cpl_element || xmlStrcmp(cpl_element->name, "CompositionPlaylist")) {
         av_log(NULL, AV_LOG_ERROR, "The root element of the CPL is not CompositionPlaylist\n");
         ret = AVERROR_INVALIDDATA;
         goto cleanup;
@@ -807,34 +807,37 @@ int ff_imf_parse_cpl(AVIOContext *in, FFIMFCPL **cpl)
         av_log(NULL, AV_LOG_ERROR, "Cannot read IMF CPL\n");
         if (ret == 0)
             ret = AVERROR_INVALIDDATA;
-    } else {
-        LIBXML_TEST_VERSION
-
-        filesize = buf.len;
-        doc = xmlReadMemory(buf.str, filesize, NULL, NULL, 0);
-        if (!doc) {
-            av_log(NULL,
-                   AV_LOG_ERROR,
-                   "XML parsing failed when reading the IMF CPL\n");
-            ret = AVERROR_INVALIDDATA;
-        }
-
-        if ((ret = ff_imf_parse_cpl_from_xml_dom(doc, cpl))) {
-            av_log(NULL, AV_LOG_ERROR, "Cannot parse IMF CPL\n");
-        } else {
-            av_log(NULL,
-                   AV_LOG_INFO,
-                   "IMF CPL ContentTitle: %s\n",
-                   (*cpl)->content_title_utf8);
-            av_log(NULL,
-                   AV_LOG_INFO,
-                   "IMF CPL Id: " FF_IMF_UUID_FORMAT "\n",
-                   UID_ARG((*cpl)->id_uuid));
-        }
-
-        xmlFreeDoc(doc);
+        goto clean_up;
     }
 
+    LIBXML_TEST_VERSION
+
+    filesize = buf.len;
+    doc = xmlReadMemory(buf.str, filesize, NULL, NULL, 0);
+    if (!doc) {
+        av_log(NULL,
+                AV_LOG_ERROR,
+                "XML parsing failed when reading the IMF CPL\n");
+        ret = AVERROR_INVALIDDATA;
+        goto clean_up;
+    }
+
+    if ((ret = ff_imf_parse_cpl_from_xml_dom(doc, cpl))) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot parse IMF CPL\n");
+    } else {
+        av_log(NULL,
+                AV_LOG_INFO,
+                "IMF CPL ContentTitle: %s\n",
+                (*cpl)->content_title_utf8);
+        av_log(NULL,
+                AV_LOG_INFO,
+                "IMF CPL Id: " FF_IMF_UUID_FORMAT "\n",
+                UID_ARG((*cpl)->id_uuid));
+    }
+
+    xmlFreeDoc(doc);
+
+clean_up:
     av_bprint_finalize(&buf, NULL);
 
     return ret;
