@@ -371,17 +371,17 @@ static int init_duplicate_context(MpegEncContext *s)
         s->pblocks[i] = &s->block[i];
     }
 
-    if (!(s->block32         = av_mallocz(sizeof(*s->block32))) ||
-        !(s->dpcm_macroblock = av_mallocz(sizeof(*s->dpcm_macroblock))))
-        return AVERROR(ENOMEM);
-    s->dpcm_direction = 0;
-
     if (s->avctx->codec_tag == AV_RL32("VCR2")) {
         // exchange uv
         FFSWAP(void *, s->pblocks[4], s->pblocks[5]);
     }
 
     if (s->out_format == FMT_H263) {
+        if (!(s->block32         = av_mallocz(sizeof(*s->block32))) ||
+            !(s->dpcm_macroblock = av_mallocz(sizeof(*s->dpcm_macroblock))))
+            return AVERROR(ENOMEM);
+        s->dpcm_direction = 0;
+
         /* ac values */
         if (!FF_ALLOCZ_TYPED_ARRAY(s->ac_val_base,  yc_size))
             return AVERROR(ENOMEM);
@@ -632,9 +632,9 @@ int ff_mpv_init_context_frame(MpegEncContext *s)
 
     if (s->out_format == FMT_H263) {
         /* cbp values, cbp, ac_pred, pred_dir */
-        if (!FF_ALLOCZ_TYPED_ARRAY(s->coded_block_base, y_size + (s->mb_height&1)*2*s->b8_stride) ||
-            !FF_ALLOCZ_TYPED_ARRAY(s->cbp_table,        mb_array_size)                            ||
-            !FF_ALLOCZ_TYPED_ARRAY(s->pred_dir_table,   mb_array_size))
+        if (!(s->coded_block_base = av_mallocz(y_size + (s->mb_height&1)*2*s->b8_stride)) ||
+            !(s->cbp_table        = av_mallocz(mb_array_size)) ||
+            !(s->pred_dir_table   = av_mallocz(mb_array_size)))
             return AVERROR(ENOMEM);
         s->coded_block = s->coded_block_base + s->b8_stride + 1;
     }
@@ -652,9 +652,9 @@ int ff_mpv_init_context_frame(MpegEncContext *s)
     }
 
     /* which mb is an intra block,  init macroblock skip table */
-    if (!FF_ALLOC_TYPED_ARRAY(s->mbintra_table, mb_array_size) ||
+    if (!(s->mbintra_table = av_mallocz(mb_array_size)) ||
         // Note the + 1 is for a quicker MPEG-4 slice_end detection
-        !FF_ALLOCZ_TYPED_ARRAY(s->mbskip_table,  mb_array_size + 2))
+        !(s->mbskip_table  = av_mallocz(mb_array_size + 2)))
         return AVERROR(ENOMEM);
     memset(s->mbintra_table, 1, mb_array_size);
 

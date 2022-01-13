@@ -87,11 +87,11 @@ OBJS-$(CONFIG_AIFF_DEMUXER)              += aiffdec.o aiff.o pcm.o \
 OBJS-$(CONFIG_AIFF_MUXER)                += aiffenc.o aiff.o id3v2enc.o
 OBJS-$(CONFIG_AIX_DEMUXER)               += aixdec.o
 OBJS-$(CONFIG_ALP_DEMUXER)               += alp.o
-OBJS-$(CONFIG_ALP_MUXER)                 += alp.o
-OBJS-$(CONFIG_AMR_DEMUXER)               += amr.o
+OBJS-$(CONFIG_ALP_MUXER)                 += alp.o rawenc.o
+OBJS-$(CONFIG_AMR_DEMUXER)               += amr.o rawdec.o
 OBJS-$(CONFIG_AMR_MUXER)                 += amr.o rawenc.o
-OBJS-$(CONFIG_AMRNB_DEMUXER)             += amr.o
-OBJS-$(CONFIG_AMRWB_DEMUXER)             += amr.o
+OBJS-$(CONFIG_AMRNB_DEMUXER)             += amr.o rawdec.o
+OBJS-$(CONFIG_AMRWB_DEMUXER)             += amr.o rawdec.o
 OBJS-$(CONFIG_AMV_MUXER)                 += amvenc.o
 OBJS-$(CONFIG_ANM_DEMUXER)               += anm.o
 OBJS-$(CONFIG_APC_DEMUXER)               += apc.o
@@ -259,9 +259,11 @@ OBJS-$(CONFIG_IMAGE2PIPE_MUXER)          += img2enc.o img2.o
 OBJS-$(CONFIG_IMAGE2_ALIAS_PIX_DEMUXER)  += img2_alias_pix.o
 OBJS-$(CONFIG_IMAGE2_BRENDER_PIX_DEMUXER) += img2_brender_pix.o
 OBJS-$(CONFIG_IMAGE_BMP_PIPE_DEMUXER)     += img2dec.o img2.o
+OBJS-$(CONFIG_IMAGE_CRI_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_DDS_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_DPX_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_EXR_PIPE_DEMUXER)     += img2dec.o img2.o
+OBJS-$(CONFIG_IMAGE_GEM_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_GIF_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_J2K_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_JPEG_PIPE_DEMUXER)    += img2dec.o img2.o
@@ -271,7 +273,8 @@ OBJS-$(CONFIG_IMAGE_PBM_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_PCX_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_PGMYUV_PIPE_DEMUXER)  += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_PGM_PIPE_DEMUXER)     += img2dec.o img2.o
-OBJS-$(CONFIG_IMAGE_PHOTOCD_DEMUXER)      += img2dec.o img2.o
+OBJS-$(CONFIG_IMAGE_PGX_PIPE_DEMUXER)     += img2dec.o img2.o
+OBJS-$(CONFIG_IMAGE_PHOTOCD_PIPE_DEMUXER) += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_PICTOR_PIPE_DEMUXER)  += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_PNG_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_PPM_PIPE_DEMUXER)     += img2dec.o img2.o
@@ -582,9 +585,7 @@ OBJS-$(CONFIG_WAV_DEMUXER)               += wavdec.o pcm.o
 OBJS-$(CONFIG_WAV_MUXER)                 += wavenc.o
 OBJS-$(CONFIG_WC3_DEMUXER)               += wc3movie.o
 OBJS-$(CONFIG_WEBM_MUXER)                += matroskaenc.o matroska.o \
-                                            av1.o avc.o hevc.o isom_tags.o \
-                                            flacenc_header.o avlanguage.o \
-                                            wv.o vorbiscomment.o
+                                            av1.o avlanguage.o
 OBJS-$(CONFIG_WEBM_DASH_MANIFEST_MUXER)  += webmdashenc.o
 OBJS-$(CONFIG_WEBM_CHUNK_MUXER)          += webm_chunk.o
 OBJS-$(CONFIG_WEBP_MUXER)                += webpenc.o
@@ -667,7 +668,7 @@ OBJS-$(CONFIG_UDPLITE_PROTOCOL)          += udp.o ip.o
 OBJS-$(CONFIG_UNIX_PROTOCOL)             += unix.o
 
 # external library protocols
-OBJS-$(CONFIG_LIBAMQP_PROTOCOL)          += libamqp.o
+OBJS-$(CONFIG_LIBAMQP_PROTOCOL)          += libamqp.o urldecode.o
 OBJS-$(CONFIG_LIBRIST_PROTOCOL)          += librist.o
 OBJS-$(CONFIG_LIBRTMP_PROTOCOL)          += librtmp.o
 OBJS-$(CONFIG_LIBRTMPE_PROTOCOL)         += librtmp.o
