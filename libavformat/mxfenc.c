@@ -32,6 +32,7 @@
  * SMPTE 379M MXF Generic Container
  * SMPTE 381M Mapping MPEG Streams into the MXF Generic Container
  * SMPTE 422M Mapping JPEG 2000 Codestreams into the MXF Generic Container
+ * SMPTE ST2019-4 (2009 or later) Mapping VC-3 Coding Units into the MXF Generic Container
  * SMPTE RP210: SMPTE Metadata Dictionary
  * SMPTE RP224: Registry of SMPTE Universal Labels
  */
@@ -48,7 +49,6 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/time_internal.h"
 #include "libavcodec/bytestream.h"
-#include "libavcodec/dnxhddata.h"
 #include "libavcodec/dv_profile.h"
 #include "libavcodec/h264_ps.h"
 #include "libavcodec/golomb.h"
@@ -181,8 +181,8 @@ static const MXFContainerEssenceEntry mxf_essence_container_uls[] = {
       { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x01,0x04,0x01,0x02,0x02,0x02,0x00,0x00,0x00 },
       mxf_write_cdci_desc },
     // DNxHD
-    { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x01,0x0D,0x01,0x03,0x01,0x02,0x11,0x01,0x00 },
-      { 0x06,0x0E,0x2B,0x34,0x01,0x02,0x01,0x01,0x0D,0x01,0x03,0x01,0x15,0x01,0x05,0x00 },
+    { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0A,0x0D,0x01,0x03,0x01,0x02,0x11,0x01,0x00 },
+      { 0x06,0x0E,0x2B,0x34,0x01,0x02,0x01,0x01,0x0D,0x01,0x03,0x01,0x15,0x01,0x0C,0x00 },
       { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x02,0x71,0x01,0x00,0x00 },
       mxf_write_cdci_desc },
     // JPEG2000
@@ -421,6 +421,7 @@ typedef struct MXFContext {
     int track_instance_count; // used to generate MXFTrack uuids
     int cbr_index;           ///< use a constant bitrate index
     uint8_t unused_tags[MXF_NUM_TAGS];  ///< local tags that we know will not be used
+    MXFStreamContext timecode_track_priv;
 } MXFContext;
 
 static void mxf_write_uuid(AVIOContext *pb, enum MXFMetadataSetType type, int value)
@@ -2196,9 +2197,9 @@ static int mxf_parse_dv_frame(AVFormatContext *s, AVStream *st, AVPacket *pkt)
 static const struct {
     UID uid;
     int frame_size;
-    int profile;
+    uint8_t profile;
     uint8_t interlaced;
-    int intra_only; // 1 or 0 when there are separate UIDs for Long GOP and Intra, -1 when Intra/LGOP detection can be ignored
+    int8_t intra_only; // 1 or 0 when there are separate UIDs for Long GOP and Intra, -1 when Intra/LGOP detection can be ignored
 } mxf_h264_codec_uls[] = {
     {{ 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0a,0x04,0x01,0x02,0x02,0x01,0x31,0x11,0x01 },      0,  66, 0, -1 }, // AVC Baseline
     {{ 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0a,0x04,0x01,0x02,0x02,0x01,0x31,0x20,0x01 },      0,  77, 0, -1 }, // AVC Main
@@ -2674,6 +2675,12 @@ static int mxf_init(AVFormatContext *s)
 
         memcpy(sc->track_essence_element_key, mxf_essence_container_uls[sc->index].element_ul, 15);
         sc->track_essence_element_key[15] = present[sc->index];
+        if (s->oformat == &ff_mxf_opatom_muxer && st->codecpar->codec_id == AV_CODEC_ID_DNXHD) {
+            // clip-wrapping requires 0x0D per ST2019-4:2009 or 0x06 per previous version ST2019-4:2008
+            // we choose to use 0x06 instead 0x0D to be compatible with AVID systems
+            // and produce mxf files with the most relevant flavour for opatom
+            sc->track_essence_element_key[14] = 0x06;
+        }
         PRINT_KEY(s, "track essence element key", sc->track_essence_element_key);
 
         if (!present[sc->index])
@@ -2705,9 +2712,7 @@ static int mxf_init(AVFormatContext *s)
     mxf->timecode_track = av_mallocz(sizeof(*mxf->timecode_track));
     if (!mxf->timecode_track)
         return AVERROR(ENOMEM);
-    mxf->timecode_track->priv_data = av_mallocz(sizeof(MXFStreamContext));
-    if (!mxf->timecode_track->priv_data)
-        return AVERROR(ENOMEM);
+    mxf->timecode_track->priv_data = &mxf->timecode_track_priv;
     mxf->timecode_track->index = -1;
 
     return 0;
@@ -3080,10 +3085,7 @@ static void mxf_deinit(AVFormatContext *s)
 
     av_freep(&mxf->index_entries);
     av_freep(&mxf->body_partition_offset);
-    if (mxf->timecode_track) {
-        av_freep(&mxf->timecode_track->priv_data);
-        av_freep(&mxf->timecode_track);
-    }
+    av_freep(&mxf->timecode_track);
 }
 
 static int mxf_interleave_get_packet(AVFormatContext *s, AVPacket *out, int flush)
@@ -3095,9 +3097,9 @@ static int mxf_interleave_get_packet(AVFormatContext *s, AVPacket *out, int flus
         stream_count += !!ffstream(s->streams[i])->last_in_packet_buffer;
 
     if (stream_count && (s->nb_streams == stream_count || flush)) {
-        PacketList *pktl = si->packet_buffer;
+        PacketListEntry *pktl = si->packet_buffer.head;
         if (s->nb_streams != stream_count) {
-            PacketList *last = NULL;
+            PacketListEntry *last = NULL;
             // find last packet in edit unit
             while (pktl) {
                 if (!stream_count || pktl->pkt.stream_index == 0)
@@ -3111,7 +3113,7 @@ static int mxf_interleave_get_packet(AVFormatContext *s, AVPacket *out, int flus
             }
             // purge packet queue
             while (pktl) {
-                PacketList *next = pktl->next;
+                PacketListEntry *next = pktl->next;
                 av_packet_unref(&pktl->pkt);
                 av_freep(&pktl);
                 pktl = next;
@@ -3119,21 +3121,17 @@ static int mxf_interleave_get_packet(AVFormatContext *s, AVPacket *out, int flus
             if (last)
                 last->next = NULL;
             else {
-                si->packet_buffer     = NULL;
-                si->packet_buffer_end = NULL;
+                si->packet_buffer.head = NULL;
+                si->packet_buffer.tail = NULL;
                 goto out;
             }
-            pktl = si->packet_buffer;
+            pktl = si->packet_buffer.head;
         }
 
-        *out = pktl->pkt;
-        av_log(s, AV_LOG_TRACE, "out st:%d dts:%"PRId64"\n", (*out).stream_index, (*out).dts);
-        si->packet_buffer = pktl->next;
         if (ffstream(s->streams[pktl->pkt.stream_index])->last_in_packet_buffer == pktl)
             ffstream(s->streams[pktl->pkt.stream_index])->last_in_packet_buffer = NULL;
-        if (!si->packet_buffer)
-            si->packet_buffer_end = NULL;
-        av_freep(&pktl);
+        avpriv_packet_list_get(&si->packet_buffer, out);
+        av_log(s, AV_LOG_TRACE, "out st:%d dts:%"PRId64"\n", out->stream_index, out->dts);
         return 1;
     } else {
     out:

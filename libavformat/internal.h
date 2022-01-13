@@ -25,6 +25,7 @@
 
 #include "libavcodec/avcodec.h"
 #include "libavcodec/bsf.h"
+#include "libavcodec/packet_internal.h"
 
 #include "avformat.h"
 #include "os_support.h"
@@ -92,8 +93,7 @@ typedef struct FFFormatContext {
      * not decoded, for example to get the codec parameters in MPEG
      * streams.
      */
-    struct PacketList *packet_buffer;
-    struct PacketList *packet_buffer_end;
+    PacketList packet_buffer;
 
     /* av_seek_frame() support */
     int64_t data_offset; /**< offset of the first packet */
@@ -104,13 +104,11 @@ typedef struct FFFormatContext {
      * be identified, as parsing cannot be done without knowing the
      * codec.
      */
-    struct PacketList *raw_packet_buffer;
-    struct PacketList *raw_packet_buffer_end;
+    PacketList raw_packet_buffer;
     /**
      * Packets split by the parser get queued here.
      */
-    struct PacketList *parse_queue;
-    struct PacketList *parse_queue_end;
+    PacketList parse_queue;
     /**
      * The generic code uses this as a temporary packet
      * to parse packets or for muxing, especially flushing.
@@ -393,7 +391,7 @@ typedef struct FFStream {
     /**
      * last packet in packet_buffer for this stream when muxing.
      */
-    struct PacketList *last_in_packet_buffer;
+    PacketListEntry *last_in_packet_buffer;
 
     int64_t last_IP_pts;
     int last_IP_duration;
@@ -556,10 +554,11 @@ uint64_t ff_parse_ntp_time(uint64_t ntp_ts);
  * @param ttl the time to live of the stream, 0 if not multicast
  * @param fmt the AVFormatContext, which might contain options modifying
  *            the generated SDP
+ * @return 0 on success, a negative error code on failure
  */
-void ff_sdp_write_media(char *buff, int size, AVStream *st, int idx,
-                        const char *dest_addr, const char *dest_type,
-                        int port, int ttl, AVFormatContext *fmt);
+int ff_sdp_write_media(char *buff, int size, const AVStream *st, int idx,
+                       const char *dest_addr, const char *dest_type,
+                       int port, int ttl, AVFormatContext *fmt);
 
 /**
  * Write a packet to another muxer than the one the user originally
@@ -841,6 +840,15 @@ int ff_stream_add_bitstream_filter(AVStream *st, const char *name, const char *a
 int ff_stream_encode_params_copy(AVStream *dst, const AVStream *src);
 
 /**
+ * Copy side data from source to destination stream
+ *
+ * @param dst pointer to destination AVStream
+ * @param src pointer to source AVStream
+ * @return >=0 on success, AVERROR code on error
+ */
+int ff_stream_side_data_copy(AVStream *dst, const AVStream *src);
+
+/**
  * Wrap ffurl_move() and log if error happens.
  *
  * @param url_src source path
@@ -916,8 +924,16 @@ int ff_format_output_open(AVFormatContext *s, const char *url, AVDictionary **op
 /*
  * A wrapper around AVFormatContext.io_close that should be used
  * instead of calling the pointer directly.
+ *
+ * @param s AVFormatContext
+ * @param *pb the AVIOContext to be closed and freed. Can be NULL.
+ * @return >=0 on success, negative AVERROR in case of failure
  */
-void ff_format_io_close(AVFormatContext *s, AVIOContext **pb);
+int ff_format_io_close(AVFormatContext *s, AVIOContext **pb);
+
+/* Default io_close callback, not to be used directly, use ff_format_io_close
+ * instead. */
+void ff_format_io_close_default(AVFormatContext *s, AVIOContext *pb);
 
 /**
  * Utility function to check if the file uses http or https protocol
@@ -1000,5 +1016,12 @@ int ff_unlock_avformat(void);
 void ff_format_set_url(AVFormatContext *s, char *url);
 
 void avpriv_register_devices(const AVOutputFormat * const o[], const AVInputFormat * const i[]);
+
+/**
+ * Make shift_size amount of space at read_start by shifting data in the output
+ * at read_start until the current IO position. The underlying IO context must
+ * be seekable.
+ */
+int ff_format_shift_data(AVFormatContext *s, int64_t read_start, int shift_size);
 
 #endif /* AVFORMAT_INTERNAL_H */

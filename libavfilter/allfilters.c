@@ -19,9 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/thread.h"
 #include "avfilter.h"
-#include "config.h"
 
 extern const AVFilter ff_af_abench;
 extern const AVFilter ff_af_acompressor;
@@ -37,6 +35,7 @@ extern const AVFilter ff_af_adecorrelate;
 extern const AVFilter ff_af_adelay;
 extern const AVFilter ff_af_adenorm;
 extern const AVFilter ff_af_aderivative;
+extern const AVFilter ff_af_adynamicequalizer;
 extern const AVFilter ff_af_adynamicsmooth;
 extern const AVFilter ff_af_aecho;
 extern const AVFilter ff_af_aemphasis;
@@ -63,6 +62,7 @@ extern const AVFilter ff_af_amix;
 extern const AVFilter ff_af_amultiply;
 extern const AVFilter ff_af_anequalizer;
 extern const AVFilter ff_af_anlmdn;
+extern const AVFilter ff_af_anlmf;
 extern const AVFilter ff_af_anlms;
 extern const AVFilter ff_af_anull;
 extern const AVFilter ff_af_apad;
@@ -181,6 +181,7 @@ extern const AVFilter ff_vf_bitplanenoise;
 extern const AVFilter ff_vf_blackdetect;
 extern const AVFilter ff_vf_blackframe;
 extern const AVFilter ff_vf_blend;
+extern const AVFilter ff_vf_blend_vulkan;
 extern const AVFilter ff_vf_bm3d;
 extern const AVFilter ff_vf_boxblur;
 extern const AVFilter ff_vf_boxblur_opencl;
@@ -495,6 +496,7 @@ extern const AVFilter ff_vf_xmedian;
 extern const AVFilter ff_vf_xstack;
 extern const AVFilter ff_vf_yadif;
 extern const AVFilter ff_vf_yadif_cuda;
+extern const AVFilter ff_vf_yadif_videotoolbox;
 extern const AVFilter ff_vf_yaepblur;
 extern const AVFilter ff_vf_zmq;
 extern const AVFilter ff_vf_zoompan;
