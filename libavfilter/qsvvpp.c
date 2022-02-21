@@ -283,8 +283,8 @@ static int fill_frameinfo_by_link(mfxFrameInfo *frameinfo, AVFilterLink *link)
 
         frameinfo->CropX          = 0;
         frameinfo->CropY          = 0;
-        frameinfo->Width          = FFALIGN(link->w, 32);
-        frameinfo->Height         = FFALIGN(link->h, 32);
+        frameinfo->Width          = FFALIGN(link->w, 16);
+        frameinfo->Height         = FFALIGN(link->h, 16);
         frameinfo->PicStruct      = MFX_PICSTRUCT_PROGRESSIVE;
         frameinfo->FourCC         = pix_fmt_to_mfx_fourcc(pix_fmt);
         frameinfo->BitDepthLuma   = desc->comp[0].depth;
