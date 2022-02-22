@@ -3290,8 +3290,17 @@ static void vulkan_unmap_to_drm(AVHWFramesContext *hwfc, HWMapDescriptor *hwmap)
     av_free(drm_desc);
 }
 
-static inline uint32_t vulkan_fmt_to_drm(VkFormat vkfmt)
+static inline uint32_t vulkan_fmt_to_drm(VkFormat vkfmt,
+                                         enum AVPixelFormat sw_format)
 {
+    if (vkfmt == VK_FORMAT_R8G8_UNORM &&
+       (sw_format == AV_PIX_FMT_NV12 || sw_format == AV_PIX_FMT_NV24))
+            return DRM_FORMAT_RG88;
+
+    if (vkfmt == VK_FORMAT_R16G16_UNORM &&
+       (sw_format == AV_PIX_FMT_P010 || sw_format == AV_PIX_FMT_P016))
+            return DRM_FORMAT_RG1616;
+
     for (int i = 0; i < FF_ARRAY_ELEMS(vulkan_drm_format_map); i++)
         if (vulkan_drm_format_map[i].vk_format == vkfmt)
             return vulkan_drm_format_map[i].drm_fourcc;
@@ -3373,7 +3382,7 @@ static int vulkan_map_to_drm(AVHWFramesContext *hwfc, AVFrame *dst,
         };
         VkFormat plane_vkfmt = av_vkfmt_from_pixfmt(hwfc->sw_format)[i];
 
-        drm_desc->layers[i].format    = vulkan_fmt_to_drm(plane_vkfmt);
+        drm_desc->layers[i].format    = vulkan_fmt_to_drm(plane_vkfmt, hwfc->sw_format);
         drm_desc->layers[i].nb_planes = 1;
 
         if (drm_desc->layers[i].format == DRM_FORMAT_INVALID) {
