@@ -3395,6 +3395,11 @@ Maximum encoded frame size in bytes.
 @item @var{max_slice_size}
 Maximum encoded slice size in bytes.
 
+@item @var{mbbrc}
+Setting this flag enables macroblock level bitrate control that generally
+improves subjective visual quality. Enabling this flag may have negative impact
+on performance and objective visual quality metric.
+
 @item @var{p_strategy}
 Enable P-pyramid: 0-default 1-simple 2-pyramid(bf need to be set to 0).
 
@@ -3590,6 +3595,12 @@ Set the B-frame reference depth.  When set to one (the default), all B-frames
 will refer only to P- or I-frames.  When set to greater values multiple layers
 of B-frames will be present, frames in each layer only referring to frames in
 higher layers.
+
+@item async_depth
+Maximum processing parallelism. Increase this to improve single channel
+performance. This option doesn't work if driver doesn't implement vaSyncBuffer
+function. Please make sure there are enough hw_frames allocated if a large
+number of async_depth is used.
 
 @item rc_mode
 Set the rate control mode to use.  A given driver may only support a subset of
