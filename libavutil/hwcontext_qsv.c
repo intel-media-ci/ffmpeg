@@ -952,6 +952,7 @@ static int qsv_transfer_data_child(AVHWFramesContext *ctx, AVFrame *dst,
     AVHWFramesContext *child_frames_ctx = (AVHWFramesContext*)s->child_frames_ref->data;
     int download = !!src->hw_frames_ctx;
     mfxFrameSurface1 *surf = (mfxFrameSurface1*)(download ? src->data[3] : dst->data[3]);
+    mfxHDLPair* pair = (mfxHDLPair*)surf->Data.MemId;
 
     AVFrame *dummy;
     int ret;
@@ -964,13 +965,40 @@ static int qsv_transfer_data_child(AVHWFramesContext *ctx, AVFrame *dst,
     dummy->width         = src->width;
     dummy->height        = src->height;
     dummy->buf[0]        = download ? src->buf[0] : dst->buf[0];
-    dummy->data[3]       = surf->Data.MemId;
     dummy->hw_frames_ctx = s->child_frames_ref;
+
+    switch (child_frames_ctx->device_ctx->type) {
+#if CONFIG_VAAPI
+    case AV_HWDEVICE_TYPE_VAAPI:
+        dummy->data[3] = (uint8_t*)(intptr_t)*(VASurfaceID*)pair->first;
+        break;
+#endif
+#if CONFIG_D3D11VA
+    case AV_HWDEVICE_TYPE_D3D11VA:
+        AVD3D11VAFramesContext* child_frames_hwctx = child_frames_ctx->hwctx;
+        dummy->data[0] = (uint8_t*)(ID3D11Texture2D*)pair->first;
+        if (child_frames_hwctx->BindFlags & D3D11_BIND_RENDER_TARGET) {
+            dummy->data[1] = 0;
+        } else {
+            dummy->data[1] = (uint8_t*)pair->second;
+        }
+        break;
+#endif
+#if CONFIG_DXVA2
+    case AV_HWDEVICE_TYPE_DXVA2:
+        dummy->data[3] = (uint8_t*)(IDirect3DSurface9*)pair->first;
+        break;
+#endif
+    default:
+        return AVERROR(ENOSYS);
+    }
 
     ret = download ? av_hwframe_transfer_data(dst, dummy, 0) :
                      av_hwframe_transfer_data(dummy, src, 0);
 
     dummy->buf[0]        = NULL;
+    dummy->data[0]       = NULL;
+    dummy->data[1]       = NULL;
     dummy->data[3]       = NULL;
     dummy->hw_frames_ctx = NULL;
 
@@ -1052,69 +1080,25 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
                                   const AVFrame *src)
 {
     QSVFramesContext  *s = ctx->internal->priv;
-    mfxFrameSurface1 out = {{ 0 }};
-    mfxFrameSurface1 *in = (mfxFrameSurface1*)src->data[3];
 
-    mfxSyncPoint sync = NULL;
-    mfxStatus err;
-    int ret = 0;
-
-    ret = qsv_internal_session_check_init(ctx, 0);
-    if (ret < 0)
-        return ret;
-
-    if (!s->session_download) {
-        if (s->child_frames_ref)
-            return qsv_transfer_data_child(ctx, dst, src);
-
+    if (!s->child_frames_ref) {
         av_log(ctx, AV_LOG_ERROR, "Surface download not possible\n");
         return AVERROR(ENOSYS);
     }
 
-    out.Info = in->Info;
-    map_frame_to_surface(dst, &out);
-
-    do {
-        err = MFXVideoVPP_RunFrameVPPAsync(s->session_download, in, &out, NULL, &sync);
-        if (err == MFX_WRN_DEVICE_BUSY)
-            av_usleep(1);
-    } while (err == MFX_WRN_DEVICE_BUSY);
-
-    if (err < 0 || !sync) {
-        av_log(ctx, AV_LOG_ERROR, "Error downloading the surface\n");
-        return AVERROR_UNKNOWN;
-    }
-
-    do {
-        err = MFXVideoCORE_SyncOperation(s->session_download, sync, 1000);
-    } while (err == MFX_WRN_IN_EXECUTION);
-    if (err < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error synchronizing the operation: %d\n", err);
-        return AVERROR_UNKNOWN;
-    }
-
-    return 0;
+    return qsv_transfer_data_child(ctx, dst, src);
 }
 
 static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
                                 const AVFrame *src)
 {
     QSVFramesContext   *s = ctx->internal->priv;
-    mfxFrameSurface1   in = {{ 0 }};
-    mfxFrameSurface1 *out = (mfxFrameSurface1*)dst->data[3];
-    mfxFrameInfo tmp_info;
 
-    mfxSyncPoint sync = NULL;
-    mfxStatus err;
     int ret = 0;
     /* make a copy if the input is not padded as libmfx requires */
     AVFrame *tmp_frame = &s->realigned_tmp_frame;
     const AVFrame *src_frame;
     int realigned = 0;
-
-    ret = qsv_internal_session_check_init(ctx, 1);
-    if (ret < 0)
-        return ret;
 
     /* According to MSDK spec for mfxframeinfo, "Width must be a multiple of 16.
      * Height must be a multiple of 16 for progressive frame sequence and a
@@ -1143,50 +1127,16 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
             av_frame_unref(tmp_frame);
             return ret;
         }
-
-        tmp_info = out->Info;
-        out->Info.CropW = FFMIN(out->Info.Width,  tmp_frame->width);
-        out->Info.CropH = FFMIN(out->Info.Height, tmp_frame->height);
     }
 
     src_frame = realigned ? tmp_frame : src;
 
-    if (!s->session_upload) {
-        if (s->child_frames_ref)
-            return qsv_transfer_data_child(ctx, dst, src_frame);
-
+    if (!s->child_frames_ref) {
         av_log(ctx, AV_LOG_ERROR, "Surface upload not possible\n");
         return AVERROR(ENOSYS);
     }
 
-    in.Info = out->Info;
-    map_frame_to_surface(src_frame, &in);
-
-    do {
-        err = MFXVideoVPP_RunFrameVPPAsync(s->session_upload, &in, out, NULL, &sync);
-        if (err == MFX_WRN_DEVICE_BUSY)
-            av_usleep(1);
-    } while (err == MFX_WRN_DEVICE_BUSY);
-
-    if (err < 0 || !sync) {
-        av_log(ctx, AV_LOG_ERROR, "Error uploading the surface\n");
-        return AVERROR_UNKNOWN;
-    }
-
-    do {
-        err = MFXVideoCORE_SyncOperation(s->session_upload, sync, 1000);
-    } while (err == MFX_WRN_IN_EXECUTION);
-    if (err < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error synchronizing the operation\n");
-        return AVERROR_UNKNOWN;
-    }
-
-    if (realigned) {
-        out->Info.CropW = tmp_info.CropW;
-        out->Info.CropH = tmp_info.CropH;
-    }
-
-    return 0;
+    return qsv_transfer_data_child(ctx, dst, src_frame);
 }
 
 static int qsv_frames_derive_to(AVHWFramesContext *dst_ctx,
