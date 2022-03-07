@@ -316,10 +316,10 @@ static int dxva2_map_frame(AVHWFramesContext *ctx, AVFrame *dst, const AVFrame *
         goto fail;
     }
 
-    for (i = 0; i < nb_planes; i++)
+    for (i = 0; i < 4; i++)
         dst->linesize[i] = LockedRect.Pitch;
 
-    av_image_fill_pointers(dst->data, dst->format, surfaceDesc.Height,
+    av_image_fill_pointers(dst->data, ctx->sw_format, surfaceDesc.Height,
                            (uint8_t*)LockedRect.pBits, dst->linesize);
 
     if (dst->format == AV_PIX_FMT_PAL8)
