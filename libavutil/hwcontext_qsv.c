@@ -1063,6 +1063,40 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
     if (ret < 0)
         return ret;
 
+    /* According to MSDK spec for mfxframeinfo, "Width must be a multiple of 16.
+     * Height must be a multiple of 16 for progressive frame sequence and a
+     * multiple of 32 otherwise.", so allign all frames to 16 before downloading. */
+    if (ctx->height & 15 || dst->linesize[0] & 15) {
+        AVFrame *tmp_frame;
+        tmp_frame = av_frame_alloc();
+        if (!tmp_frame)
+            return AVERROR(ENOMEM);
+        ret = av_frame_ref(tmp_frame, dst);
+        if (ret < 0) {
+            av_frame_free(&tmp_frame);
+            return ret;
+        }
+        av_frame_unref(dst);
+
+        dst->width  = FFALIGN(tmp_frame->width, 16);
+        dst->height = FFALIGN(ctx->height, 16);
+        dst->format = tmp_frame->format;
+        ret = av_frame_get_buffer(dst, 0);
+        if (ret < 0) {
+            av_frame_free(&tmp_frame);
+            return ret;
+        }
+
+        dst->width = tmp_frame->width;
+        dst->height = tmp_frame->height;
+        ret = av_frame_copy_props(dst, tmp_frame);
+        if (ret < 0) {
+            av_frame_free(&tmp_frame);
+            return ret;
+        }
+        av_frame_free(&tmp_frame);
+    }
+
     if (!s->session_download) {
         if (s->child_frames_ref)
             return qsv_transfer_data_child(ctx, dst, src);
