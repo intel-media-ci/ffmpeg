@@ -254,6 +254,11 @@ static int d3d11va_frames_init(AVHWFramesContext *ctx)
         return AVERROR(EINVAL);
     }
 
+    if (!hwctx->BindFlags) {
+        av_log(ctx, AV_LOG_DEBUG, "Add render target bindflag for texture\n");
+        hwctx->BindFlags = D3D11_BIND_RENDER_TARGET;
+    }
+
     texDesc = (D3D11_TEXTURE2D_DESC){
         .Width      = ctx->width,
         .Height     = ctx->height,
