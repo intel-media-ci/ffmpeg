@@ -3664,6 +3664,22 @@ Number of columns for tiled encoding (requires libmfx >= 1.29).
 Number of rows for tiled encoding (requires libmfx  >= 1.29).
 @end table
 
+@subsection AV1 Options
+These options are used by av1_qsv (requires libvpl).
+@table @option
+@item @var{profile}
+@table @samp
+@item unknown
+@item main
+@end table
+
+@item @var{tile_cols}
+Number of columns for tiled encoding.
+
+@item @var{tile_rows}
+Number of rows for tiled encoding.
+@end table
+
 @section snow
 
 @subsection Options
