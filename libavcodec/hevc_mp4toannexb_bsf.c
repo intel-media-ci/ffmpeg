@@ -124,6 +124,7 @@ static int hevc_mp4toannexb_filter(AVBSFContext *ctx, AVPacket *out)
 
     int got_irap = 0;
     int i, ret = 0;
+    int last_nalu_is_aud = 0, cp_offset = 0;
 
     ret = ff_bsf_get_packet(ctx, &in);
     if (ret < 0)
@@ -169,14 +170,21 @@ static int hevc_mp4toannexb_filter(AVBSFContext *ctx, AVPacket *out)
 
         prev_size = out->size;
 
+        if (last_nalu_is_aud)
+            cp_offset = prev_size;
+
         ret = av_grow_packet(out, 4 + nalu_size + extra_size);
         if (ret < 0)
             goto fail;
 
-        if (extra_size)
-            memcpy(out->data + prev_size, ctx->par_out->extradata, extra_size);
+        if (extra_size) {
+            memmove(out->data + cp_offset + extra_size, out->data + cp_offset, prev_size - cp_offset);
+            memcpy(out->data + cp_offset, ctx->par_out->extradata, extra_size);
+        }
+
         AV_WB32(out->data + prev_size + extra_size, 1);
         bytestream2_get_buffer(&gb, out->data + prev_size + 4 + extra_size, nalu_size);
+        last_nalu_is_aud = nalu_type == HEVC_NAL_AUD;
     }
 
     ret = av_packet_copy_props(out, in);
