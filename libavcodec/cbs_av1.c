@@ -1075,6 +1075,9 @@ static int cbs_av1_write_obu(CodedBitstreamContext *ctx,
         put_bits32(pbc, 0);
     }
 
+    if (8 * unit->data_size > put_bits_left(pbc))
+        return AVERROR(ENOSPC);
+
     td = NULL;
     start_pos = put_bits_count(pbc);
 
@@ -1195,9 +1198,6 @@ static int cbs_av1_write_obu(CodedBitstreamContext *ctx,
     data_pos = put_bits_count(pbc) / 8;
     flush_put_bits(pbc);
     av_assert0(data_pos <= start_pos);
-
-    if (8 * obu->obu_size > put_bits_left(pbc))
-        return AVERROR(ENOSPC);
 
     if (obu->obu_size > 0) {
         memmove(pbc->buf + data_pos,
