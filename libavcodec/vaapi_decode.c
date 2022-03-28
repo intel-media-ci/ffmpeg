@@ -160,6 +160,10 @@ int ff_vaapi_decode_issue(AVCodecContext *avctx,
     av_log(avctx, AV_LOG_DEBUG, "Decode to surface %#x.\n",
            pic->output_surface);
 
+    if (ctx->hwfc->enable_sub_frame)
+        av_log(avctx, AV_LOG_DEBUG, "Decode sub frame to surface %#x.\n",
+               pic->sub_frame_surface);
+
     vas = vaBeginPicture(ctx->hwctx->display, ctx->va_context,
                          pic->output_surface);
     if (vas != VA_STATUS_SUCCESS) {
@@ -440,6 +444,9 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
     AVHWDeviceContext    *device = (AVHWDeviceContext*)device_ref->data;
     AVVAAPIDeviceContext *hwctx = device->hwctx;
 
+    VAConfigAttrib attr;
+    int attr_num = 0, support_dec_processing = 0;
+
     codec_desc = avcodec_descriptor_get(avctx->codec_id);
     if (!codec_desc) {
         err = AVERROR(EINVAL);
@@ -518,8 +525,23 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         }
     }
 
+    if (avctx->export_side_data & AV_CODEC_EXPORT_DATA_SUB_FRAME) {
+        attr.type = VAConfigAttribDecProcessing;
+        vas = vaGetConfigAttributes(hwctx->display, matched_va_profile,
+                                    VAEntrypointVLD, &attr, 1);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to query decode process "
+                   "attributes: %d (%s).\n", vas, vaErrorStr(vas));
+            return AVERROR_EXTERNAL;
+        } else if (attr.value | VA_DEC_PROCESSING) {
+            support_dec_processing = 1;
+            attr_num++;
+        } else
+            av_log(avctx, AV_LOG_WARNING, "Hardware doesn't support decode processing.\n");
+    }
+
     vas = vaCreateConfig(hwctx->display, matched_va_profile,
-                         VAEntrypointVLD, NULL, 0,
+                         VAEntrypointVLD, &attr, attr_num,
                          va_config);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create decode "
@@ -564,10 +586,32 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
 
     if (frames_ref) {
         AVHWFramesContext *frames = (AVHWFramesContext *)frames_ref->data;
+        AVVAAPIFramesContext *avfc = frames->hwctx;
 
         frames->format = AV_PIX_FMT_VAAPI;
         frames->width = avctx->coded_width;
         frames->height = avctx->coded_height;
+        avfc->enable_sub_frame = support_dec_processing;
+
+        if (avfc->enable_sub_frame) {
+            avfc->sub_frame_width = avctx->coded_width;
+            avfc->sub_frame_height = avctx->coded_height;
+            avfc->sub_frame_sw_format = AV_PIX_FMT_NV12;
+            if (avctx->sub_frame_opts) {
+                AVDictionaryEntry *e = NULL;
+                while ((e = av_dict_get(avctx->sub_frame_opts, "", e, AV_DICT_IGNORE_SUFFIX))) {
+                    if (!strcmp(e->key, "width"))
+                        avfc->sub_frame_width= atoi(e->value);
+                    else if (!strcmp(e->key, "height"))
+                        avfc->sub_frame_height = atoi(e->value);
+                    else if (!strcmp(e->key, "format"))
+                        avfc->sub_frame_sw_format = av_get_pix_fmt(e->value);
+                }
+            }
+            av_log(avctx, AV_LOG_DEBUG, "Sub frame set with width:%d, height:%d, "
+                   "format:%s.\n", avfc->sub_frame_width, avfc->sub_frame_height,
+                   av_get_pix_fmt_name(avfc->sub_frame_sw_format));
+        }
 
         err = vaapi_decode_find_best_format(avctx, device,
                                             *va_config, frames);

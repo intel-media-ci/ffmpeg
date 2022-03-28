@@ -19,6 +19,7 @@
 #ifndef AVUTIL_HWCONTEXT_VAAPI_H
 #define AVUTIL_HWCONTEXT_VAAPI_H
 
+#include "pixfmt.h"
 #include <va/va.h>
 
 /**
@@ -81,7 +82,7 @@ typedef struct AVVAAPIDeviceContext {
 } AVVAAPIDeviceContext;
 
 /**
- * VAAPI-specific data associated with a frame pool.
+ * VAAPI-specific data associated with a frame pool and sub frame.
  *
  * Allocated as AVHWFramesContext.hwctx.
  */
@@ -100,6 +101,18 @@ typedef struct AVVAAPIFramesContext {
      */
     VASurfaceID     *surface_ids;
     int           nb_surfaces;
+
+    /**
+     * Set by the user to indicate if need to enable sub frame support.
+     */
+    int enable_sub_frame;
+
+    /**
+     * Sub frame width/height/format. Only avaliable if enable_sub_frame
+     * is true.
+     */
+    int sub_frame_width, sub_frame_height;
+    enum AVPixelFormat sub_frame_sw_format;
 } AVVAAPIFramesContext;
 
 /**

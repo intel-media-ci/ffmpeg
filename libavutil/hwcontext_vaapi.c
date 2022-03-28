@@ -49,8 +49,7 @@
 #include "hwcontext_vaapi.h"
 #include "mem.h"
 #include "pixdesc.h"
-#include "pixfmt.h"
-
+#include "sub_frame_metadata.h"
 
 typedef struct VAAPIDevicePriv {
 #if HAVE_VAAPI_X11
@@ -82,6 +81,8 @@ typedef struct VAAPIFramesContext {
     // Caches whether VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2 is unsupported for
     // surface imports.
     int prime_2_import_unsupported;
+
+    AVBufferRef *sub_frames_ref;
 } VAAPIFramesContext;
 
 typedef struct VAAPIMapping {
@@ -511,7 +512,7 @@ static AVBufferRef *vaapi_pool_alloc(void *opaque, size_t size)
     return ref;
 }
 
-static int vaapi_frames_init(AVHWFramesContext *hwfc)
+static int vaapi_hw_frames_init(AVHWFramesContext *hwfc)
 {
     AVVAAPIFramesContext  *avfc = hwfc->hwctx;
     VAAPIFramesContext     *ctx = hwfc->internal->priv;
@@ -663,17 +664,57 @@ fail:
     return err;
 }
 
+static int vaapi_frames_init(AVHWFramesContext *hwfc)
+{
+    VAAPIFramesContext *ctx = hwfc->internal->priv;
+    AVVAAPIFramesContext *avfc = hwfc->hwctx;
+    AVHWFramesContext *sub_frames_ctx;
+    int ret;
+
+    ret = vaapi_hw_frames_init(hwfc);
+    if (ret < 0)
+        return ret;
+
+    if (avfc->enable_sub_frame){
+        ctx->sub_frames_ref = av_hwframe_ctx_alloc(hwfc->device_ref);
+        if (!ctx->sub_frames_ref) {
+            return AVERROR(ENOMEM);
+        }
+        sub_frames_ctx = (AVHWFramesContext*)ctx->sub_frames_ref->data;
+
+        sub_frames_ctx->width             = avfc->sub_frame_width;
+        sub_frames_ctx->height            = avfc->sub_frame_height;
+        sub_frames_ctx->format            = AV_PIX_FMT_VAAPI;
+        sub_frames_ctx->sw_format         = avfc->sub_frame_sw_format;
+
+        ret = av_hwframe_ctx_init(ctx->sub_frames_ref);
+        if (ret < 0) {
+            av_buffer_unref(&ctx->sub_frames_ref);
+            av_log(hwfc, AV_LOG_ERROR, "Error to init sub frame hw context.\n");
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
 static void vaapi_frames_uninit(AVHWFramesContext *hwfc)
 {
     AVVAAPIFramesContext *avfc = hwfc->hwctx;
     VAAPIFramesContext    *ctx = hwfc->internal->priv;
 
+    av_buffer_unref(&ctx->sub_frames_ref);
     av_freep(&avfc->surface_ids);
     av_freep(&ctx->attributes);
 }
 
 static int vaapi_get_buffer(AVHWFramesContext *hwfc, AVFrame *frame)
 {
+    VAAPIFramesContext *ctx = hwfc->internal->priv;
+    AVVAAPIFramesContext *avfc = hwfc->hwctx;
+    AVFrame *sub_frame;
+    int ret;
+
     frame->buf[0] = av_buffer_pool_get(hwfc->pool);
     if (!frame->buf[0])
         return AVERROR(ENOMEM);
@@ -682,6 +723,21 @@ static int vaapi_get_buffer(AVHWFramesContext *hwfc, AVFrame *frame)
     frame->format  = AV_PIX_FMT_VAAPI;
     frame->width   = hwfc->width;
     frame->height  = hwfc->height;
+
+    if (avfc->enable_sub_frame) {
+        if (!ctx->sub_frames_ref)
+            return AVERROR(ENOSYS);
+
+        sub_frame = av_sub_frame_create_side_data(frame);
+        if (!sub_frame)
+            return AVERROR(ENOMEM);
+
+        ret = av_hwframe_get_buffer(ctx->sub_frames_ref, sub_frame, 0);
+        if (ret < 0) {
+            av_log(ctx, AV_LOG_ERROR, "Can't get sub frame.\n");
+            return ret;
+        }
+    }
 
     return 0;
 }
