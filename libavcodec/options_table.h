@@ -88,6 +88,7 @@ static const AVOption avcodec_options[] = {
 {"prft", "export Producer Reference Time through packet side data", 0, AV_OPT_TYPE_CONST, {.i64 = AV_CODEC_EXPORT_DATA_PRFT}, INT_MIN, INT_MAX, A|V|S|E, "export_side_data"},
 {"venc_params", "export video encoding parameters through frame side data", 0, AV_OPT_TYPE_CONST, {.i64 = AV_CODEC_EXPORT_DATA_VIDEO_ENC_PARAMS}, INT_MIN, INT_MAX, V|D, "export_side_data"},
 {"film_grain", "export film grain parameters through frame side data", 0, AV_OPT_TYPE_CONST, {.i64 = AV_CODEC_EXPORT_DATA_FILM_GRAIN}, INT_MIN, INT_MAX, V|D, "export_side_data"},
+{"sub_frame", "export sub frame through frame side data", 0, AV_OPT_TYPE_CONST, {.i64 = AV_CODEC_EXPORT_DATA_SUB_FRAME}, INT_MIN, INT_MAX, V|D, "export_side_data"},
 {"time_base", NULL, OFFSET(time_base), AV_OPT_TYPE_RATIONAL, {.dbl = 0}, 0, INT_MAX},
 {"g", "set the group of picture (GOP) size", OFFSET(gop_size), AV_OPT_TYPE_INT, {.i64 = 12 }, INT_MIN, INT_MAX, V|E},
 {"ar", "set audio sampling rate (in Hz)", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64 = DEFAULT }, 0, INT_MAX, A|D|E},
@@ -399,6 +400,7 @@ static const AVOption avcodec_options[] = {
 {"allow_profile_mismatch", "attempt to decode anyway if HW accelerated decoder's supported profiles do not exactly match the stream", 0, AV_OPT_TYPE_CONST, {.i64 = AV_HWACCEL_FLAG_ALLOW_PROFILE_MISMATCH }, INT_MIN, INT_MAX, V | D, "hwaccel_flags"},
 {"extra_hw_frames", "Number of extra hardware frames to allocate for the user", OFFSET(extra_hw_frames), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, V|D },
 {"discard_damaged_percentage", "Percentage of damaged samples to discard a frame", OFFSET(discard_damaged_percentage), AV_OPT_TYPE_INT, {.i64 = 95 }, 0, 100, V|D },
+{"sub_frame_opts", "set sub frame opts", OFFSET(sub_frame_opts), AV_OPT_TYPE_DICT, {.str = NULL}, -1, INT_MAX, V|D},
 {NULL},
 };
 
