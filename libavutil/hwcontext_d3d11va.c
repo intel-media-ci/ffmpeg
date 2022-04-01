@@ -349,6 +349,8 @@ static int d3d11va_create_staging_texture(AVHWFramesContext *ctx)
     AVD3D11VADeviceContext *device_hwctx = ctx->device_ctx->hwctx;
     D3D11VAFramesContext              *s = ctx->internal->priv;
     HRESULT hr;
+    int i;
+
     D3D11_TEXTURE2D_DESC texDesc = {
         .Width          = ctx->width,
         .Height         = ctx->height,
@@ -359,6 +361,20 @@ static int d3d11va_create_staging_texture(AVHWFramesContext *ctx)
         .Usage          = D3D11_USAGE_STAGING,
         .CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE,
     };
+
+    if (!texDesc.Format) {
+        for (i = 0; i < FF_ARRAY_ELEMS(supported_formats); i++) {
+            if (ctx->sw_format == supported_formats[i].pix_fmt) {
+                texDesc.Format = supported_formats[i].d3d_format;
+                break;
+            }
+        }
+        if (i == FF_ARRAY_ELEMS(supported_formats)) {
+            av_log(ctx, AV_LOG_ERROR, "Unsupported pixel format: %s\n",
+                av_get_pix_fmt_name(ctx->sw_format));
+            return AVERROR(EINVAL);
+        }
+    }
 
     hr = ID3D11Device_CreateTexture2D(device_hwctx->device, &texDesc, NULL, &s->staging_texture);
     if (FAILED(hr)) {
