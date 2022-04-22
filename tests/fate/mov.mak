@@ -153,4 +153,13 @@ fate-mov-mp4-disposition-mpegts-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/
 
 FATE_SAMPLES_FFMPEG_FFPROBE += $(FATE_MOV_FFMPEG_FFPROBE-yes)
 
-fate-mov: $(FATE_MOV) $(FATE_MOV_FFPROBE) $(FATE_MOV_FASTSTART) $(FATE_MOV_FFMPEG_FFPROBE-yes)
+FATE_MOV_FFMPEG-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL \
+                               WAV_DEMUXER PAN_FILTER PCM_S16LE_ENCODER \
+                               MOV_MUXER FRAMECRC_MUXER ) \
+                          += fate-mov-channel-description
+fate-mov-channel-description: tests/data/asynth-44100-1.wav tests/data/filtergraphs/mov-channel-description
+fate-mov-channel-description: CMD = transcode wav $(TARGET_PATH)/tests/data/asynth-44100-1.wav mov "-filter_complex_script $(TARGET_PATH)/tests/data/filtergraphs/mov-channel-description -map [outFL] -map [outFR] -map [outFC] -map [outLFE] -map [outBL] -map [outBR] -map [outDL] -map [outDR] -c:a pcm_s16le" "-map 0 -c copy -frames:a 0"
+
+FATE_FFMPEG += $(FATE_MOV_FFMPEG-yes)
+
+fate-mov: $(FATE_MOV) $(FATE_MOV_FFMPEG-yes) $(FATE_MOV_FFPROBE) $(FATE_MOV_FASTSTART) $(FATE_MOV_FFMPEG_FFPROBE-yes)

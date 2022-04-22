@@ -337,9 +337,13 @@ fate-jpg-12bpp: CMD = framecrc -idct simple -i $(TARGET_SAMPLES)/jpg/12bpp.jpg -
 FATE_JPG += fate-jpg-jfif
 fate-jpg-jfif: CMD = framecrc -idct simple -i $(TARGET_SAMPLES)/jpg/20242.jpg
 
+FATE_JPG_TRANSCODE-$(call TRANSCODE, MJPEG, MJPEG IMAGE_JPEG_PIPE, IMAGE_PNG_PIPE_DEMUXER PNG_DECODER SCALE_FILTER) += fate-jpg-icc
+fate-jpg-icc: CMD = transcode png_pipe $(TARGET_SAMPLES)/png1/lena-int_rgb24.png mjpeg "-vf scale" "" "" "-show_frames"
+
 FATE_JPG-$(call DEMDEC, IMAGE2, MJPEG) += $(FATE_JPG)
 FATE_IMAGE += $(FATE_JPG-yes)
-fate-jpg: $(FATE_JPG-yes)
+FATE_IMAGE_TRANSCODE += $(FATE_JPG_TRANSCODE-yes)
+fate-jpg: $(FATE_JPG-yes) $(FATE_JPG_TRANSCODE-yes)
 
 FATE_JPEGLS += fate-jpegls-2bpc
 fate-jpegls-2bpc: CMD = framecrc -idct simple -i $(TARGET_SAMPLES)/jpegls/4.jls
@@ -385,11 +389,15 @@ FATE_PNG_PROBE += fate-png-side-data
 fate-png-side-data: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_frames \
     -i $(TARGET_SAMPLES)/png1/lena-int_rgb24.png
 
+FATE_PNG_TRANSCODE-$(call TRANSCODE, PNG, IMAGE2 IMAGE_PNG_PIPE) += fate-png-icc
+fate-png-icc: CMD = transcode png_pipe $(TARGET_SAMPLES)/png1/lena-int_rgb24.png image2 "-c png" "" "" "-show_frames"
+
 FATE_PNG-$(call DEMDEC, IMAGE2, PNG) += $(FATE_PNG)
 FATE_PNG_PROBE-$(call DEMDEC, IMAGE2, PNG) += $(FATE_PNG_PROBE)
 FATE_IMAGE += $(FATE_PNG-yes)
 FATE_IMAGE_PROBE += $(FATE_PNG_PROBE-yes)
-fate-png: $(FATE_PNG-yes) $(FATE_PNG_PROBE-yes)
+FATE_IMAGE_TRANSCODE += $(FATE_PNG_TRANSCODE-yes)
+fate-png: $(FATE_PNG-yes) $(FATE_PNG_PROBE-yes) $(FATE_PNG_TRANSCODE-yes)
 
 FATE_IMAGE-$(call DEMDEC, IMAGE2, PTX) += fate-ptx
 fate-ptx: CMD = framecrc -i $(TARGET_SAMPLES)/ptx/_113kw_pic.ptx -pix_fmt rgb24 -vf scale
@@ -551,8 +559,10 @@ fate-xbm: $(FATE_XBM-yes)
 
 FATE_IMAGE += $(FATE_IMAGE-yes)
 FATE_IMAGE_PROBE += $(FATE_IMAGE_PROBE-yes)
+FATE_IMAGE_TRANSCODE += $(FATE_IMAGE_TRANSCODE-yes)
 
 FATE_SAMPLES_FFMPEG += $(FATE_IMAGE)
 FATE_SAMPLES_FFPROBE += $(FATE_IMAGE_PROBE)
+FATE_SAMPLES_FFMPEG_FFPROBE += $(FATE_IMAGE_TRANSCODE)
 
-fate-image: $(FATE_IMAGE) $(FATE_IMAGE_PROBE)
+fate-image: $(FATE_IMAGE) $(FATE_IMAGE_PROBE) $(FATE_IMAGE_TRANSCODE)

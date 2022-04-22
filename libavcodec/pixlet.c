@@ -406,7 +406,7 @@ static void filterfn(int16_t *dest, int16_t *tmp, unsigned size, int64_t scale)
                 (int64_t) low [i - 1] * -INT64_C(325392907)  +
                 (int64_t) high[i + 0] *  INT64_C(1518500249) +
                 (int64_t) high[i - 1] *  INT64_C(1518500249);
-        dest[i * 2] = av_clip_int16(((value >> 32) * scale) >> 32);
+        dest[i * 2] = av_clip_int16(((value >> 32) * (uint64_t)scale) >> 32);
     }
 
     for (i = 0; i < hsize; i++) {
@@ -417,7 +417,7 @@ static void filterfn(int16_t *dest, int16_t *tmp, unsigned size, int64_t scale)
                 (int64_t) high[i + 1] *  INT64_C(303700064)  +
                 (int64_t) high[i + 0] * -INT64_C(3644400640) +
                 (int64_t) high[i - 1] *  INT64_C(303700064);
-        dest[i * 2 + 1] = av_clip_int16(((value >> 32) * scale) >> 32);
+        dest[i * 2 + 1] = av_clip_int16(((value >> 32) * (uint64_t)scale) >> 32);
     }
 }
 
@@ -601,12 +601,11 @@ static int decode_plane(AVCodecContext *avctx, int plane,
     return 0;
 }
 
-static int pixlet_decode_frame(AVCodecContext *avctx, void *data,
+static int pixlet_decode_frame(AVCodecContext *avctx, AVFrame *p,
                                int *got_frame, AVPacket *avpkt)
 {
     PixletContext *ctx = avctx->priv_data;
     int i, w, h, width, height, ret, version;
-    AVFrame *p = data;
     uint32_t pktsize, depth;
 
     bytestream2_init(&ctx->gb, avpkt->data, avpkt->size);
@@ -700,7 +699,7 @@ const FFCodec ff_pixlet_decoder = {
     .p.id             = AV_CODEC_ID_PIXLET,
     .init             = pixlet_init,
     .close            = pixlet_close,
-    .decode           = pixlet_decode_frame,
+    FF_CODEC_DECODE_CB(pixlet_decode_frame),
     .priv_data_size   = sizeof(PixletContext),
     .p.capabilities   = AV_CODEC_CAP_DR1 |
                         AV_CODEC_CAP_FRAME_THREADS,

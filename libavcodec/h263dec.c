@@ -425,15 +425,14 @@ static int decode_slice(MpegEncContext *s)
     return AVERROR_INVALIDDATA;
 }
 
-int ff_h263_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
-                         AVPacket *avpkt)
+int ff_h263_decode_frame(AVCodecContext *avctx, AVFrame *pict,
+                         int *got_frame, AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     MpegEncContext *s  = avctx->priv_data;
     int ret;
     int slice_ret = 0;
-    AVFrame *pict = data;
 
     /* no supplementary picture */
     if (buf_size == 0) {
@@ -695,12 +694,12 @@ frame_end:
         if ((ret = av_frame_ref(pict, s->current_picture_ptr->f)) < 0)
             return ret;
         ff_print_debug_info(s, s->current_picture_ptr, pict);
-        ff_mpv_export_qp_table(s, pict, s->current_picture_ptr, FF_QSCALE_TYPE_MPEG1);
+        ff_mpv_export_qp_table(s, pict, s->current_picture_ptr, FF_MPV_QSCALE_TYPE_MPEG1);
     } else if (s->last_picture_ptr) {
         if ((ret = av_frame_ref(pict, s->last_picture_ptr->f)) < 0)
             return ret;
         ff_print_debug_info(s, s->last_picture_ptr, pict);
-        ff_mpv_export_qp_table(s, pict, s->last_picture_ptr, FF_QSCALE_TYPE_MPEG1);
+        ff_mpv_export_qp_table(s, pict, s->last_picture_ptr, FF_MPV_QSCALE_TYPE_MPEG1);
     }
 
     if (s->last_picture_ptr || s->low_delay) {
@@ -763,7 +762,7 @@ const FFCodec ff_h263_decoder = {
     .priv_data_size = sizeof(MpegEncContext),
     .init           = ff_h263_decode_init,
     .close          = ff_h263_decode_end,
-    .decode         = ff_h263_decode_frame,
+    FF_CODEC_DECODE_CB(ff_h263_decode_frame),
     .p.capabilities = AV_CODEC_CAP_DRAW_HORIZ_BAND | AV_CODEC_CAP_DR1 |
 #if FF_API_FLAG_TRUNCATED
                       AV_CODEC_CAP_TRUNCATED |
@@ -785,7 +784,7 @@ const FFCodec ff_h263p_decoder = {
     .priv_data_size = sizeof(MpegEncContext),
     .init           = ff_h263_decode_init,
     .close          = ff_h263_decode_end,
-    .decode         = ff_h263_decode_frame,
+    FF_CODEC_DECODE_CB(ff_h263_decode_frame),
     .p.capabilities = AV_CODEC_CAP_DRAW_HORIZ_BAND | AV_CODEC_CAP_DR1 |
 #if FF_API_FLAG_TRUNCATED
                       AV_CODEC_CAP_TRUNCATED |

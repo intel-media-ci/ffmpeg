@@ -154,13 +154,15 @@ void ff_h264_free_tables(H264Context *h)
     av_buffer_pool_uninit(&h->motion_val_pool);
     av_buffer_pool_uninit(&h->ref_index_pool);
 
+#if CONFIG_ERROR_RESILIENCE
+    av_freep(&h->er.mb_index2xy);
+    av_freep(&h->er.error_status_table);
+    av_freep(&h->er.er_temp_buffer);
+    av_freep(&h->dc_val_base);
+#endif
+
     for (i = 0; i < h->nb_slice_ctx; i++) {
         H264SliceContext *sl = &h->slice_ctx[i];
-
-        av_freep(&sl->dc_val_base);
-        av_freep(&sl->er.mb_index2xy);
-        av_freep(&sl->er.error_status_table);
-        av_freep(&sl->er.er_temp_buffer);
 
         av_freep(&sl->bipred_scratchpad);
         av_freep(&sl->edge_emu_buffer);
@@ -176,6 +178,7 @@ void ff_h264_free_tables(H264Context *h)
 
 int ff_h264_alloc_tables(H264Context *h)
 {
+    ERContext *const er = &h->er;
     const int big_mb_num = h->mb_stride * (h->mb_height + 1);
     const int row_mb_num = 2*h->mb_stride*FFMAX(h->nb_slice_ctx, 1);
     const int st_size = big_mb_num + h->mb_stride;
@@ -208,33 +211,11 @@ int ff_h264_alloc_tables(H264Context *h)
             h->mb2br_xy[mb_xy] = 8 * (FMO ? mb_xy : (mb_xy % (2 * h->mb_stride)));
         }
 
-    return 0;
-}
-
-/**
- * Init context
- * Allocate buffers which are not shared amongst multiple threads.
- */
-int ff_h264_slice_context_init(H264Context *h, H264SliceContext *sl)
-{
-    ERContext *er = &sl->er;
-    int mb_array_size = h->mb_height * h->mb_stride;
-    int y_size  = (2 * h->mb_width + 1) * (2 * h->mb_height + 1);
-    int c_size  = h->mb_stride * (h->mb_height + 1);
-    int yc_size = y_size + 2   * c_size;
-    int x, y, i;
-
-    sl->ref_cache[0][scan8[5]  + 1] =
-    sl->ref_cache[0][scan8[7]  + 1] =
-    sl->ref_cache[0][scan8[13] + 1] =
-    sl->ref_cache[1][scan8[5]  + 1] =
-    sl->ref_cache[1][scan8[7]  + 1] =
-    sl->ref_cache[1][scan8[13] + 1] = PART_NOT_AVAILABLE;
-
-    if (sl != h->slice_ctx) {
-        memset(er, 0, sizeof(*er));
-    } else if (CONFIG_ERROR_RESILIENCE) {
+    if (CONFIG_ERROR_RESILIENCE) {
         const int er_size = h->mb_height * h->mb_stride * (4*sizeof(int) + 1);
+        int mb_array_size = h->mb_height * h->mb_stride;
+        int y_size  = (2 * h->mb_width + 1) * (2 * h->mb_height + 1);
+        int yc_size = y_size + 2 * big_mb_num;
 
         /* init ER */
         er->avctx          = h->avctx;
@@ -252,7 +233,7 @@ int ff_h264_slice_context_init(H264Context *h, H264SliceContext *sl)
         if (!FF_ALLOCZ_TYPED_ARRAY(er->mb_index2xy,        h->mb_num + 1) ||
             !FF_ALLOCZ_TYPED_ARRAY(er->error_status_table, mb_array_size) ||
             !FF_ALLOCZ_TYPED_ARRAY(er->er_temp_buffer,     er_size)       ||
-            !FF_ALLOCZ_TYPED_ARRAY(sl->dc_val_base,        yc_size))
+            !FF_ALLOCZ_TYPED_ARRAY(h->dc_val_base,         yc_size))
             return AVERROR(ENOMEM); // ff_h264_free_tables will clean up for us
 
         for (y = 0; y < h->mb_height; y++)
@@ -261,14 +242,29 @@ int ff_h264_slice_context_init(H264Context *h, H264SliceContext *sl)
 
         er->mb_index2xy[h->mb_height * h->mb_width] = (h->mb_height - 1) *
                                                       h->mb_stride + h->mb_width;
-        er->dc_val[0] = sl->dc_val_base + h->mb_width * 2 + 2;
-        er->dc_val[1] = sl->dc_val_base + y_size + h->mb_stride + 1;
-        er->dc_val[2] = er->dc_val[1] + c_size;
-        for (i = 0; i < yc_size; i++)
-            sl->dc_val_base[i] = 1024;
+        er->dc_val[0] = h->dc_val_base + h->mb_width * 2 + 2;
+        er->dc_val[1] = h->dc_val_base + y_size + h->mb_stride + 1;
+        er->dc_val[2] = er->dc_val[1] + big_mb_num;
+        for (int i = 0; i < yc_size; i++)
+            h->dc_val_base[i] = 1024;
     }
 
     return 0;
+}
+
+/**
+ * Init slice context
+ */
+void ff_h264_slice_context_init(H264Context *h, H264SliceContext *sl)
+{
+    sl->ref_cache[0][scan8[5]  + 1] =
+    sl->ref_cache[0][scan8[7]  + 1] =
+    sl->ref_cache[0][scan8[13] + 1] =
+    sl->ref_cache[1][scan8[5]  + 1] =
+    sl->ref_cache[1][scan8[7]  + 1] =
+    sl->ref_cache[1][scan8[13] + 1] = PART_NOT_AVAILABLE;
+
+    sl->er = &h->er;
 }
 
 static int h264_init_pic(H264Picture *pic)
@@ -739,7 +735,7 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
         goto end;
 
     // set decode_error_flags to allow users to detect concealed decoding errors
-    if ((ret < 0 || h->slice_ctx->er.error_occurred) && h->cur_pic_ptr) {
+    if ((ret < 0 || h->er.error_occurred) && h->cur_pic_ptr) {
         h->cur_pic_ptr->f->decode_error_flags |= FF_DECODE_ERROR_DECODE_SLICES;
     }
 
@@ -764,25 +760,23 @@ end:
         H264SliceContext *sl = h->slice_ctx;
         int use_last_pic = h->last_pic_for_ec.f->buf[0] && !sl->ref_count[0];
 
-        ff_h264_set_erpic(&sl->er.cur_pic, h->cur_pic_ptr);
+        ff_h264_set_erpic(&h->er.cur_pic, h->cur_pic_ptr);
 
         if (use_last_pic) {
-            ff_h264_set_erpic(&sl->er.last_pic, &h->last_pic_for_ec);
+            ff_h264_set_erpic(&h->er.last_pic, &h->last_pic_for_ec);
             sl->ref_list[0][0].parent = &h->last_pic_for_ec;
             memcpy(sl->ref_list[0][0].data, h->last_pic_for_ec.f->data, sizeof(sl->ref_list[0][0].data));
             memcpy(sl->ref_list[0][0].linesize, h->last_pic_for_ec.f->linesize, sizeof(sl->ref_list[0][0].linesize));
             sl->ref_list[0][0].reference = h->last_pic_for_ec.reference;
         } else if (sl->ref_count[0]) {
-            ff_h264_set_erpic(&sl->er.last_pic, sl->ref_list[0][0].parent);
+            ff_h264_set_erpic(&h->er.last_pic, sl->ref_list[0][0].parent);
         } else
-            ff_h264_set_erpic(&sl->er.last_pic, NULL);
+            ff_h264_set_erpic(&h->er.last_pic, NULL);
 
         if (sl->ref_count[1])
-            ff_h264_set_erpic(&sl->er.next_pic, sl->ref_list[1][0].parent);
+            ff_h264_set_erpic(&h->er.next_pic, sl->ref_list[1][0].parent);
 
-        sl->er.ref_count = sl->ref_count[0];
-
-        ff_er_frame_end(&sl->er);
+        ff_er_frame_end(&h->er);
         if (use_last_pic)
             memset(&sl->ref_list[0][0], 0, sizeof(sl->ref_list[0][0]));
     }
@@ -980,13 +974,12 @@ static int send_next_delayed_frame(H264Context *h, AVFrame *dst_frame,
     return buf_index;
 }
 
-static int h264_decode_frame(AVCodecContext *avctx, void *data,
+static int h264_decode_frame(AVCodecContext *avctx, AVFrame *pict,
                              int *got_frame, AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     H264Context *h     = avctx->priv_data;
-    AVFrame *pict      = data;
     int buf_index;
     int ret;
 
@@ -1077,7 +1070,7 @@ const FFCodec ff_h264_decoder = {
     .priv_data_size        = sizeof(H264Context),
     .init                  = h264_decode_init,
     .close                 = h264_decode_end,
-    .decode                = h264_decode_frame,
+    FF_CODEC_DECODE_CB(h264_decode_frame),
     .p.capabilities        = /*AV_CODEC_CAP_DRAW_HORIZ_BAND |*/ AV_CODEC_CAP_DR1 |
                              AV_CODEC_CAP_DELAY | AV_CODEC_CAP_SLICE_THREADS |
                              AV_CODEC_CAP_FRAME_THREADS,

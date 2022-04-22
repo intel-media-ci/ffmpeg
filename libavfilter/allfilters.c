@@ -259,6 +259,7 @@ extern const AVFilter ff_vf_estdif;
 extern const AVFilter ff_vf_exposure;
 extern const AVFilter ff_vf_extractplanes;
 extern const AVFilter ff_vf_fade;
+extern const AVFilter ff_vf_feedback;
 extern const AVFilter ff_vf_fftdnoiz;
 extern const AVFilter ff_vf_fftfilt;
 extern const AVFilter ff_vf_field;
@@ -372,6 +373,7 @@ extern const AVFilter ff_vf_perspective;
 extern const AVFilter ff_vf_phase;
 extern const AVFilter ff_vf_photosensitivity;
 extern const AVFilter ff_vf_pixdesctest;
+extern const AVFilter ff_vf_pixelize;
 extern const AVFilter ff_vf_pixscope;
 extern const AVFilter ff_vf_pp;
 extern const AVFilter ff_vf_pp7;
@@ -432,6 +434,7 @@ extern const AVFilter ff_vf_shuffleplanes;
 extern const AVFilter ff_vf_sidedata;
 extern const AVFilter ff_vf_signalstats;
 extern const AVFilter ff_vf_signature;
+extern const AVFilter ff_vf_siti;
 extern const AVFilter ff_vf_smartblur;
 extern const AVFilter ff_vf_sobel;
 extern const AVFilter ff_vf_sobel_opencl;
@@ -549,6 +552,7 @@ extern const AVFilter ff_avf_showwavespic;
 extern const AVFilter ff_vaf_spectrumsynth;
 
 /* multimedia sources */
+extern const AVFilter ff_avsrc_avsynctest;
 extern const AVFilter ff_avsrc_amovie;
 extern const AVFilter ff_avsrc_movie;
 

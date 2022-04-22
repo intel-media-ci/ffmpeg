@@ -109,9 +109,8 @@ static av_cold int xface_decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int xface_decode_frame(AVCodecContext *avctx,
-                              void *data, int *got_frame,
-                              AVPacket *avpkt)
+static int xface_decode_frame(AVCodecContext *avctx, AVFrame *frame,
+                              int *got_frame, AVPacket *avpkt)
 {
     XFaceContext *xface = avctx->priv_data;
     int ret, i, j, k;
@@ -119,7 +118,6 @@ static int xface_decode_frame(AVCodecContext *avctx,
     BigInt b = {0};
     char *buf;
     int64_t c;
-    AVFrame *frame = data;
 
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
@@ -184,7 +182,7 @@ const FFCodec ff_xface_decoder = {
     .p.id           = AV_CODEC_ID_XFACE,
     .priv_data_size = sizeof(XFaceContext),
     .init           = xface_decode_init,
-    .decode         = xface_decode_frame,
+    FF_CODEC_DECODE_CB(xface_decode_frame),
     .p.pix_fmts     = (const enum AVPixelFormat[]) { AV_PIX_FMT_MONOWHITE, AV_PIX_FMT_NONE },
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
 };

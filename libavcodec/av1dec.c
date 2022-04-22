@@ -503,9 +503,8 @@ static int get_pixel_format(AVCodecContext *avctx)
 
     if (pix_fmt == AV_PIX_FMT_NONE)
         return -1;
-    s->pix_fmt = pix_fmt;
 
-    switch (s->pix_fmt) {
+    switch (pix_fmt) {
     case AV_PIX_FMT_YUV420P:
 #if CONFIG_AV1_DXVA2_HWACCEL
         *fmtp++ = AV_PIX_FMT_DXVA2_VLD;
@@ -548,7 +547,7 @@ static int get_pixel_format(AVCodecContext *avctx)
         break;
     }
 
-    *fmtp++ = s->pix_fmt;
+    *fmtp++ = pix_fmt;
     *fmtp = AV_PIX_FMT_NONE;
 
     ret = ff_thread_get_format(avctx, pix_fmts);
@@ -566,6 +565,7 @@ static int get_pixel_format(AVCodecContext *avctx)
         return AVERROR(ENOSYS);
     }
 
+    s->pix_fmt = pix_fmt;
     avctx->pix_fmt = ret;
 
     return 0;
@@ -999,7 +999,7 @@ static int get_current_frame(AVCodecContext *avctx)
     return ret;
 }
 
-static int av1_decode_frame(AVCodecContext *avctx, void *frame,
+static int av1_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                             int *got_frame, AVPacket *pkt)
 {
     AV1DecContext *s = avctx->priv_data;
@@ -1246,7 +1246,7 @@ const FFCodec ff_av1_decoder = {
     .priv_data_size        = sizeof(AV1DecContext),
     .init                  = av1_decode_init,
     .close                 = av1_decode_free,
-    .decode                = av1_decode_frame,
+    FF_CODEC_DECODE_CB(av1_decode_frame),
     .p.capabilities        = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_AVOID_PROBING,
     .caps_internal         = FF_CODEC_CAP_INIT_THREADSAFE |
                              FF_CODEC_CAP_INIT_CLEANUP |

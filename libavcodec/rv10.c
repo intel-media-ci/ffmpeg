@@ -593,13 +593,12 @@ static int get_slice_offset(AVCodecContext *avctx, const uint8_t *buf, int n)
         return AV_RL32(buf + n * 8);
 }
 
-static int rv10_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
-                             AVPacket *avpkt)
+static int rv10_decode_frame(AVCodecContext *avctx, AVFrame *pict,
+                             int *got_frame, AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     MpegEncContext *s = avctx->priv_data;
-    AVFrame *pict = data;
     int i, ret;
     int slice_count;
     const uint8_t *slices_hdr = NULL;
@@ -663,12 +662,12 @@ static int rv10_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
             if ((ret = av_frame_ref(pict, s->current_picture_ptr->f)) < 0)
                 return ret;
             ff_print_debug_info(s, s->current_picture_ptr, pict);
-            ff_mpv_export_qp_table(s, pict, s->current_picture_ptr, FF_QSCALE_TYPE_MPEG1);
+            ff_mpv_export_qp_table(s, pict, s->current_picture_ptr, FF_MPV_QSCALE_TYPE_MPEG1);
         } else if (s->last_picture_ptr) {
             if ((ret = av_frame_ref(pict, s->last_picture_ptr->f)) < 0)
                 return ret;
             ff_print_debug_info(s, s->last_picture_ptr, pict);
-            ff_mpv_export_qp_table(s, pict,s->last_picture_ptr, FF_QSCALE_TYPE_MPEG1);
+            ff_mpv_export_qp_table(s, pict,s->last_picture_ptr, FF_MPV_QSCALE_TYPE_MPEG1);
         }
 
         if (s->last_picture_ptr || s->low_delay) {
@@ -690,7 +689,7 @@ const FFCodec ff_rv10_decoder = {
     .priv_data_size = sizeof(RVDecContext),
     .init           = rv10_decode_init,
     .close          = rv10_decode_end,
-    .decode         = rv10_decode_frame,
+    FF_CODEC_DECODE_CB(rv10_decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
     .p.max_lowres   = 3,
@@ -708,7 +707,7 @@ const FFCodec ff_rv20_decoder = {
     .priv_data_size = sizeof(RVDecContext),
     .init           = rv10_decode_init,
     .close          = rv10_decode_end,
-    .decode         = rv10_decode_frame,
+    FF_CODEC_DECODE_CB(rv10_decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
     .flush          = ff_mpeg_flush,

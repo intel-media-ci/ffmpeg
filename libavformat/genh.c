@@ -21,7 +21,6 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
-#include "libavcodec/internal.h"
 #include "avformat.h"
 #include "internal.h"
 
@@ -68,6 +67,9 @@ static int genh_read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
     st->codecpar->block_align = align * st->codecpar->ch_layout.nb_channels;
     st->codecpar->sample_rate = avio_rl32(s->pb);
+    if (st->codecpar->sample_rate < 0)
+        return AVERROR_INVALIDDATA;
+
     avio_skip(s->pb, 4);
     st->duration = avio_rl32(s->pb);
 

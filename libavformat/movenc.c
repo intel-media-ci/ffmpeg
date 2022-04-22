@@ -867,20 +867,38 @@ static int mov_write_dmlp_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *tra
 
 static int mov_write_chan_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *track)
 {
-    uint32_t layout_tag, bitmap;
+    uint32_t layout_tag, bitmap, *channel_desc;
     int64_t pos = avio_tell(pb);
-
-    layout_tag = ff_mov_get_channel_layout_tag(track->par->codec_id,
-                                               &track->par->ch_layout,
-                                               &bitmap);
-    if (!layout_tag) {
-        av_log(s, AV_LOG_WARNING, "not writing 'chan' tag due to "
-               "lack of channel information\n");
-        return 0;
-    }
+    int num_desc, ret;
 
     if (track->multichannel_as_mono)
         return 0;
+
+    ret = ff_mov_get_channel_layout_tag(track->par, &layout_tag,
+                                        &bitmap, &channel_desc);
+
+    if (ret < 0) {
+        if (ret == AVERROR(ENOSYS)) {
+            av_log(s, AV_LOG_WARNING, "not writing 'chan' tag due to "
+                                      "lack of channel information\n");
+            ret = 0;
+        }
+
+        return ret;
+    }
+
+    if (layout_tag == MOV_CH_LAYOUT_MONO && track->mono_as_fc > 0) {
+        av_assert0(!channel_desc);
+        channel_desc = av_malloc(sizeof(*channel_desc));
+        if (!channel_desc)
+            return AVERROR(ENOMEM);
+
+        layout_tag = 0;
+        bitmap = 0;
+        *channel_desc = 3; // channel label "Center"
+    }
+
+    num_desc = layout_tag ? 0 : track->par->ch_layout.nb_channels;
 
     avio_wb32(pb, 0);           // Size
     ffio_wfourcc(pb, "chan");   // Type
@@ -888,7 +906,17 @@ static int mov_write_chan_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *tra
     avio_wb24(pb, 0);           // Flags
     avio_wb32(pb, layout_tag);  // mChannelLayoutTag
     avio_wb32(pb, bitmap);      // mChannelBitmap
-    avio_wb32(pb, 0);           // mNumberChannelDescriptions
+    avio_wb32(pb, num_desc);    // mNumberChannelDescriptions
+
+    for (int i = 0; i < num_desc; i++) {
+        avio_wb32(pb, channel_desc[i]); // mChannelLabel
+        avio_wb32(pb, 0);               // mChannelFlags
+        avio_wl32(pb, 0);               // mCoordinates[0]
+        avio_wl32(pb, 0);               // mCoordinates[1]
+        avio_wl32(pb, 0);               // mCoordinates[2]
+    }
+
+    av_free(channel_desc);
 
     return update_size(pb, pos);
 }
@@ -5641,9 +5669,8 @@ static int check_pkt(AVFormatContext *s, AVPacket *pkt)
 
     duration = pkt->dts - ref;
     if (pkt->dts < ref || duration >= INT_MAX) {
-        av_log(s, AV_LOG_ERROR, "Application provided duration: %"PRId64" / timestamp: %"PRId64" is out of range for mov/mp4 format\n",
-            duration, pkt->dts
-        );
+        av_log(s, AV_LOG_WARNING, "Packet duration: %"PRId64" / dts: %"PRId64" is out of range\n",
+               duration, pkt->dts);
 
         pkt->dts = ref + 1;
         pkt->pts = AV_NOPTS_VALUE;
@@ -6359,6 +6386,7 @@ static int mov_create_timecode_track(AVFormatContext *s, int index, int src_inde
     pkt->data = data;
     pkt->stream_index = index;
     pkt->flags = AV_PKT_FLAG_KEY;
+    pkt->pts = pkt->dts = av_rescale_q(tc.start, av_inv_q(rate), (AVRational){1,mov->movie_timescale});
     pkt->size = 4;
     AV_WB32(pkt->data, tc.start);
     ret = ff_mov_write_packet(s, pkt);
@@ -6952,6 +6980,20 @@ static int mov_write_header(AVFormatContext *s)
             MOVTrack *trackj= &mov->tracks[j];
             if (j == i)
                 continue;
+
+            if (stj->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                (trackj->par->ch_layout.nb_channels != 1 ||
+                 !av_channel_layout_compare(&trackj->par->ch_layout,
+                                            &(AVChannelLayout)AV_CHANNEL_LAYOUT_MONO))
+            )
+                track->mono_as_fc = -1;
+
+            if (stj->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                av_channel_layout_compare(&trackj->par->ch_layout,
+                                          &(AVChannelLayout)AV_CHANNEL_LAYOUT_MONO) &&
+                trackj->par->ch_layout.nb_channels == 1 && track->mono_as_fc >= 0
+            )
+                track->mono_as_fc++;
 
             if (stj->codecpar->codec_type != AVMEDIA_TYPE_AUDIO ||
                 av_channel_layout_compare(&trackj->par->ch_layout,

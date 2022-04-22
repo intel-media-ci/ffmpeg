@@ -33,7 +33,7 @@
 #include "codec_internal.h"
 #include "encode.h"
 #include "fdctdsp.h"
-#include "internal.h"
+#include "mathops.h"
 #include "mpegvideo.h"
 #include "mpegvideoenc.h"
 #include "pixblockdsp.h"
@@ -1361,7 +1361,7 @@ const FFCodec ff_dnxhd_encoder = {
                       AV_CODEC_CAP_SLICE_THREADS,
     .priv_data_size = sizeof(DNXHDEncContext),
     .init           = dnxhd_encode_init,
-    .encode2        = dnxhd_encode_picture,
+    FF_CODEC_ENCODE_CB(dnxhd_encode_picture),
     .close          = dnxhd_encode_end,
     .p.pix_fmts     = (const enum AVPixelFormat[]) {
         AV_PIX_FMT_YUV422P,

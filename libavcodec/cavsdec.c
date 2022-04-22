@@ -32,6 +32,7 @@
 #include "cavs.h"
 #include "codec_internal.h"
 #include "internal.h"
+#include "mathops.h"
 #include "mpeg12data.h"
 #include "startcode.h"
 
@@ -1225,8 +1226,8 @@ static void cavs_flush(AVCodecContext * avctx)
     h->got_keyframe = 0;
 }
 
-static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
-                             AVPacket *avpkt)
+static int cavs_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
+                             int *got_frame, AVPacket *avpkt)
 {
     AVSContext *h      = avctx->priv_data;
     const uint8_t *buf = avpkt->data;
@@ -1240,7 +1241,7 @@ static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     if (buf_size == 0) {
         if (!h->low_delay && h->DPB[0].f->data[0]) {
             *got_frame = 1;
-            av_frame_move_ref(data, h->DPB[0].f);
+            av_frame_move_ref(rframe, h->DPB[0].f);
         }
         return 0;
     }
@@ -1273,7 +1274,7 @@ static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                 return AVERROR_INVALIDDATA;
             frame_start ++;
             if (*got_frame)
-                av_frame_unref(data);
+                av_frame_unref(rframe);
             *got_frame = 0;
             if (!h->got_keyframe)
                 break;
@@ -1284,13 +1285,13 @@ static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
             *got_frame = 1;
             if (h->cur.f->pict_type != AV_PICTURE_TYPE_B) {
                 if (h->DPB[!h->low_delay].f->data[0]) {
-                    if ((ret = av_frame_ref(data, h->DPB[!h->low_delay].f)) < 0)
+                    if ((ret = av_frame_ref(rframe, h->DPB[!h->low_delay].f)) < 0)
                         return ret;
                 } else {
                     *got_frame = 0;
                 }
             } else {
-                av_frame_move_ref(data, h->cur.f);
+                av_frame_move_ref(rframe, h->cur.f);
             }
             break;
         case EXT_START_CODE:
@@ -1317,7 +1318,7 @@ const FFCodec ff_cavs_decoder = {
     .priv_data_size = sizeof(AVSContext),
     .init           = ff_cavs_init,
     .close          = ff_cavs_end,
-    .decode         = cavs_decode_frame,
+    FF_CODEC_DECODE_CB(cavs_decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
     .flush          = cavs_flush,
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE | FF_CODEC_CAP_INIT_CLEANUP,

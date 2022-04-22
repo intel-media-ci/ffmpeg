@@ -29,9 +29,7 @@
 #include "codec_internal.h"
 #include "get_bits.h"
 #include "golomb.h"
-#include "internal.h"
 #include "mathops.h"
-#include "mjpeg.h"
 #include "mjpegdec.h"
 #include "jpegls.h"
 #include "jpeglsdec.h"
@@ -560,7 +558,7 @@ const FFCodec ff_jpegls_decoder = {
     .priv_data_size = sizeof(MJpegDecodeContext),
     .init           = ff_mjpeg_decode_init,
     .close          = ff_mjpeg_decode_end,
-    .receive_frame  = ff_mjpeg_receive_frame,
+    FF_CODEC_RECEIVE_FRAME_CB(ff_mjpeg_receive_frame),
     .p.capabilities = AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE | FF_CODEC_CAP_INIT_CLEANUP |
                       FF_CODEC_CAP_SETS_PKT_DTS,

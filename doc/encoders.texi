@@ -1996,8 +1996,11 @@ kilobits/s.
 @item keyint_min (@emph{kf-min-dist})
 
 @item qmin (@emph{min-q})
+Minimum (Best Quality) Quantizer.
 
 @item qmax (@emph{max-q})
+Maximum (Worst Quality) Quantizer.
+Can be changed per-frame.
 
 @item bufsize (@emph{buf-sz}, @emph{buf-optimal-sz})
 Set ratecontrol buffer size (in bits). Note @command{vpxenc}'s options are
@@ -2261,11 +2264,10 @@ and compression tools used, and varies the combination of these tools. This
 maps to the @var{method} option in libwebp. The valid range is 0 to 6.
 Default is 4.
 
-@item -qscale @var{float}
-For lossy encoding, this controls image quality, 0 to 100. For lossless
-encoding, this controls the effort and time spent at compressing more. The
-default value is 75. Note that for usage via libavcodec, this option is called
-@var{global_quality} and must be multiplied by @var{FF_QP2LAMBDA}.
+@item -quality @var{float}
+For lossy encoding, this controls image quality. For lossless encoding, this
+controls the effort and time spent in compression.
+Range is 0 to 100. Default is 75.
 
 @item -preset @var{type}
 Configuration preset. This does some automatic settings based on the general
@@ -3264,6 +3266,14 @@ Enable rate distortion optimization.
 @item @var{max_frame_size}
 Maximum encoded frame size in bytes.
 
+@item @var{max_frame_size_i}
+Maximum encoded frame size for I frames in bytes. If this value is set as larger
+than zero, then for I frames the value set by max_frame_size is ignored.
+
+@item @var{max_frame_size_p}
+Maximum encoded frame size for P frames in bytes. If this value is set as larger
+than zero, then for P frames the value set by max_frame_size is ignored.
+
 @item @var{max_slice_size}
 Maximum encoded slice size in bytes.
 
@@ -3279,6 +3289,11 @@ by the QSV encoder, it will be changed to be in the range.
 Setting this flag enables macroblock level bitrate control that generally
 improves subjective visual quality. Enabling this flag may have negative impact
 on performance and objective visual quality metric.
+
+@item @var{low_delay_brc}
+Setting this flag turns on or off LowDelayBRC feautre in qsv plugin, which provides
+more accurate bitrate control to minimize the variance of bitstream size frame
+by frame. Value: -1-default 0-off 1-on
 
 @item @var{adaptive_i}
 This flag controls insertion of I frames by the QSV encoder. Turn ON this flag
@@ -3392,6 +3407,14 @@ Enable rate distortion optimization.
 @item @var{max_frame_size}
 Maximum encoded frame size in bytes.
 
+@item @var{max_frame_size_i}
+Maximum encoded frame size for I frames in bytes. If this value is set as larger
+than zero, then for I frames the value set by max_frame_size is ignored.
+
+@item @var{max_frame_size_p}
+Maximum encoded frame size for P frames in bytes. If this value is set as larger
+than zero, then for P frames the value set by max_frame_size is ignored.
+
 @item @var{max_slice_size}
 Maximum encoded slice size in bytes.
 
@@ -3399,6 +3422,11 @@ Maximum encoded slice size in bytes.
 Setting this flag enables macroblock level bitrate control that generally
 improves subjective visual quality. Enabling this flag may have negative impact
 on performance and objective visual quality metric.
+
+@item @var{low_delay_brc}
+Setting this flag turns on or off LowDelayBRC feautre in qsv plugin, which provides
+more accurate bitrate control to minimize the variance of bitstream size frame
+by frame. Value: -1-default 0-off 1-on
 
 @item @var{p_strategy}
 Enable P-pyramid: 0-default 1-simple 2-pyramid(bf need to be set to 0).
@@ -3748,6 +3776,22 @@ bitstream filter to modify the output stream to display frames in the correct or
 Only normal frames are produced - the @option{vp9_superframe} bitstream filter may be
 required to produce a stream usable with all decoders.
 
+@end table
+
+@section vbn
+
+Vizrt Binary Image encoder.
+
+This format is used by the broadcast vendor Vizrt for quick texture streaming.
+Advanced features of the format such as LZW compression of texture data or
+generation of mipmaps are not supported.
+
+@subsection Options
+
+@table @option
+@item format @var{string}
+Sets the texture compression used by the VBN file. Can be @var{dxt1},
+@var{dxt5} or @var{raw}. Default is @var{dxt5}.
 @end table
 
 @section vc2

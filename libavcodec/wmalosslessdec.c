@@ -198,15 +198,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
         return AVERROR_PATCHWELCOME;
     }
 
-    s->max_frame_size = MAX_FRAMESIZE * avctx->ch_layout.nb_channels;
-    s->frame_data = av_mallocz(s->max_frame_size + AV_INPUT_BUFFER_PADDING_SIZE);
-    if (!s->frame_data)
-        return AVERROR(ENOMEM);
-
-    s->avctx = avctx;
-    ff_llauddsp_init(&s->dsp);
-    init_put_bits(&s->pb, s->frame_data, s->max_frame_size);
-
     if (avctx->extradata_size >= 18) {
         s->decode_flags    = AV_RL16(edata_ptr + 14);
         channel_mask       = AV_RL32(edata_ptr +  2);
@@ -230,6 +221,32 @@ static av_cold int decode_init(AVCodecContext *avctx)
         avpriv_request_sample(avctx, "Unsupported extradata size");
         return AVERROR_PATCHWELCOME;
     }
+
+    if (channel_mask) {
+        av_channel_layout_uninit(&avctx->ch_layout);
+        av_channel_layout_from_mask(&avctx->ch_layout, channel_mask);
+    }
+
+    s->num_channels = avctx->ch_layout.nb_channels;
+
+    /* extract lfe channel position */
+    s->lfe_channel = -1;
+
+    if (channel_mask & 8) {
+        unsigned int mask;
+        for (mask = 1; mask < 16; mask <<= 1)
+            if (channel_mask & mask)
+                ++s->lfe_channel;
+    }
+
+    s->max_frame_size = MAX_FRAMESIZE * avctx->ch_layout.nb_channels;
+    s->frame_data = av_mallocz(s->max_frame_size + AV_INPUT_BUFFER_PADDING_SIZE);
+    if (!s->frame_data)
+        return AVERROR(ENOMEM);
+
+    s->avctx = avctx;
+    ff_llauddsp_init(&s->dsp);
+    init_put_bits(&s->pb, s->frame_data, s->max_frame_size);
 
     /* generic init */
     s->log2_frame_size = av_log2(avctx->block_align) + 4;
@@ -264,24 +281,10 @@ static av_cold int decode_init(AVCodecContext *avctx)
         return AVERROR_INVALIDDATA;
     }
 
-    s->num_channels = avctx->ch_layout.nb_channels;
-
-    /* extract lfe channel position */
-    s->lfe_channel = -1;
-
-    if (channel_mask & 8) {
-        unsigned int mask;
-        for (mask = 1; mask < 16; mask <<= 1)
-            if (channel_mask & mask)
-                ++s->lfe_channel;
-    }
-
     s->frame = av_frame_alloc();
     if (!s->frame)
         return AVERROR(ENOMEM);
 
-    av_channel_layout_uninit(&avctx->ch_layout);
-    av_channel_layout_from_mask(&avctx->ch_layout, channel_mask);
     return 0;
 }
 
@@ -1181,8 +1184,8 @@ static void save_bits(WmallDecodeCtx *s, GetBitContext* gb, int len,
     skip_bits(&s->gb, s->frame_offset);
 }
 
-static int decode_packet(AVCodecContext *avctx, void *data, int *got_frame_ptr,
-                         AVPacket* avpkt)
+static int decode_packet(AVCodecContext *avctx, AVFrame *rframe,
+                         int *got_frame_ptr, AVPacket* avpkt)
 {
     WmallDecodeCtx *s = avctx->priv_data;
     GetBitContext* gb  = &s->pgb;
@@ -1295,7 +1298,7 @@ static int decode_packet(AVCodecContext *avctx, void *data, int *got_frame_ptr,
     }
 
     *got_frame_ptr   = s->frame->nb_samples > 0;
-    av_frame_move_ref(data, s->frame);
+    av_frame_move_ref(rframe, s->frame);
 
     s->packet_offset = get_bits_count(gb) & 7;
 
@@ -1333,7 +1336,7 @@ const FFCodec ff_wmalossless_decoder = {
     .priv_data_size = sizeof(WmallDecodeCtx),
     .init           = decode_init,
     .close          = decode_close,
-    .decode         = decode_packet,
+    FF_CODEC_DECODE_CB(decode_packet),
     .flush          = flush,
     .p.capabilities = AV_CODEC_CAP_SUBFRAMES | AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE | FF_CODEC_CAP_INIT_CLEANUP,
