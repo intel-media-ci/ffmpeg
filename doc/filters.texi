@@ -1390,6 +1390,13 @@ Stop sample noise capture and measure new noise band profile.
 
 Default value is @code{none}.
 @end table
+
+@item gain_smooth, gs
+Set gain smooth spatial radius, used to smooth gains applied to each frequency bin.
+Useful to reduce random music noise artefacts.
+Higher values increases smoothing of gains.
+Allowed range is from @code{0} to @code{50}.
+Default value is @code{0}.
 @end table
 
 @subsection Commands
@@ -8459,6 +8466,9 @@ Show white point on CIE diagram, by default disabled.
 
 @item gamma
 Set input gamma. Used only with XYZ input color space.
+
+@item fill
+Fill with CIE colors. By default is enabled.
 @end table
 
 @section codecview
@@ -8940,6 +8950,39 @@ colorlevels=romin=0.5:gomin=0.5:bomin=0.5
 @subsection Commands
 
 This filter supports the all above options as @ref{commands}.
+
+@section colormap
+Apply custom color maps to video stream.
+
+This filter needs three input video streams.
+First stream is video stream that is going to be filtered out.
+Second and third video stream specify color patches for source
+color to target color mapping.
+
+The filter accepts the following options:
+
+@table @option
+@item patch_size
+Set the source and target video stream patch size in pixels.
+
+@item nb_patches
+Set the max number of used patches from source and target video stream.
+
+@item type
+Set the adjustments used for target colors. Can be @code{relative} or @code{absolute}.
+Defaults is @code{absolute}.
+
+@item kernel
+Set the kernel used to measure color differences between mapped colors.
+
+The accepted values are:
+@table @samp
+@item euclidean
+@item weuclidean
+@end table
+
+Default is @code{euclidean}.
+@end table
 
 @section colormatrix
 
@@ -14341,6 +14384,41 @@ By default value is 0.
 @end table
 
 The @code{hysteresis} filter also supports the @ref{framesync} options.
+
+@section iccdetect
+
+Detect the colorspace  from an embedded ICC profile (if present), and update
+the frame's tags accordingly.
+
+This filter accepts the following options:
+
+@table @option
+@item force
+If true, the frame's existing colorspace tags will always be overridden by
+values detected from an ICC profile. Otherwise, they will only be assigned if
+they contain @code{unknown}. Enabled by default.
+@end table
+
+@section iccgen
+
+Generate ICC profiles and attach them to frames.
+
+This filter accepts the following options:
+
+@table @option
+@item color_primaries
+@item color_trc
+Configure the colorspace that the ICC profile will be generated for. The
+default value of @code{auto} infers the value from the input frame's metadata,
+defaulting to BT.709/sRGB as appropriate.
+
+See the @ref{setparams} filter for a list of possible values, but note that
+@code{unknown} are not valid values for this filter.
+
+@item force
+If true, an ICC profile will be generated even if it would overwrite an
+already existing ICC profile. Disabled by default.
+@end table
 
 @section identity
 
@@ -26251,6 +26329,7 @@ ffplay -f lavfi life=s=300x200:mold=10:r=60:ratio=0.1:death_color=#C83232:life_c
 @anchor{allrgb}
 @anchor{allyuv}
 @anchor{color}
+@anchor{colorchart}
 @anchor{colorspectrum}
 @anchor{haldclutsrc}
 @anchor{nullsrc}
@@ -26269,6 +26348,8 @@ The @code{allrgb} source returns frames of size 4096x4096 of all rgb colors.
 The @code{allyuv} source returns frames of size 4096x4096 of all yuv colors.
 
 The @code{color} source provides an uniformly colored input.
+
+The @code{colorchart} source provides a colors checker chart.
 
 The @code{colorspectrum} source provides a color spectrum input.
 
@@ -26373,6 +26454,22 @@ Set the type of the color spectrum, only available in the
 @item white
 @item all
 @end table
+
+@item patch_size
+Set patch size of single color patch, only available in the
+@code{colorchart} source. Default is @code{64x64}.
+
+@item preset
+Set colorchecker colors preset, only available in the
+@code{colorchart} source.
+
+Available values are:
+@table @samp
+@item reference
+@item skintones
+@end table
+
+Default value is @code{reference}.
 @end table
 
 @subsection Examples
@@ -28429,6 +28526,9 @@ It accepts the following values:
 @item delay
 @end table
 Default is @code{magnitude}.
+
+@item channels
+Set channels to use when processing audio. By default all are processed.
 @end table
 
 @section showspatial
