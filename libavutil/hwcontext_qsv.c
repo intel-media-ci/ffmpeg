@@ -1376,10 +1376,13 @@ static int qsv_map_to(AVHWFramesContext *dst_ctx,
         case AV_PIX_FMT_D3D11:
         {
             mfxHDLPair *pair = (mfxHDLPair*)hwctx->surfaces[i].Data.MemId;
-            if (pair->first == src->data[0]
-                && pair->second == src->data[1]) {
-                index = i;
-                break;
+            if (pair->first == src->data[0]) {
+                if (hwctx->frame_type & MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET
+                    && pair->second == src->data[1]
+                    || hwctx->frame_type & MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET) {
+                    index = i;
+                    break;
+                }
             }
         }
 #endif
