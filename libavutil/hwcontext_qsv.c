@@ -913,9 +913,16 @@ static int qsv_map_from(AVHWFramesContext *ctx,
         dst->height  = src->height;
 
        if (child_frames_ctx->device_ctx->type == AV_HWDEVICE_TYPE_D3D11VA) {
+#if CONFIG_D3D11VA
+            AVD3D11VAFramesContext* child_frames_hwctx = child_frames_ctx->hwctx;
             mfxHDLPair *pair = (mfxHDLPair*)surf->Data.MemId;
             dst->data[0] = pair->first;
-            dst->data[1] = pair->second;
+            if (child_frames_hwctx->BindFlags & D3D11_BIND_RENDER_TARGET) {
+                dst->data[1] = 0;
+            } else {
+                dst->data[1] = pair->second;
+            }
+#endif
         } else {
             dst->data[3] = child_data;
         }
@@ -943,9 +950,16 @@ static int qsv_map_from(AVHWFramesContext *ctx,
     dummy->height        = src->height;
 
     if (child_frames_ctx->device_ctx->type == AV_HWDEVICE_TYPE_D3D11VA) {
+#if CONFIG_D3D11VA
+        AVD3D11VAFramesContext* child_frames_hwctx = child_frames_ctx->hwctx;
         mfxHDLPair *pair = (mfxHDLPair*)surf->Data.MemId;
         dummy->data[0] = pair->first;
-        dummy->data[1] = pair->second;
+        if (child_frames_hwctx->BindFlags & D3D11_BIND_RENDER_TARGET) {
+            dummy->data[1] = 0;
+        } else {
+            dummy->data[1] = pair->second;
+        }
+#endif
     } else {
         dummy->data[3] = child_data;
     }
