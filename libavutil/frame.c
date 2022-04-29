@@ -315,7 +315,9 @@ static int frame_copy_props(AVFrame *dst, const AVFrame *src, int force_copy)
         if (   sd_src->type == AV_FRAME_DATA_PANSCAN
             && (src->width != dst->width || src->height != dst->height))
             continue;
-        if (force_copy) {
+        /* Don't copy sub frame side data, otherwise sub frame's pointers in
+         * dst may be invalid. */
+        if (force_copy && sd_src->type != AV_FRAME_DATA_SUB_FRAME) {
             sd_dst = av_frame_new_side_data(dst, sd_src->type,
                                             sd_src->size);
             if (!sd_dst) {
@@ -824,6 +826,7 @@ const char *av_frame_side_data_name(enum AVFrameSideDataType type)
     case AV_FRAME_DATA_DETECTION_BBOXES:            return "Bounding boxes for object detection and classification";
     case AV_FRAME_DATA_DOVI_RPU_BUFFER:             return "Dolby Vision RPU Data";
     case AV_FRAME_DATA_DOVI_METADATA:               return "Dolby Vision Metadata";
+    case AV_FRAME_DATA_SUB_FRAME:                   return "Sub frame Metadata";
     }
     return NULL;
 }

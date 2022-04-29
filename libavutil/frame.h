@@ -209,6 +209,11 @@ enum AVFrameSideDataType {
      * volume transform - CUVA 005.1-2021.
      */
     AV_FRAME_DATA_DYNAMIC_HDR_VIVID,
+
+    /**
+     * Sub frame of a target frame, as described by AVFrame.
+     */
+    AV_FRAME_DATA_SUB_FRAME,
 };
 
 enum AVActiveFormatDescription {
