@@ -45,6 +45,10 @@ typedef struct VAAPIDecodePicture {
     int                nb_slices;
     VABufferID           *slice_buffers;
     int                   slices_allocated;
+
+    VASurfaceID           sub_frame_surface;
+    VARectangle           sub_frame_src;
+    VARectangle           sub_frame_dst;
 } VAAPIDecodePicture;
 
 typedef struct VAAPIDecodeContext {
