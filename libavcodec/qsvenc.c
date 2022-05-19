@@ -668,6 +668,7 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
                                    avctx->sw_pix_fmt : avctx->pix_fmt;
     const AVPixFmtDescriptor *desc;
     float quant;
+    int max_quant;
     int target_bitrate_kbps, max_bitrate_kbps, brc_param_multiplier;
     int buffer_size_in_kilobytes, initial_delay_in_kilobytes;
     int ret;
@@ -786,6 +787,15 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     brc_param_multiplier       = (FFMAX(FFMAX3(target_bitrate_kbps, max_bitrate_kbps, buffer_size_in_kilobytes),
                                   initial_delay_in_kilobytes) + 0x10000) / 0x10000;
 
+    switch(avctx->codec_id) {
+    case AV_CODEC_ID_VP9:
+        max_quant = 255;
+        break;
+    default:
+        max_quant = 51;
+        break;
+    }
+
     switch (q->param.mfx.RateControlMethod) {
     case MFX_RATECONTROL_CBR:
     case MFX_RATECONTROL_VBR:
@@ -807,15 +817,15 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
         q->param.mfx.BRCParamMultiplier = brc_param_multiplier;
 #if QSV_HAVE_QVBR
         if (q->param.mfx.RateControlMethod == MFX_RATECONTROL_QVBR)
-            q->extco3.QVBRQuality = av_clip(avctx->global_quality, 0, 51);
+            q->extco3.QVBRQuality = av_clip(avctx->global_quality, 0, max_quant);
 #endif
         break;
     case MFX_RATECONTROL_CQP:
         quant = avctx->global_quality / FF_QP2LAMBDA;
 
-        q->param.mfx.QPI = av_clip(quant * fabs(avctx->i_quant_factor) + avctx->i_quant_offset, 0, 51);
-        q->param.mfx.QPP = av_clip(quant, 0, 51);
-        q->param.mfx.QPB = av_clip(quant * fabs(avctx->b_quant_factor) + avctx->b_quant_offset, 0, 51);
+        q->param.mfx.QPI = av_clip(quant * fabs(avctx->i_quant_factor) + avctx->i_quant_offset, 0, max_quant);
+        q->param.mfx.QPP = av_clip(quant, 0, max_quant);
+        q->param.mfx.QPB = av_clip(quant * fabs(avctx->b_quant_factor) + avctx->b_quant_offset, 0, max_quant);
 
         break;
 #if QSV_HAVE_AVBR
@@ -836,7 +846,7 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     case MFX_RATECONTROL_LA_ICQ:
         q->extco2.LookAheadDepth = q->look_ahead_depth;
     case MFX_RATECONTROL_ICQ:
-        q->param.mfx.ICQQuality  = av_clip(avctx->global_quality, 1, 51);
+        q->param.mfx.ICQQuality  = av_clip(avctx->global_quality, 1, max_quant);
         break;
 #endif
 #endif
@@ -935,11 +945,11 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
                 return AVERROR(EINVAL);
             }
             if (avctx->qmin >= 0) {
-                q->extco2.MinQPI = avctx->qmin > 51 ? 51 : avctx->qmin;
+                q->extco2.MinQPI = avctx->qmin > max_quant ? max_quant : avctx->qmin;
                 q->extco2.MinQPP = q->extco2.MinQPB = q->extco2.MinQPI;
             }
             if (avctx->qmax >= 0) {
-                q->extco2.MaxQPI = avctx->qmax > 51 ? 51 : avctx->qmax;
+                q->extco2.MaxQPI = avctx->qmax > max_quant ? max_quant : avctx->qmax;
                 q->extco2.MaxQPP = q->extco2.MaxQPB = q->extco2.MaxQPI;
             }
 #endif
