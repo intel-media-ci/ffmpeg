@@ -863,14 +863,30 @@ static int qsv_create_mfx_session(void *ctx,
     }
 #endif
 #if CONFIG_VAAPI
-    // TODO: add config filter for device
-    // Without device info, oneVPL loads the default implementation which doesn't
-    // matter on a single GPU. But on multiple GPUs, the default implementation might
-    // not work with the given device. We'll add the config filter for device once we
-    // can get device info via a VADisplay handle
-    // if (MFX_HANDLE_VA_DISPLAY == handle_type) {
-    //
-    // }
+    if (MFX_HANDLE_VA_DISPLAY == handle_type) {
+        if (handle) {
+            VAStatus vas;
+            VADisplayAttribute attr = {
+                .type = 21, /* VADisplayPCIID */
+            };
+
+            vas = vaGetDisplayAttributes(handle, &attr, 1);
+
+            if (vas == VA_STATUS_SUCCESS && attr.flags != VA_DISPLAY_ATTRIB_NOT_SUPPORTED) {
+                impl_value.Type = MFX_VARIANT_TYPE_U16;
+                impl_value.Data.U16 = (attr.value & 0xFFFF);
+                sts = MFXSetConfigFilterProperty(cfg,
+                                                (const mfxU8 *)"mfxExtendedDeviceId.DeviceID", impl_value);
+
+                if (sts != MFX_ERR_NONE) {
+                    av_log(ctx, AV_LOG_ERROR, "Error adding a MFX configuration"
+                        "DeviceID property: %d.\n", sts);
+                    goto fail;
+                }
+            } else
+                av_log(ctx, AV_LOG_DEBUG, "Without device info, a default MFX implementation will be loaded\n");
+        }
+    }
 #endif
 
     impl_value.Type = MFX_VARIANT_TYPE_U32;
