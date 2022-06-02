@@ -309,6 +309,8 @@ const FFCodec ff_hevc_qsv_encoder = {
                                                     AV_PIX_FMT_YUYV422,
                                                     AV_PIX_FMT_Y210,
                                                     AV_PIX_FMT_QSV,
+                                                    AV_PIX_FMT_VAAPI,
+                                                    AV_PIX_FMT_D3D11,
                                                     AV_PIX_FMT_BGRA,
                                                     AV_PIX_FMT_X2RGB10,
                                                     AV_PIX_FMT_NONE },

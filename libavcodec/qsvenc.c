@@ -524,7 +524,9 @@ static int check_enc_param(AVCodecContext *avctx, QSVEncContext *q)
 
 static int init_video_param_jpeg(AVCodecContext *avctx, QSVEncContext *q)
 {
-    enum AVPixelFormat sw_format = avctx->pix_fmt == AV_PIX_FMT_QSV ?
+    enum AVPixelFormat sw_format = avctx->pix_fmt == AV_PIX_FMT_QSV ||
+                                   avctx->pix_fmt == AV_PIX_FMT_VAAPI ||
+                                   avctx->pix_fmt == AV_PIX_FMT_D3D11 ?
                                    avctx->sw_pix_fmt : avctx->pix_fmt;
     const AVPixFmtDescriptor *desc;
     int ret;
@@ -591,7 +593,9 @@ static int init_video_param_jpeg(AVCodecContext *avctx, QSVEncContext *q)
 
 static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
 {
-    enum AVPixelFormat sw_format = avctx->pix_fmt == AV_PIX_FMT_QSV ?
+    enum AVPixelFormat sw_format = avctx->pix_fmt == AV_PIX_FMT_QSV ||
+                                   avctx->pix_fmt == AV_PIX_FMT_VAAPI ||
+                                   avctx->pix_fmt == AV_PIX_FMT_D3D11 ?
                                    avctx->sw_pix_fmt : avctx->pix_fmt;
     const AVPixFmtDescriptor *desc;
     float quant;
@@ -1247,7 +1251,31 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
 
     if (avctx->hw_frames_ctx) {
         AVHWFramesContext    *frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
-        AVQSVFramesContext *frames_hwctx = frames_ctx->hwctx;
+        AVQSVFramesContext *frames_hwctx = NULL;
+
+        if (frames_ctx->format == AV_PIX_FMT_VAAPI || frames_ctx->format == AV_PIX_FMT_D3D11) {
+            AVBufferRef *derive_device_ref = NULL;
+            AVBufferRef *derive_frames_ref = NULL;
+            ret = av_hwdevice_ctx_create_derived(&derive_device_ref,
+                                                 AV_HWDEVICE_TYPE_QSV, frames_ctx->device_ref, 0);
+            if (ret < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Failed to derive QSV device context: %d.\n", ret);
+                return ret;
+            }
+            ret = av_hwframe_ctx_create_derived(&derive_frames_ref,
+                                                AV_PIX_FMT_QSV, derive_device_ref, avctx->hw_frames_ctx, 0);
+            if (ret < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Failed to derive QSV frames context: %d.\n", ret);
+                av_buffer_unref(&derive_device_ref);
+                return ret;
+            }
+            av_buffer_unref(&avctx->hw_device_ctx);
+            avctx->hw_device_ctx = derive_device_ref;
+            av_buffer_unref(&avctx->hw_frames_ctx);
+            avctx->hw_frames_ctx = derive_frames_ref;
+            frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
+        }
+        frames_hwctx = frames_ctx->hwctx;
 
         if (!iopattern) {
             if (frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME)
@@ -1437,10 +1465,25 @@ static int submit_frame(QSVEncContext *q, const AVFrame *frame,
     if (ret < 0)
         return ret;
 
-    if (frame->format == AV_PIX_FMT_QSV) {
-        ret = av_frame_ref(qf->frame, frame);
-        if (ret < 0)
-            return ret;
+    if (frame->format == AV_PIX_FMT_QSV || frame->format == AV_PIX_FMT_VAAPI || frame->format == AV_PIX_FMT_D3D11) {
+        if (frame->format == AV_PIX_FMT_QSV) {
+            ret = av_frame_ref(qf->frame, frame);
+            if (ret < 0)
+                return ret;
+        } else {
+            qf->frame->format = AV_PIX_FMT_QSV;
+            qf->frame->hw_frames_ctx = av_buffer_ref(q->avctx->hw_frames_ctx);
+            if (!qf->frame->hw_frames_ctx)
+                return AVERROR(ENOMEM);
+            ret = av_hwframe_map(qf->frame, frame, 0);
+            if (ret < 0) {
+                av_log(q->avctx, AV_LOG_ERROR, "Failed to map to QSV frames\n");
+                return ret;
+            }
+            ret = av_frame_copy_props(qf->frame, frame);
+            if (ret < 0)
+                return ret;
+        }
 
         qf->surface = *(mfxFrameSurface1*)qf->frame->data[3];
 
@@ -1735,6 +1778,8 @@ int ff_qsv_enc_close(AVCodecContext *avctx, QSVEncContext *q)
 
 const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[] = {
     HW_CONFIG_ENCODER_FRAMES(QSV,  QSV),
+    HW_CONFIG_ENCODER_FRAMES(VAAPI,VAAPI),
+    HW_CONFIG_ENCODER_FRAMES(D3D11,D3D11VA),
     HW_CONFIG_ENCODER_DEVICE(NV12, QSV),
     HW_CONFIG_ENCODER_DEVICE(P010, QSV),
     NULL,
