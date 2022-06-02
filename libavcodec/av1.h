@@ -175,4 +175,11 @@ enum {
     AV1_RESTORE_SWITCHABLE = 3,
 };
 
+// TX mode (section 6.8.21)
+enum {
+    AV1_ONLY_4X4        = 0,
+    AV1_TX_MODE_LARGEST = 1,
+    AV1_TX_MODE_SELECT  = 2,
+};
+
 #endif /* AVCODEC_AV1_H */
