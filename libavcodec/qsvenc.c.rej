@@ -1,0 +1,34 @@
+diff a/libavcodec/qsvenc.c b/libavcodec/qsvenc.c	(rejected hunks)
+@@ -1247,7 +1251,31 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
+ 
+     if (avctx->hw_frames_ctx) {
+         AVHWFramesContext    *frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
+-        AVQSVFramesContext *frames_hwctx = frames_ctx->hwctx;
++        AVQSVFramesContext *frames_hwctx = NULL;
++
++        if (frames_ctx->format == AV_PIX_FMT_VAAPI || frames_ctx->format == AV_PIX_FMT_D3D11) {
++            AVBufferRef *derive_device_ref = NULL;
++            AVBufferRef *derive_frames_ref = NULL;
++            ret = av_hwdevice_ctx_create_derived(&derive_device_ref,
++                                                 AV_HWDEVICE_TYPE_QSV, frames_ctx->device_ref, 0);
++            if (ret < 0) {
++                av_log(avctx, AV_LOG_ERROR, "Failed to derive QSV device context: %d.\n", ret);
++                return ret;
++            }
++            ret = av_hwframe_ctx_create_derived(&derive_frames_ref,
++                                                AV_PIX_FMT_QSV, derive_device_ref, avctx->hw_frames_ctx, 0);
++            if (ret < 0) {
++                av_log(avctx, AV_LOG_ERROR, "Failed to derive QSV frames context: %d.\n", ret);
++                av_buffer_unref(&derive_device_ref);
++                return ret;
++            }
++            av_buffer_unref(&avctx->hw_device_ctx);
++            avctx->hw_device_ctx = derive_device_ref;
++            av_buffer_unref(&avctx->hw_frames_ctx);
++            avctx->hw_frames_ctx = derive_frames_ref;
++            frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
++        }
++        frames_hwctx = frames_ctx->hwctx;
+ 
+         if (!iopattern) {
+             if (frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME)

@@ -90,6 +90,8 @@ const FFCodec ff_mjpeg_qsv_encoder = {
     .p.capabilities = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_HYBRID,
     .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12,
                                                     AV_PIX_FMT_QSV,
+                                                    AV_PIX_FMT_VAAPI,
+                                                    AV_PIX_FMT_D3D11,
                                                     AV_PIX_FMT_NONE },
     .p.priv_class   = &class,
     .defaults       = qsv_enc_defaults,
