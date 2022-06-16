@@ -650,15 +650,58 @@ fail_at_end:
     return err;
 }
 
+static int vaapi_encode_set_pkt_timestamp(AVCodecContext *avctx, VAAPIEncodePicture *pic, AVPacket *pkt)
+{
+    VAAPIEncodeContext *ctx = avctx->priv_data;
+
+    if (avctx->codec_id == AV_CODEC_ID_AV1) {
+        pkt->dts = pkt->pts = ctx->first_pts + ctx->output_order;
+        goto end;
+    }
+
+    /** pic should not be null except AV1. */
+    av_assert0(pic);
+
+    if (ctx->output_delay == 0) {
+        pkt->dts = pkt->pts;
+    } else if (pic->encode_order < ctx->decode_delay) {
+        if (ctx->ts_ring[pic->encode_order] < INT64_MIN + ctx->dts_pts_diff)
+            pkt->dts = INT64_MIN;
+        else
+            pkt->dts = ctx->ts_ring[pic->encode_order] - ctx->dts_pts_diff;
+    } else {
+        pkt->dts = ctx->ts_ring[(pic->encode_order - ctx->decode_delay) %
+                                (3 * ctx->output_delay)];
+    }
+
+end:
+    av_log(avctx, AV_LOG_DEBUG, "Output packet: size %u bytes, pts %"PRId64", dts %"PRId64".\n",
+           pkt->size, pkt->pts, pkt->dts);
+    return 0;
+}
+
 static int vaapi_encode_output(AVCodecContext *avctx,
                                VAAPIEncodePicture *pic, AVPacket *pkt)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
     VACodedBufferSegment *buf_list, *buf;
     VAStatus vas;
-    int total_size = 0;
+    int total_size = 0, pkt_size = 0;
     uint8_t *ptr;
-    int err;
+    int cache_current_frame, err;
+
+    if (!pic) {
+        pkt_size =  ctx->coded_frame_size;
+        err = ff_get_encode_buffer(avctx, pkt, pkt_size, 0);
+        if (err < 0)
+            goto fail_mapped;
+        ptr = pkt->data;
+        memcpy(ptr, ctx->coded_frame_data, ctx->coded_frame_size);
+        ctx->coded_frame_type = CODED_FRAME_NONE;
+        vaapi_encode_set_pkt_timestamp(avctx, pic, pkt);
+
+        return 0;
+    }
 
     err = vaapi_encode_wait(avctx, pic);
     if (err < 0)
@@ -677,11 +720,54 @@ static int vaapi_encode_output(AVCodecContext *avctx,
     for (buf = buf_list; buf; buf = buf->next)
         total_size += buf->size;
 
-    err = ff_get_encode_buffer(avctx, pkt, total_size, 0);
-    ptr = pkt->data;
+    /** Repack av1 coded frame for not display and repeat frames */
+    if (avctx->codec_id == AV_CODEC_ID_AV1) {
+        cache_current_frame = pic->display_order > pic->encode_order;
+        if (ctx->coded_frame_type == CODED_FRAME_MERGE_TO_NEXT) {
+            pkt_size = total_size + ctx->coded_frame_size;
+            err = ff_get_encode_buffer(avctx, pkt, pkt_size, 0);
+            if (err < 0)
+                goto fail_mapped;
+            ptr = pkt->data;
+            memcpy(ptr, ctx->coded_frame_data, ctx->coded_frame_size);
+            ptr += ctx->coded_frame_size;
+            ctx->coded_frame_type = CODED_FRAME_NONE;
+        } else if (ctx->coded_frame_type == CODED_FRAME_INDEPENDENT) {
+            pkt_size = ctx->coded_frame_size;
+            err = ff_get_encode_buffer(avctx, pkt, pkt_size, 0);
+            if (err < 0)
+                goto fail_mapped;
+            ptr = pkt->data;
+            memcpy(ptr, ctx->coded_frame_data, ctx->coded_frame_size);
+            ctx->coded_frame_data = av_realloc(ctx->coded_frame_data, total_size);
+            if (!ctx->coded_frame_data)
+                return AVERROR(ENOMEM);
+            ptr = ctx->coded_frame_data;
+            ctx->coded_frame_size = total_size;
+            ctx->coded_frame_type = cache_current_frame ? CODED_FRAME_MERGE_TO_NEXT : CODED_FRAME_INDEPENDENT;
+        } else {
+            if (!cache_current_frame) {
+                pkt_size = total_size;
+                err = ff_get_encode_buffer(avctx, pkt, pkt_size, 0);
+                if (err < 0)
+                    goto fail_mapped;
+                ptr = pkt->data;
+            } else {
+                ctx->coded_frame_data = av_realloc(ctx->coded_frame_data, total_size);
+                if (!ctx->coded_frame_data)
+                    return AVERROR(ENOMEM);
+                ptr = ctx->coded_frame_data;
+                ctx->coded_frame_type = CODED_FRAME_MERGE_TO_NEXT;
+                ctx->coded_frame_size = total_size;
+            }
+        }
+    } else {
+        err = ff_get_encode_buffer(avctx, pkt, total_size, 0);
+        ptr = pkt->data;
 
-    if (err < 0)
-        goto fail_mapped;
+        if (err < 0)
+            goto fail_mapped;
+    }
 
     for (buf = buf_list; buf; buf = buf->next) {
         av_log(avctx, AV_LOG_DEBUG, "Output buffer: %u bytes "
@@ -709,6 +795,24 @@ static int vaapi_encode_output(AVCodecContext *avctx,
 
     av_log(avctx, AV_LOG_DEBUG, "Output read for pic %"PRId64"/%"PRId64".\n",
            pic->display_order, pic->encode_order);
+
+    if (pic->tail_size) {
+        if (ctx->coded_frame_type) {
+            av_log(avctx, AV_LOG_ERROR, "Fail to cache data because cached frame data is not NULL.\n");
+            err = AVERROR_BUG;
+            goto fail;
+        }
+        ctx->coded_frame_data = av_realloc(ctx->coded_frame_data, pic->tail_size);
+        if (!ctx->coded_frame_data)
+            return AVERROR(ENOMEM);
+        memcpy(ctx->coded_frame_data, pic->tail_data, pic->tail_size);
+        ctx->coded_frame_type = CODED_FRAME_INDEPENDENT;
+        ctx->coded_frame_size = pic->tail_size;
+    }
+
+    if (!pkt->size)
+        return AVERROR(EAGAIN);
+
     return 0;
 
 fail_mapped:
@@ -1225,9 +1329,12 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
             }
         }
 
-        if (!av_fifo_can_read(ctx->encode_fifo))
-            return err;
-
+        if (!av_fifo_can_read(ctx->encode_fifo)) {
+            if ((err == AVERROR_EOF) && ctx->coded_frame_type)
+                return  vaapi_encode_output(avctx, pic, pkt);
+            else
+                return err;
+        }
         // More frames can be buffered
         if (av_fifo_can_write(ctx->encode_fifo) && !ctx->end_of_stream)
             return AVERROR(EAGAIN);
@@ -1237,8 +1344,15 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
     } else {
         pic = NULL;
         err = vaapi_encode_pick_next(avctx, &pic);
-        if (err < 0)
+        if (err < 0 && err != AVERROR_EOF)
             return err;
+        if (!pic) {
+          if (ctx->coded_frame_type)
+              return  vaapi_encode_output(avctx, pic, pkt);
+          else
+              return AVERROR_EOF;
+        }
+
         av_assert0(pic);
 
         pic->encode_order = ctx->encode_order++;
@@ -1251,29 +1365,19 @@ int ff_vaapi_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
     }
 
     err = vaapi_encode_output(avctx, pic, pkt);
-    if (err < 0) {
+    if (err < 0 && err != AVERROR(EAGAIN)) {
         av_log(avctx, AV_LOG_ERROR, "Output failed: %d.\n", err);
         return err;
     }
 
-    if (ctx->output_delay == 0) {
-        pkt->dts = pkt->pts;
-    } else if (pic->encode_order < ctx->decode_delay) {
-        if (ctx->ts_ring[pic->encode_order] < INT64_MIN + ctx->dts_pts_diff)
-            pkt->dts = INT64_MIN;
-        else
-            pkt->dts = ctx->ts_ring[pic->encode_order] - ctx->dts_pts_diff;
-    } else {
-        pkt->dts = ctx->ts_ring[(pic->encode_order - ctx->decode_delay) %
-                                (3 * ctx->output_delay + ctx->async_depth)];
+    if (pkt->size) {
+        vaapi_encode_set_pkt_timestamp(avctx, pic, pkt);
+        ++ctx->output_order;
     }
-    av_log(avctx, AV_LOG_DEBUG, "Output packet: pts %"PRId64" dts %"PRId64".\n",
-           pkt->pts, pkt->dts);
 
-    ctx->output_order = pic->encode_order;
     vaapi_encode_clear_old(avctx);
 
-    return 0;
+    return err;
 }
 
 
@@ -2773,6 +2877,7 @@ av_cold int ff_vaapi_encode_close(AVCodecContext *avctx)
 
     av_freep(&ctx->codec_sequence_params);
     av_freep(&ctx->codec_picture_params);
+    av_freep(&ctx->coded_frame_data);
     av_fifo_freep2(&ctx->encode_fifo);
 
     av_buffer_unref(&ctx->recon_frames_ref);

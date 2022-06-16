@@ -56,6 +56,11 @@ fate-h265-levels: libavcodec/tests/h265_levels$(EXESUF)
 fate-h265-levels: CMD = run libavcodec/tests/h265_levels$(EXESUF)
 fate-h265-levels: REF = /dev/null
 
+FATE_LIBAVCODEC-$(CONFIG_AV1_VAAPI_ENCODER) += fate-av1-levels
+fate-av1-levels: libavcodec/tests/av1_levels$(EXESUF)
+fate-av1-levels: CMD = run libavcodec/tests/av1_levels$(EXESUF)
+fate-av1-levels: REF = /dev/null
+
 FATE_LIBAVCODEC-$(CONFIG_IIRFILTER) += fate-iirfilter
 fate-iirfilter: libavcodec/tests/iirfilter$(EXESUF)
 fate-iirfilter: CMD = run libavcodec/tests/iirfilter$(EXESUF)

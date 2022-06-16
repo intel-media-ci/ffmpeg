@@ -815,6 +815,7 @@ extern const FFCodec ff_av1_decoder;
 extern const FFCodec ff_av1_cuvid_decoder;
 extern const FFCodec ff_av1_qsv_decoder;
 extern const FFCodec ff_av1_qsv_encoder;
+extern const FFCodec ff_av1_vaapi_encoder;
 extern const FFCodec ff_libopenh264_encoder;
 extern const FFCodec ff_libopenh264_decoder;
 extern const FFCodec ff_h264_amf_encoder;

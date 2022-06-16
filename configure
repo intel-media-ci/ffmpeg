@@ -3252,6 +3252,8 @@ wmv3_crystalhd_decoder_select="crystalhd"
 av1_qsv_decoder_select="qsvdec"
 av1_qsv_encoder_select="qsvenc"
 av1_qsv_encoder_deps="libvpl MFX_EXTBUFF_AV1_BITSTREAM_PARAM"
+av1_vaapi_encoder_deps="VAEncPictureParameterBufferAV1"
+av1_vaapi_encoder_select="cbs_av1 vaapi_encode"
 
 # parsers
 aac_parser_select="adts_header mpeg4audio"
@@ -6939,6 +6941,7 @@ if enabled vaapi; then
     check_type "va/va.h va/va_enc_jpeg.h" "VAEncPictureParameterBufferJPEG"
     check_type "va/va.h va/va_enc_vp8.h"  "VAEncPictureParameterBufferVP8"
     check_type "va/va.h va/va_enc_vp9.h"  "VAEncPictureParameterBufferVP9"
+    check_type "va/va.h va/va_enc_av1.h"  "VAEncPictureParameterBufferAV1"
 fi
 
 if enabled_all opencl libdrm ; then

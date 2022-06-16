@@ -127,6 +127,10 @@ typedef struct VAAPIEncodePicture {
 
     int          nb_slices;
     VAAPIEncodeSlice *slices;
+
+    char tail_data[MAX_PARAM_BUFFER_SIZE];
+    /** Byte length of tail_data */
+    size_t tail_size;
 } VAAPIEncodePicture;
 
 typedef struct VAAPIEncodeProfile {
@@ -153,6 +157,12 @@ enum {
     RC_MODE_QVBR,
     RC_MODE_AVBR,
     RC_MODE_MAX = RC_MODE_AVBR,
+};
+
+enum {
+    CODED_FRAME_NONE,
+    CODED_FRAME_INDEPENDENT,
+    CODED_FRAME_MERGE_TO_NEXT,
 };
 
 typedef struct VAAPIEncodeRCMode {
@@ -351,6 +361,11 @@ typedef struct VAAPIEncodeContext {
     // If the driver does not support ROI then warn the first time we
     // encounter a frame with ROI side data.
     int             roi_warned;
+
+    /** coded frame data need to deal with next frame's data */
+    void  *coded_frame_data;
+    size_t coded_frame_size;
+    int    coded_frame_type;
 
     AVFrame         *frame;
 

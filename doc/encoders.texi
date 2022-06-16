@@ -3806,6 +3806,20 @@ Average variable bitrate.
 Each encoder also has its own specific options:
 @table @option
 
+@item av1_vaapi
+@option{profile} sets the value of @emph{seq_profile}.
+@option{tier} sets the value of @emph{seq_tier}.
+@option{level} sets the value of @emph{seq_level_idx}.
+
+@table @option
+@item tile_cols_log2
+Set log2 of columns number (default is 0):
+@item tile_rols_log2
+Set log2 of rows number (default is 0):
+@item tile_groups
+Set number of tile groups (default is 1):
+@end table
+
 @item h264_vaapi
 @option{profile} sets the value of @emph{profile_idc} and the @emph{constraint_set*_flag}s.
 @option{level} sets the value of @emph{level_idc}.

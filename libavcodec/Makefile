@@ -242,6 +242,7 @@ OBJS-$(CONFIG_AURA2_DECODER)           += aura.o
 OBJS-$(CONFIG_AV1_DECODER)             += av1dec.o
 OBJS-$(CONFIG_AV1_CUVID_DECODER)       += cuviddec.o
 OBJS-$(CONFIG_AV1_QSV_ENCODER)         += qsvenc_av1.o
+OBJS-$(CONFIG_AV1_VAAPI_ENCODER)       += vaapi_encode_av1.o av1_profile_level.o
 OBJS-$(CONFIG_AVRN_DECODER)            += avrndec.o
 OBJS-$(CONFIG_AVRP_DECODER)            += r210dec.o
 OBJS-$(CONFIG_AVRP_ENCODER)            += r210enc.o
@@ -1271,6 +1272,7 @@ TESTPROGS-$(CONFIG_H264_METADATA_BSF)     += h264_levels
 TESTPROGS-$(CONFIG_HEVC_METADATA_BSF)     += h265_levels
 TESTPROGS-$(CONFIG_RANGECODER)            += rangecoder
 TESTPROGS-$(CONFIG_SNOW_ENCODER)          += snowenc
+TESTPROGS-$(CONFIG_AV1_VAAPI_ENCODER)     += av1_levels
 
 TESTOBJS = dctref.o
 
