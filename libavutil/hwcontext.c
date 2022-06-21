@@ -80,6 +80,18 @@ static const char *const hw_type_names[] = {
     [AV_HWDEVICE_TYPE_VULKAN] = "vulkan",
 };
 
+enum AVHWDeviceType av_hwdevice_get_type_by_pix_fmt(enum AVPixelFormat fmt)
+{
+    int i, j;
+    for (i = 0; hw_table[i]; i++) {
+        for (j = 0; hw_table[i]->pix_fmts[j] != AV_PIX_FMT_NONE; j++) {
+            if (hw_table[i]->pix_fmts[j] == fmt)
+                return hw_table[i]->type;
+        }
+    }
+    return AV_HWDEVICE_TYPE_NONE;
+}
+
 enum AVHWDeviceType av_hwdevice_find_type_by_name(const char *name)
 {
     int type;
