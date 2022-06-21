@@ -326,18 +326,36 @@ static const AVFilterFormatsMerger mergers_audio[] = {
     },
 };
 
+static const AVFilterFormatsFilter filters_video[] = {
+    {
+        .conversion_filter = "scale",
+        .conversion_opts_offset = offsetof(AVFilterGraph, scale_sws_opts),
+    },
+    {
+        .conversion_filter = "hwmap",
+        .conversion_opts_offset = 0,
+    }
+};
+
+static const AVFilterFormatsFilter filters_audio[] = {
+    {
+        .conversion_filter = "aresample",
+        .conversion_opts_offset = offsetof(AVFilterGraph, aresample_swr_opts),
+    }
+};
+
 static const AVFilterNegotiation negotiate_video = {
     .nb_mergers = FF_ARRAY_ELEMS(mergers_video),
     .mergers = mergers_video,
-    .conversion_filter = "scale",
-    .conversion_opts_offset = offsetof(AVFilterGraph, scale_sws_opts),
+    .nb_conversion_filters = FF_ARRAY_ELEMS(filters_video),
+    .conversion_filters = filters_video,
 };
 
 static const AVFilterNegotiation negotiate_audio = {
     .nb_mergers = FF_ARRAY_ELEMS(mergers_audio),
     .mergers = mergers_audio,
-    .conversion_filter = "aresample",
-    .conversion_opts_offset = offsetof(AVFilterGraph, aresample_swr_opts),
+    .nb_conversion_filters = FF_ARRAY_ELEMS(filters_audio),
+    .conversion_filters = filters_audio,
 };
 
 const AVFilterNegotiation *ff_filter_get_negotiation(AVFilterLink *link)
