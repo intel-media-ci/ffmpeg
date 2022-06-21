@@ -928,7 +928,8 @@ static int encode_frame(OutputFile *of, OutputStream *ost, AVFrame *frame)
             fprintf(ost->logfile, "%s", enc->stats_out);
 
         if (ret == AVERROR(EAGAIN)) {
-            av_assert0(frame); // should never happen during flushing
+            if (!frame)
+                continue;
             return 0;
         } else if (ret == AVERROR_EOF) {
             output_packet(of, pkt, ost, 1);
