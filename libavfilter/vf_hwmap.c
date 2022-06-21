@@ -72,25 +72,33 @@ static int hwmap_config_output(AVFilterLink *outlink)
     if (inlink->hw_frames_ctx) {
         hwfc = (AVHWFramesContext*)inlink->hw_frames_ctx->data;
 
-        if (ctx->derive_device_type) {
-            enum AVHWDeviceType type;
+        enum AVHWDeviceType type;
 
+        if (ctx->derive_device_type) {
             type = av_hwdevice_find_type_by_name(ctx->derive_device_type);
             if (type == AV_HWDEVICE_TYPE_NONE) {
                 av_log(avctx, AV_LOG_ERROR, "Invalid device type.\n");
                 err = AVERROR(EINVAL);
                 goto fail;
             }
-
-            err = av_hwdevice_ctx_create_derived(&device, type,
-                                                 hwfc->device_ref, 0);
-            if (err < 0) {
-                av_log(avctx, AV_LOG_ERROR, "Failed to created derived "
-                       "device context: %d.\n", err);
+        } else {
+            type = av_hwdevice_get_type_by_pix_fmt(outlink->format);
+            if (type == AV_HWDEVICE_TYPE_NONE) {
+                av_log(avctx, AV_LOG_ERROR, "Could not get device type from "
+                       "format %s.\n", av_get_pix_fmt_name(outlink->format));
+                err = AVERROR(EINVAL);
                 goto fail;
             }
-            device_is_derived = 1;
         }
+
+        err = av_hwdevice_ctx_create_derived(&device, type,
+                                             hwfc->device_ref, 0);
+        if (err < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to created derived "
+                   "device context: %d.\n", err);
+            goto fail;
+        }
+        device_is_derived = 1;
 
         desc = av_pix_fmt_desc_get(outlink->format);
         if (!desc) {
