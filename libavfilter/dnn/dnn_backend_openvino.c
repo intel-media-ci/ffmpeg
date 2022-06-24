@@ -58,6 +58,8 @@ typedef struct OVModel{
     SafeQueue *request_queue;   // holds OVRequestItem
     Queue *task_queue;          // holds TaskItem
     Queue *lltask_queue;     // holds LastLevelTaskItem
+    char *all_input_names;
+    char *all_output_names;
 } OVModel;
 
 // one request for one call to openvino
@@ -336,13 +338,23 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
     // while we pass NHWC data from FFmpeg to openvino
     status = ie_network_set_input_layout(ov_model->network, input_name, NHWC);
     if (status != OK) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to set layout as NHWC for input %s\n", input_name);
+        if (status == NOT_FOUND) {
+            av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model, failed to set input layout as NHWC, "\
+                                      "all input(s) are: \"%s\"\n", input_name, ov_model->all_input_names);
+        } else{
+            av_log(ctx, AV_LOG_ERROR, "Failed to set layout as NHWC for input %s\n", input_name);
+        }
         ret = DNN_GENERIC_ERROR;
         goto err;
     }
     status = ie_network_set_output_layout(ov_model->network, output_name, NHWC);
     if (status != OK) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to set layout as NHWC for output %s\n", output_name);
+        if (status == NOT_FOUND) {
+            av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model, failed to set output layout as NHWC, "\
+                                      "all output(s) are: \"%s\"\n", input_name, ov_model->all_output_names);
+        } else{
+            av_log(ctx, AV_LOG_ERROR, "Failed to set layout as NHWC for output %s\n", output_name);
+        }
         ret = DNN_GENERIC_ERROR;
         goto err;
     }
@@ -505,7 +517,6 @@ static int get_input_ov(void *model, DNNData *input, const char *input_name)
     OVModel *ov_model = model;
     OVContext *ctx = &ov_model->ctx;
     char *model_input_name = NULL;
-    char *all_input_names = NULL;
     IEStatusCode status;
     size_t model_input_count = 0;
     dimensions_t dims;
@@ -538,15 +549,12 @@ static int get_input_ov(void *model, DNNData *input, const char *input_name)
             input->width    = input_resizable ? -1 : dims.dims[3];
             input->dt       = precision_to_datatype(precision);
             return 0;
-        } else {
-            //incorrect input name
-            APPEND_STRING(all_input_names, model_input_name)
         }
 
         ie_network_name_free(&model_input_name);
     }
 
-    av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model, all input(s) are: \"%s\"\n", input_name, all_input_names);
+    av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model, all input(s) are: \"%s\"\n", input_name, ov_model->all_input_names);
     return AVERROR(EINVAL);
 }
 
@@ -729,6 +737,8 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, DNNFunctionType func_
     OVModel *ov_model = NULL;
     OVContext *ctx = NULL;
     IEStatusCode status;
+    size_t node_count = 0;
+    char *node_name = NULL;
 
     model = av_mallocz(sizeof(DNNModel));
     if (!model){
@@ -744,6 +754,8 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, DNNFunctionType func_
     ov_model->model = model;
     ov_model->ctx.class = &dnn_openvino_class;
     ctx = &ov_model->ctx;
+    ov_model->all_input_names = NULL;
+    ov_model->all_output_names = NULL;
 
     //parse options
     av_opt_set_defaults(ctx);
@@ -765,6 +777,34 @@ DNNModel *ff_dnn_load_model_ov(const char *model_filename, DNNFunctionType func_
                                    model_filename, ver.api_version);
         ie_version_free(&ver);
         goto err;
+    }
+
+    //get all the input and output names
+    status = ie_network_get_inputs_number(ov_model->network, &node_count);
+    if (status != OK) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to get input count\n");
+        goto err;
+    }
+    for (size_t i = 0; i < node_count; i++) {
+        status = ie_network_get_input_name(ov_model->network, i, &node_name);
+        if (status != OK) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to get No.%d input's name\n", (int)i);
+            goto err;
+        }
+        APPEND_STRING(ov_model->all_input_names, node_name)
+    }
+    status = ie_network_get_outputs_number(ov_model->network, &node_count);
+    if (status != OK) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to get output count\n");
+        goto err;
+    }
+    for (size_t i = 0; i < node_count; i++) {
+        status = ie_network_get_output_name(ov_model->network, i, &node_name);
+        if (status != OK) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to get No.%d output's name\n", (int)i);
+            goto err;
+        }
+        APPEND_STRING(ov_model->all_output_names, node_name)
     }
 
     model->get_input = &get_input_ov;
