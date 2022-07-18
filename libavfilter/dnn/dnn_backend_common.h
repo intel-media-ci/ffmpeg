@@ -37,10 +37,13 @@ typedef struct TaskItem {
     void *model; // model for the backend
     AVFrame *in_frame;
     AVFrame *out_frame;
+    AVFifo *in_queue;
+    AVFifo *out_queue;
     const char *input_name;
     const char **output_names;
     uint8_t async;
     uint8_t do_ioproc;
+    uint32_t nb_input;
     uint32_t nb_output;
     uint32_t inference_todo;
     uint32_t inference_done;

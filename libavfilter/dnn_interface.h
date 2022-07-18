@@ -28,6 +28,7 @@
 
 #include <stdint.h>
 #include "libavutil/frame.h"
+#include "libavutil/fifo.h"
 #include "avfilter.h"
 
 #define DNN_GENERIC_ERROR FFERRTAG('D','N','N','!')
@@ -68,9 +69,12 @@ typedef struct DNNData{
 typedef struct DNNExecBaseParams {
     const char *input_name;
     const char **output_names;
+    uint32_t nb_input;
     uint32_t nb_output;
     AVFrame *in_frame;
     AVFrame *out_frame;
+    AVFifo *in_queue;
+    AVFifo *out_queue;
 } DNNExecBaseParams;
 
 typedef struct DNNExecClassificationParams {

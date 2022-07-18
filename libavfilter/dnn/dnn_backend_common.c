@@ -66,7 +66,10 @@ int ff_dnn_fill_task(TaskItem *task, DNNExecBaseParams *exec_params, void *backe
     task->input_name = exec_params->input_name;
     task->in_frame = exec_params->in_frame;
     task->out_frame = exec_params->out_frame;
+    task->in_queue = exec_params->in_queue;
+    task->out_queue = exec_params->out_queue;
     task->model = backend_model;
+    task->nb_input = exec_params->nb_input;
     task->nb_output = exec_params->nb_output;
     task->output_names = exec_params->output_names;
 

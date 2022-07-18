@@ -135,9 +135,12 @@ int ff_dnn_execute_model(DnnContext *ctx, AVFrame *in_frame, AVFrame *out_frame)
     DNNExecBaseParams exec_params = {
         .input_name     = ctx->model_inputname,
         .output_names   = (const char **)ctx->model_outputnames,
+        .nb_input       = ctx->nb_inputs,
         .nb_output      = ctx->nb_outputs,
         .in_frame       = in_frame,
         .out_frame      = out_frame,
+        .in_queue       = ctx->in_queue,
+        .out_queue      = ctx->out_queue,
     };
     return (ctx->dnn_module->execute_model)(ctx->model, &exec_params);
 }

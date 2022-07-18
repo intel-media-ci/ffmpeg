@@ -28,6 +28,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/fifo.h"
 #include "filters.h"
 #include "dnn_filter_common.h"
 #include "formats.h"
@@ -61,10 +62,16 @@ static const AVOption dnn_processing_options[] = {
 };
 
 AVFILTER_DEFINE_CLASS(dnn_processing);
-
+#define MAX_PROCESSING_QUEUE 48
 static av_cold int init(AVFilterContext *context)
 {
     DnnProcessingContext *ctx = context->priv;
+    ctx->dnnctx.in_queue = av_fifo_alloc2(MAX_PROCESSING_QUEUE, sizeof(AVFrame *), AV_FIFO_FLAG_AUTO_GROW);
+    if (!ctx->dnnctx.in_queue)
+        return AVERROR(ENOMEM);
+    ctx->dnnctx.out_queue = av_fifo_alloc2(MAX_PROCESSING_QUEUE, sizeof(AVFrame *), AV_FIFO_FLAG_AUTO_GROW);
+    if (!ctx->dnnctx.out_queue)
+        return AVERROR(ENOMEM);
     return ff_dnn_init(&ctx->dnnctx, DFT_PROCESS_FRAME, context);
 }
 
@@ -292,15 +299,43 @@ static int activate(AVFilterContext *filter_ctx)
         ret = ff_inlink_consume_frame(inlink, &in);
         if (ret < 0)
             return ret;
-        if (ret > 0) {
-            out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-            if (!out) {
-                av_frame_free(&in);
-                return AVERROR(ENOMEM);
+        if (ctx->dnnctx.nb_inputs == 1) {
+            if (ret > 0) {
+                out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+                if (!out) {
+                    av_frame_free(&in);
+                    return AVERROR(ENOMEM);
+                }
+                av_frame_copy_props(out, in);
+                if (ff_dnn_execute_model(&ctx->dnnctx, in, out) != 0) {
+                    return AVERROR(EIO);
+                }
             }
-            av_frame_copy_props(out, in);
-            if (ff_dnn_execute_model(&ctx->dnnctx, in, out) != 0) {
-                return AVERROR(EIO);
+        } else {
+            if (ret > 0) {
+            if (av_fifo_can_read(ctx->dnnctx.in_queue) < ctx->dnnctx.nb_inputs) {
+                out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+                if (!out) {
+                    av_frame_free(&in);
+                    return AVERROR(ENOMEM);
+                }
+                av_frame_copy_props(out, in);
+                av_fifo_write(ctx->dnnctx.in_queue, &in, 1);
+                av_fifo_write(ctx->dnnctx.out_queue, &out, 1);
+            }
+            if (av_fifo_can_read(ctx->dnnctx.in_queue) == ctx->dnnctx.nb_inputs)
+            {
+                if (ff_dnn_execute_model(&ctx->dnnctx, in, out) != 0) {
+                    return AVERROR(EIO);
+                }
+                do {
+                    av_fifo_read(ctx->dnnctx.out_queue, &out, 1);
+                    ret = ff_filter_frame(outlink, out);
+                    if (ret < 0)
+                        return ret;
+                } while (av_fifo_can_read(ctx->dnnctx.out_queue));
+                got_frame = 1;
+            }
             }
         }
     } while (ret > 0);
@@ -342,7 +377,6 @@ static int activate(AVFilterContext *filter_ctx)
 static av_cold void uninit(AVFilterContext *ctx)
 {
     DnnProcessingContext *context = ctx->priv;
-
     sws_freeContext(context->sws_uv_scale);
     ff_dnn_uninit(&context->dnnctx);
 }
