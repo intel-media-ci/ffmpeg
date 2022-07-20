@@ -74,6 +74,7 @@ static int8_t vaapi_av1_get_bit_depth_idx(AVCodecContext *avctx)
 static int vaapi_av1_decode_init(AVCodecContext *avctx)
 {
     VAAPIAV1DecContext *ctx = avctx->internal->hwaccel_priv_data;
+    AV1DecContext *s = avctx->priv_data;
 
     ctx->tmp_frame = av_frame_alloc();
     if (!ctx->tmp_frame) {
@@ -90,6 +91,11 @@ static int vaapi_av1_decode_init(AVCodecContext *avctx)
             return AVERROR(ENOMEM);
         }
         ctx->ref_tab[i].valid = 0;
+    }
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(s->ref); i++) {
+        if (s->ref[i].f)
+            s->ref[i].f->data[3] = (uint8_t*)(uintptr_t)VA_INVALID_SURFACE;
     }
 
     return ff_vaapi_decode_init(avctx);
@@ -274,12 +280,9 @@ static int vaapi_av1_start_frame(AVCodecContext *avctx,
     };
 
     for (int i = 0; i < AV1_NUM_REF_FRAMES; i++) {
-        if (pic_param.pic_info_fields.bits.frame_type == AV1_FRAME_KEY)
-            pic_param.ref_frame_map[i] = VA_INVALID_ID;
-        else
-            pic_param.ref_frame_map[i] = ctx->ref_tab[i].valid ?
-                                         ff_vaapi_get_surface_id(ctx->ref_tab[i].frame) :
-                                         vaapi_av1_surface_id(&s->ref[i]);
+        pic_param.ref_frame_map[i] = ctx->ref_tab[i].valid ?
+                                     ff_vaapi_get_surface_id(ctx->ref_tab[i].frame) :
+                                     vaapi_av1_surface_id(&s->ref[i]);
     }
     for (int i = 0; i < AV1_REFS_PER_FRAME; i++) {
         pic_param.ref_frame_idx[i] = frame_header->ref_frame_idx[i];
