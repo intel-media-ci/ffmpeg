@@ -191,6 +191,9 @@ static const struct {
     #if CONFIG_THRESHOLD_FILTER
         { "vf_threshold", checkasm_check_vf_threshold },
     #endif
+    #if CONFIG_CONVOLUTION_FILTER
+        { "vf_convolution", checkasm_check_vf_convolution },
+    #endif
 #endif
 #if CONFIG_SWSCALE
     { "sw_gbrp", checkasm_check_sw_gbrp },

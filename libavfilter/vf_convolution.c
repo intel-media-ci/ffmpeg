@@ -874,6 +874,9 @@ static int param_init(AVFilterContext *ctx)
         if (s->depth > 8)
             for (p = 0; p < s->nb_planes; p++)
                 s->filter[p] = filter16_sobel;
+#if CONFIG_CONVOLUTION_FILTER && ARCH_X86_64
+        ff_sobel_init_x86(s);
+#endif
     } else if (!strcmp(ctx->filter->name, "kirsch")) {
         if (s->depth > 8)
             for (p = 0; p < s->nb_planes; p++)
@@ -885,6 +888,26 @@ static int param_init(AVFilterContext *ctx)
     }
 
     return 0;
+}
+
+void ff_convolution_init(ConvolutionContext *s, const char *filter_name)
+{
+    if (!strcmp(filter_name, "sobel")) {
+        for (int i = 0; i < 4; i++) {
+            s->filter[i] = filter_sobel;
+            s->copy[i] = !((1 << i) & s->planes);
+            s->size[i] = 3;
+            s->setup[i] = setup_3x3;
+            s->rdiv[i] = s->scale;
+            s->bias[i] = s->delta;
+        }
+        if (s->depth > 8)
+            for (int i = 0; i < 4; i++)
+                s->filter[i] = filter16_sobel;
+#if CONFIG_CONVOLUTION_FILTER && ARCH_X86_64
+        ff_sobel_init_x86(s);
+#endif
+    } 
 }
 
 static int config_input(AVFilterLink *inlink)
