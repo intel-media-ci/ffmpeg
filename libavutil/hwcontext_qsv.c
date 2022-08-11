@@ -108,6 +108,8 @@ static const struct {
                        MFX_FOURCC_YUY2 },
     { AV_PIX_FMT_Y210,
                        MFX_FOURCC_Y210 },
+    { AV_PIX_FMT_VUYA,
+                       MFX_FOURCC_AYUV },
 #endif
 };
 
@@ -1021,6 +1023,12 @@ static int map_frame_to_surface(const AVFrame *frame, mfxFrameSurface1 *surface)
         surface->Data.Y16 = (mfxU16 *)frame->data[0];
         surface->Data.U16 = (mfxU16 *)frame->data[0] + 1;
         surface->Data.V16 = (mfxU16 *)frame->data[0] + 3;
+        break;
+    case AV_PIX_FMT_VUYA:
+        surface->Data.V = frame->data[0];
+        surface->Data.U = frame->data[0] + 1;
+        surface->Data.Y = frame->data[0] + 2;
+        surface->Data.A = frame->data[0] + 3;
         break;
 #endif
     default:
