@@ -115,6 +115,7 @@ const FFCodec ff_vp9_qsv_encoder = {
     .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12,
                                                     AV_PIX_FMT_P010,
                                                     AV_PIX_FMT_QSV,
+                                                    AV_PIX_FMT_VUYA,
                                                     AV_PIX_FMT_NONE },
     .p.priv_class   = &class,
     .defaults       = qsv_enc_defaults,

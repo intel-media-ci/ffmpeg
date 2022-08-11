@@ -312,6 +312,7 @@ const FFCodec ff_hevc_qsv_encoder = {
                                                     AV_PIX_FMT_QSV,
                                                     AV_PIX_FMT_BGRA,
                                                     AV_PIX_FMT_X2RGB10,
+                                                    AV_PIX_FMT_VUYA,
                                                     AV_PIX_FMT_NONE },
     .p.priv_class   = &class,
     .defaults       = qsv_enc_defaults,
