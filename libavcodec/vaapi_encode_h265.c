@@ -430,12 +430,14 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
             vps->vps_max_latency_increase_plus1[i];
     }
 
+    sps->log2_min_luma_coding_block_size_minus3 =
+        ff_ctz(priv->min_cb_size) - 3;
+    sps->log2_diff_max_min_luma_coding_block_size =
+        ff_ctz(priv->ctu_size) - ff_ctz(priv->min_cb_size);
+
     // These values come from the capabilities of the first encoder
     // implementation in the i965 driver on Intel Skylake.  They may
     // fail badly with other platforms or drivers.
-    // CTB size from 8x8 to 32x32.
-    sps->log2_min_luma_coding_block_size_minus3   = 0;
-    sps->log2_diff_max_min_luma_coding_block_size = 2;
     // Transform size from 4x4 to 32x32.
     sps->log2_min_luma_transform_block_size_minus2   = 0;
     sps->log2_diff_max_min_luma_transform_block_size = 3;
@@ -468,10 +470,6 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
     if (priv->va_bs) {
         VAConfigAttribValEncHEVCBlockSizes bs = { .value = priv->va_bs };
-        sps->log2_min_luma_coding_block_size_minus3 =
-            ff_ctz(priv->min_cb_size) - 3;
-        sps->log2_diff_max_min_luma_coding_block_size =
-            ff_ctz(priv->ctu_size) - ff_ctz(priv->min_cb_size);
 
         sps->log2_min_luma_transform_block_size_minus2 =
             bs.bits.log2_min_luma_transform_block_size_minus2;
@@ -1209,7 +1207,7 @@ static av_cold int vaapi_encode_h265_get_encoder_caps(AVCodecContext *avctx)
 
     if (!priv->ctu_size) {
         priv->ctu_size     = 32;
-        priv->min_cb_size  = 16;
+        priv->min_cb_size  = 8;
     }
     av_log(avctx, AV_LOG_VERBOSE, "Using CTU size %dx%d, "
            "min CB size %dx%d.\n", priv->ctu_size, priv->ctu_size,
