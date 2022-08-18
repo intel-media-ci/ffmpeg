@@ -262,7 +262,7 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
            info->FrameInfo.FrameRateExtD, info->FrameInfo.FrameRateExtN);
 
     if (co2) {
-        if ((info->RateControlMethod == MFX_RATECONTROL_VBR && q->extbrc && q->look_ahead_depth > 0) ||
+        if ((((info->RateControlMethod == MFX_RATECONTROL_VBR) || (info->RateControlMethod == MFX_RATECONTROL_CBR)) && q->look_ahead_depth > 0) ||
             (info->RateControlMethod == MFX_RATECONTROL_LA) ||
             (info->RateControlMethod == MFX_RATECONTROL_LA_HRD) ||
             (info->RateControlMethod == MFX_RATECONTROL_LA_ICQ))
@@ -433,7 +433,7 @@ static int select_rc_mode(AVCodecContext *avctx, QSVEncContext *q)
     const char *rc_desc;
     mfxU16      rc_mode;
 
-    int want_la     = q->look_ahead;
+    int want_la     = q->look_ahead && (q->extbrc > 0);
     int want_qscale = !!(avctx->flags & AV_CODEC_FLAG_QSCALE);
     int want_vcm    = q->vcm;
 
@@ -716,7 +716,7 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     switch (q->param.mfx.RateControlMethod) {
     case MFX_RATECONTROL_CBR:
     case MFX_RATECONTROL_VBR:
-        if (q->extbrc) {
+        if (q->look_ahead_depth > 0) {
             q->extco2.LookAheadDepth = q->look_ahead_depth;
         }
 #if QSV_HAVE_VCM
