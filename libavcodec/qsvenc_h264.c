@@ -24,7 +24,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
@@ -32,7 +32,6 @@
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "qsv.h"
-#include "qsv_internal.h"
 #include "qsvenc.h"
 #include "atsc_a53.h"
 
@@ -115,6 +114,7 @@ static const AVOption options[] = {
     QSV_OPTION_DBLK_IDC
     QSV_OPTION_LOW_DELAY_BRC
     QSV_OPTION_MAX_MIN_QP
+    QSV_OPTION_SCENARIO
 
     { "cavlc",          "Enable CAVLC",                           OFFSET(qsv.cavlc),          AV_OPT_TYPE_BOOL, { .i64 = 0 },   0,          1, VE },
 #if QSV_HAVE_VCM

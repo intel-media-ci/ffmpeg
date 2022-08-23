@@ -24,10 +24,12 @@
 #ifndef AVFILTER_QSVVPP_H
 #define AVFILTER_QSVVPP_H
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
 #include "avfilter.h"
 #include "libavutil/fifo.h"
+#include "libavutil/hwcontext.h"
+#include "libavutil/hwcontext_qsv.h"
 
 #define FF_INLINK_IDX(link)  ((int)((link)->dstpad - (link)->dst->input_pads))
 #define FF_OUTLINK_IDX(link) ((int)((link)->srcpad - (link)->src->output_pads))
@@ -39,6 +41,9 @@
 #define QSV_RUNTIME_VERSION_ATLEAST(MFX_VERSION, MAJOR, MINOR) \
     ((MFX_VERSION.Major > (MAJOR)) ||                           \
     (MFX_VERSION.Major == (MAJOR) && MFX_VERSION.Minor >= (MINOR)))
+
+#define QSV_ONEVPL       QSV_VERSION_ATLEAST(2, 0)
+#define QSV_HAVE_OPAQUE  !QSV_ONEVPL
 
 typedef struct QSVFrame {
     AVFrame          *frame;
@@ -64,10 +69,12 @@ typedef struct QSVVPPContext {
     mfxFrameSurface1  **surface_ptrs_in;
     mfxFrameSurface1  **surface_ptrs_out;
 
+#if QSV_HAVE_OPAQUE
     /** MFXVPP extern parameters */
     mfxExtOpaqueSurfaceAlloc opaque_alloc;
     mfxExtBuffer      **ext_buffers;
     int                 nb_ext_buffers;
+#endif
 
     int got_frame;
     int async_depth;
@@ -116,5 +123,8 @@ int ff_qsvvpp_print_error(void *log_ctx, mfxStatus err,
 
 int ff_qsvvpp_print_warning(void *log_ctx, mfxStatus err,
                             const char *warning_string);
+
+int ff_qsvvpp_create_mfx_session(void *ctx, void *loader, mfxIMPL implementation,
+                                 mfxVersion *pver, mfxSession *psession);
 
 #endif /* AVFILTER_QSVVPP_H */

@@ -47,11 +47,25 @@ static void av_noinline free_picture_tables(Picture *pic)
     }
 }
 
+static int make_table_writable(AVBufferRef **ref)
+{
+    AVBufferRef *old = *ref, *new;
+
+    if (av_buffer_is_writable(old))
+        return 0;
+    new = av_buffer_allocz(old->size);
+    if (!new)
+        return AVERROR(ENOMEM);
+    av_buffer_unref(ref);
+    *ref = new;
+    return 0;
+}
+
 static int make_tables_writable(Picture *pic)
 {
 #define MAKE_WRITABLE(table) \
 do {\
-    int ret = av_buffer_make_writable(&pic->table); \
+    int ret = make_table_writable(&pic->table); \
     if (ret < 0) \
         return ret; \
 } while (0)
@@ -297,8 +311,6 @@ fail:
  */
 void ff_mpeg_unref_picture(AVCodecContext *avctx, Picture *pic)
 {
-    int off = offsetof(Picture, hwaccel_priv_buf) + sizeof(pic->hwaccel_priv_buf);
-
     pic->tf.f = pic->f;
     /* WM Image / Screen codecs allocate internal buffers with different
      * dimensions / colorspaces; ignore user-defined callbacks for these. */
@@ -314,7 +326,12 @@ void ff_mpeg_unref_picture(AVCodecContext *avctx, Picture *pic)
     if (pic->needs_realloc)
         free_picture_tables(pic);
 
-    memset((uint8_t*)pic + off, 0, sizeof(*pic) - off);
+    pic->hwaccel_picture_private = NULL;
+    pic->field_picture = 0;
+    pic->b_frame_score = 0;
+    pic->needs_realloc = 0;
+    pic->reference     = 0;
+    pic->shared        = 0;
 }
 
 int ff_update_picture_tables(Picture *dst, const Picture *src)

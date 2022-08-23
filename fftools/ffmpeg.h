@@ -323,10 +323,18 @@ typedef struct InputStream {
 #define DECODING_FOR_FILTER 2
     int processing_needed;   /* non zero if the packets must be processed */
 
+    /**
+     * Codec parameters - to be used by the decoding/streamcopy code.
+     * st->codecpar should not be accessed, because it may be modified
+     * concurrently by the demuxing thread.
+     */
+    AVCodecParameters *par;
     AVCodecContext *dec_ctx;
     const AVCodec *dec;
     AVFrame *decoded_frame;
     AVPacket *pkt;
+
+    AVRational framerate_guessed;
 
     int64_t       prev_pkt_pts;
     int64_t       start;     /* time when read started */
@@ -427,6 +435,10 @@ typedef struct InputFile {
     int input_sync_ref;
 
     int64_t ts_offset;
+    /**
+     * Extra timestamp offset added by discontinuity handling.
+     */
+    int64_t ts_offset_discont;
     int64_t last_ts;
     int64_t start_time;   /* user-specified start time in AV_TIME_BASE or AV_NOPTS_VALUE */
     int64_t recording_time;
@@ -484,6 +496,12 @@ typedef struct OutputStream {
     int64_t last_mux_dts;
     /* pts of the last frame received from the filters, in AV_TIME_BASE_Q */
     int64_t last_filter_pts;
+
+    // timestamp from which the streamcopied streams should start,
+    // in AV_TIME_BASE_Q;
+    // everything before it should be discarded
+    int64_t ts_copy_start;
+
     // the timebase of the packets sent to the muxer
     AVRational mux_timebase;
     AVRational enc_timebase;

@@ -21,7 +21,7 @@
  * deinterlace video filter - QSV
  */
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -62,7 +62,9 @@ typedef struct QSVDeintContext {
     mfxFrameSurface1 **surface_ptrs;
     int             nb_surface_ptrs;
 
+#if QSV_HAVE_OPAQUE
     mfxExtOpaqueSurfaceAlloc opaque_alloc;
+#endif
     mfxExtVPPDeinterlacing   deint_conf;
     mfxExtBuffer            *ext_buffers[2];
     int                      num_ext_buffers;
@@ -154,17 +156,18 @@ static int init_out_session(AVFilterContext *ctx)
     AVHWFramesContext    *hw_frames_ctx = (AVHWFramesContext*)s->hw_frames_ctx->data;
     AVQSVFramesContext *hw_frames_hwctx = hw_frames_ctx->hwctx;
     AVQSVDeviceContext    *device_hwctx = hw_frames_ctx->device_ctx->hwctx;
-
-    int opaque = !!(hw_frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
-
+    int opaque = 0;
     mfxHDL handle = NULL;
     mfxHandleType handle_type;
     mfxVersion ver;
     mfxIMPL impl;
     mfxVideoParam par;
     mfxStatus err;
-    int i;
+    int i, ret;
 
+#if QSV_HAVE_OPAQUE
+    opaque = !!(hw_frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME);
+#endif
     /* extract the properties of the "master" session given to us */
     err = MFXQueryIMPL(device_hwctx->session, &impl);
     if (err == MFX_ERR_NONE)
@@ -195,13 +198,10 @@ static int init_out_session(AVFilterContext *ctx)
 
     /* create a "slave" session with those same properties, to be used for
      * actual deinterlacing */
-    err = MFXInit(impl, &ver, &s->session);
-    if (err < 0)
-        return ff_qsvvpp_print_error(ctx, err, "Error initializing a session for deinterlacing");
-    else if (err > 0) {
-        ff_qsvvpp_print_warning(ctx, err, "Warning in session initialization");
-        return AVERROR_UNKNOWN;
-    }
+    ret = ff_qsvvpp_create_mfx_session(ctx, device_hwctx->loader, impl, &ver,
+                                       &s->session);
+    if (ret)
+        return ret;
 
     if (handle) {
         err = MFXVideoCORE_SetHandle(s->session, handle_type, handle);
@@ -223,28 +223,7 @@ static int init_out_session(AVFilterContext *ctx)
 
     s->ext_buffers[s->num_ext_buffers++] = (mfxExtBuffer *)&s->deint_conf;
 
-    if (opaque) {
-        s->surface_ptrs = av_calloc(hw_frames_hwctx->nb_surfaces,
-                                    sizeof(*s->surface_ptrs));
-        if (!s->surface_ptrs)
-            return AVERROR(ENOMEM);
-        for (i = 0; i < hw_frames_hwctx->nb_surfaces; i++)
-            s->surface_ptrs[i] = hw_frames_hwctx->surfaces + i;
-        s->nb_surface_ptrs = hw_frames_hwctx->nb_surfaces;
-
-        s->opaque_alloc.In.Surfaces   = s->surface_ptrs;
-        s->opaque_alloc.In.NumSurface = s->nb_surface_ptrs;
-        s->opaque_alloc.In.Type       = hw_frames_hwctx->frame_type;
-
-        s->opaque_alloc.Out = s->opaque_alloc.In;
-
-        s->opaque_alloc.Header.BufferId = MFX_EXTBUFF_OPAQUE_SURFACE_ALLOCATION;
-        s->opaque_alloc.Header.BufferSz = sizeof(s->opaque_alloc);
-
-        s->ext_buffers[s->num_ext_buffers++] = (mfxExtBuffer *)&s->opaque_alloc;
-
-        par.IOPattern = MFX_IOPATTERN_IN_OPAQUE_MEMORY | MFX_IOPATTERN_OUT_OPAQUE_MEMORY;
-    } else {
+    if (!opaque) {
         mfxFrameAllocator frame_allocator = {
             .pthis  = ctx,
             .Alloc  = frame_alloc,
@@ -268,6 +247,31 @@ static int init_out_session(AVFilterContext *ctx)
 
         par.IOPattern = MFX_IOPATTERN_IN_VIDEO_MEMORY | MFX_IOPATTERN_OUT_VIDEO_MEMORY;
     }
+#if QSV_HAVE_OPAQUE
+    else {
+        s->surface_ptrs = av_calloc(hw_frames_hwctx->nb_surfaces,
+                                    sizeof(*s->surface_ptrs));
+
+        if (!s->surface_ptrs)
+            return AVERROR(ENOMEM);
+        for (i = 0; i < hw_frames_hwctx->nb_surfaces; i++)
+            s->surface_ptrs[i] = hw_frames_hwctx->surfaces + i;
+        s->nb_surface_ptrs = hw_frames_hwctx->nb_surfaces;
+
+        s->opaque_alloc.In.Surfaces   = s->surface_ptrs;
+        s->opaque_alloc.In.NumSurface = s->nb_surface_ptrs;
+        s->opaque_alloc.In.Type       = hw_frames_hwctx->frame_type;
+
+        s->opaque_alloc.Out = s->opaque_alloc.In;
+
+        s->opaque_alloc.Header.BufferId = MFX_EXTBUFF_OPAQUE_SURFACE_ALLOCATION;
+        s->opaque_alloc.Header.BufferSz = sizeof(s->opaque_alloc);
+
+        s->ext_buffers[s->num_ext_buffers++] = (mfxExtBuffer *)&s->opaque_alloc;
+
+        par.IOPattern = MFX_IOPATTERN_IN_OPAQUE_MEMORY | MFX_IOPATTERN_OUT_OPAQUE_MEMORY;
+    }
+#endif
 
     par.ExtParam    = s->ext_buffers;
     par.NumExtParam = s->num_ext_buffers;

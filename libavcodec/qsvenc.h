@@ -26,8 +26,11 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
+#include "libavutil/common.h"
+#include "libavutil/hwcontext.h"
+#include "libavutil/hwcontext_qsv.h"
 #include "libavutil/avutil.h"
 #include "libavutil/fifo.h"
 
@@ -44,7 +47,7 @@
 #else
 #define QSV_HAVE_AVBR   0
 #define QSV_HAVE_VCM    0
-#define QSV_HAVE_MF     1
+#define QSV_HAVE_MF     !QSV_ONEVPL
 #endif
 
 #define QSV_COMMON_OPTS \
@@ -108,6 +111,19 @@
 { "max_qp_b", "Maximum video quantizer scale for B frame",       OFFSET(qsv.max_qp_b),       AV_OPT_TYPE_INT, { .i64 = -1 },  -1,          51, VE},                         \
 { "min_qp_b", "Minimum video quantizer scale for B frame",       OFFSET(qsv.min_qp_b),       AV_OPT_TYPE_INT, { .i64 = -1 },  -1,          51, VE},
 
+#define QSV_OPTION_SCENARIO \
+{ "scenario", "A hint to encoder about the scenario for the encoding session", OFFSET(qsv.scenario), AV_OPT_TYPE_INT, { .i64 = MFX_SCENARIO_UNKNOWN },          \
+  MFX_SCENARIO_UNKNOWN, MFX_SCENARIO_REMOTE_GAMING, VE, "scenario" }, \
+{ "unknown",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_UNKNOWN },            .flags = VE, "scenario" },                                      \
+{ "displayremoting",    NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_DISPLAY_REMOTING },   .flags = VE, "scenario" },                                      \
+{ "videoconference",    NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_VIDEO_CONFERENCE },   .flags = VE, "scenario" },                                      \
+{ "archive",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_ARCHIVE },            .flags = VE, "scenario" },                                      \
+{ "livestreaming",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_LIVE_STREAMING },     .flags = VE, "scenario" },                                      \
+{ "cameracapture",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_CAMERA_CAPTURE },     .flags = VE, "scenario" },                                      \
+{ "videosurveillance",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_VIDEO_SURVEILLANCE }, .flags = VE, "scenario" },                                      \
+{ "gamestreaming",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_GAME_STREAMING },     .flags = VE, "scenario" },                                      \
+{ "remotegaming",       NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_REMOTE_GAMING },      .flags = VE, "scenario" },
+
 extern const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[];
 
 typedef int SetEncodeCtrlCB (AVCodecContext *avctx,
@@ -137,9 +153,11 @@ typedef struct QSVEncContext {
     mfxExtHEVCTiles exthevctiles;
     mfxExtVP9Param  extvp9param;
 
+#if QSV_HAVE_OPAQUE
     mfxExtOpaqueSurfaceAlloc opaque_alloc;
     mfxFrameSurface1       **opaque_surfaces;
     AVBufferRef             *opaque_alloc_buf;
+#endif
 
     mfxExtVideoSignalInfo extvsi;
 
@@ -174,6 +192,7 @@ typedef struct QSVEncContext {
     int max_frame_size_p;
     int max_slice_size;
     int dblk_idc;
+    int scenario;
 
     int tile_cols;
     int tile_rows;

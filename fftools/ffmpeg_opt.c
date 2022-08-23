@@ -1065,6 +1065,8 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
             ist->top_field_first = -1;
             MATCH_PER_STREAM_OPT(top_field_first, i, ist->top_field_first, ic, st);
 
+            ist->framerate_guessed = av_guess_frame_rate(ic, st, NULL);
+
             break;
         case AVMEDIA_TYPE_AUDIO:
             ist->guess_layout_max = INT_MAX;
@@ -1090,7 +1092,11 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
             abort();
         }
 
-        ret = avcodec_parameters_from_context(par, ist->dec_ctx);
+        ist->par = avcodec_parameters_alloc();
+        if (!ist->par)
+            exit_program(1);
+
+        ret = avcodec_parameters_from_context(ist->par, ist->dec_ctx);
         if (ret < 0) {
             av_log(NULL, AV_LOG_ERROR, "Error initializing the decoder context.\n");
             exit_program(1);

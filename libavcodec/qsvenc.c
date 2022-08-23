@@ -25,7 +25,7 @@
 
 #include <string.h>
 #include <sys/types.h>
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
 #include "libavutil/common.h"
 #include "libavutil/hwcontext.h"
@@ -141,7 +141,9 @@ static const struct {
 #if QSV_HAVE_VCM
     { MFX_RATECONTROL_VCM,     "VCM" },
 #endif
+#if !QSV_ONEVPL
     { MFX_RATECONTROL_LA_EXT,  "LA_EXT" },
+#endif
     { MFX_RATECONTROL_LA_HRD,  "LA_HRD" },
     { MFX_RATECONTROL_QVBR,    "QVBR" },
 };
@@ -335,6 +337,7 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
         av_log(avctx, AV_LOG_VERBOSE, "LowDelayBRC: %s\n", print_threestate(co3->LowDelayBRC));
         av_log(avctx, AV_LOG_VERBOSE, "MaxFrameSizeI: %d; ", co3->MaxFrameSizeI);
         av_log(avctx, AV_LOG_VERBOSE, "MaxFrameSizeP: %d\n", co3->MaxFrameSizeP);
+        av_log(avctx, AV_LOG_VERBOSE, "ScenarioInfo: %"PRId16"\n", co3->ScenarioInfo);
     }
 
     if (exthevctiles) {
@@ -814,11 +817,6 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
 
             q->extco2.LookAheadDS = q->look_ahead_downsampling;
             q->extco2.RepeatPPS   = q->repeat_pps ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
-
-            if (q->adaptive_i >= 0)
-                q->extco2.AdaptiveI = q->adaptive_i ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
-            if (q->adaptive_b >= 0)
-                q->extco2.AdaptiveB = q->adaptive_b ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
         }
 
         if (avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_HEVC) {
@@ -838,6 +836,10 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
 
             if (q->b_strategy >= 0)
                 q->extco2.BRefType = q->b_strategy ? MFX_B_REF_PYRAMID : MFX_B_REF_OFF;
+            if (q->adaptive_i >= 0)
+                q->extco2.AdaptiveI = q->adaptive_i ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
+            if (q->adaptive_b >= 0)
+                q->extco2.AdaptiveB = q->adaptive_b ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
             if ((avctx->qmin >= 0 && avctx->qmax >= 0 && avctx->qmin > avctx->qmax) ||
                 (q->max_qp_i >= 0 && q->min_qp_i >= 0 && q->min_qp_i > q->max_qp_i) ||
                 (q->max_qp_p >= 0 && q->min_qp_p >= 0 && q->min_qp_p > q->max_qp_p) ||
@@ -922,6 +924,8 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
                 q->extco3.MaxFrameSizeI = q->max_frame_size_i;
             if (q->max_frame_size_p >= 0)
                 q->extco3.MaxFrameSizeP = q->max_frame_size_p;
+
+            q->extco3.ScenarioInfo = q->scenario;
         }
 
         if (avctx->codec_id == AV_CODEC_ID_HEVC) {
@@ -1174,6 +1178,7 @@ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
     return 0;
 }
 
+#if QSV_HAVE_OPAQUE
 static int qsv_init_opaque_alloc(AVCodecContext *avctx, QSVEncContext *q)
 {
     AVQSVContext *qsv = avctx->hwaccel_context;
@@ -1210,6 +1215,7 @@ static int qsv_init_opaque_alloc(AVCodecContext *avctx, QSVEncContext *q)
 
     return 0;
 }
+#endif
 
 static int qsvenc_init_session(AVCodecContext *avctx, QSVEncContext *q)
 {
@@ -1225,7 +1231,11 @@ static int qsvenc_init_session(AVCodecContext *avctx, QSVEncContext *q)
 
         ret = ff_qsv_init_session_frames(avctx, &q->internal_qs.session,
                                          &q->frames_ctx, q->load_plugins,
+#if QSV_HAVE_OPAQUE
                                          q->param.IOPattern == MFX_IOPATTERN_IN_OPAQUE_MEMORY,
+#else
+                                         0,
+#endif
                                          MFX_GPUCOPY_OFF);
         if (ret < 0) {
             av_buffer_unref(&q->frames_ctx.hw_frames_ctx);
@@ -1277,11 +1287,17 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
         AVQSVFramesContext *frames_hwctx = frames_ctx->hwctx;
 
         if (!iopattern) {
+#if QSV_HAVE_OPAQUE
             if (frames_hwctx->frame_type & MFX_MEMTYPE_OPAQUE_FRAME)
                 iopattern = MFX_IOPATTERN_IN_OPAQUE_MEMORY;
             else if (frames_hwctx->frame_type &
                      (MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET | MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET))
                 iopattern = MFX_IOPATTERN_IN_VIDEO_MEMORY;
+#else
+            if (frames_hwctx->frame_type &
+                (MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET | MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET))
+                iopattern = MFX_IOPATTERN_IN_VIDEO_MEMORY;
+#endif
         }
     }
 
@@ -1355,9 +1371,16 @@ int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q)
                                   "Error querying (IOSurf) the encoding parameters");
 
     if (opaque_alloc) {
+#if QSV_HAVE_OPAQUE
         ret = qsv_init_opaque_alloc(avctx, q);
         if (ret < 0)
             return ret;
+#else
+        av_log(avctx, AV_LOG_ERROR, "User is requesting to allocate OPAQUE surface, "
+               "however libmfx %d.%d doesn't support OPAQUE memory.\n",
+               q->ver.Major, q->ver.Minor);
+        return AVERROR_UNKNOWN;
+#endif
     }
 
     ret = MFXVideoENCODE_Init(q->session, &q->param);
@@ -1911,8 +1934,10 @@ int ff_qsv_enc_close(AVCodecContext *avctx, QSVEncContext *q)
         av_fifo_freep2(&q->async_fifo);
     }
 
+#if QSV_HAVE_OPAQUE
     av_freep(&q->opaque_surfaces);
     av_buffer_unref(&q->opaque_alloc_buf);
+#endif
 
     av_freep(&q->extparam);
 

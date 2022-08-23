@@ -21,12 +21,13 @@
 
 #include "config_components.h"
 
+#include "libavutil/half2float.h"
+
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "internal.h"
 #include "put_bits.h"
 #include "pnm.h"
-#include "half2float.h"
 
 static void samplecpy(uint8_t *dst, const uint8_t *src, int n, int maxval)
 {
@@ -312,18 +313,9 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
                 b = (float *)p->data[1];
                 for (int i = 0; i < avctx->height; i++) {
                     for (int j = 0; j < avctx->width; j++) {
-                        r[j] = av_int2float(half2float(AV_RL16(s->bytestream+0),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
-                        g[j] = av_int2float(half2float(AV_RL16(s->bytestream+2),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
-                        b[j] = av_int2float(half2float(AV_RL16(s->bytestream+4),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
+                        r[j] = av_int2float(half2float(AV_RL16(s->bytestream+0), &s->h2f_tables)) * scale;
+                        g[j] = av_int2float(half2float(AV_RL16(s->bytestream+2), &s->h2f_tables)) * scale;
+                        b[j] = av_int2float(half2float(AV_RL16(s->bytestream+4), &s->h2f_tables)) * scale;
                         s->bytestream += 6;
                     }
 
@@ -339,18 +331,9 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
                 b = (float *)p->data[1];
                 for (int i = 0; i < avctx->height; i++) {
                     for (int j = 0; j < avctx->width; j++) {
-                        r[j] = av_int2float(half2float(AV_RB16(s->bytestream+0),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
-                        g[j] = av_int2float(half2float(AV_RB16(s->bytestream+2),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
-                        b[j] = av_int2float(half2float(AV_RB16(s->bytestream+4),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
+                        r[j] = av_int2float(half2float(AV_RB16(s->bytestream+0), &s->h2f_tables)) * scale;
+                        g[j] = av_int2float(half2float(AV_RB16(s->bytestream+2), &s->h2f_tables)) * scale;
+                        b[j] = av_int2float(half2float(AV_RB16(s->bytestream+4), &s->h2f_tables)) * scale;
                         s->bytestream += 6;
                     }
 
@@ -393,10 +376,7 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
                 float *g = (float *)p->data[0];
                 for (int i = 0; i < avctx->height; i++) {
                     for (int j = 0; j < avctx->width; j++) {
-                        g[j] = av_int2float(half2float(AV_RL16(s->bytestream),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
+                        g[j] = av_int2float(half2float(AV_RL16(s->bytestream), &s->h2f_tables)) * scale;
                         s->bytestream += 2;
                     }
                     g += p->linesize[0] / 4;
@@ -405,10 +385,7 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
                 float *g = (float *)p->data[0];
                 for (int i = 0; i < avctx->height; i++) {
                     for (int j = 0; j < avctx->width; j++) {
-                        g[j] = av_int2float(half2float(AV_RB16(s->bytestream),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
+                        g[j] = av_int2float(half2float(AV_RB16(s->bytestream), &s->h2f_tables)) * scale;
                         s->bytestream += 2;
                     }
                     g += p->linesize[0] / 4;
@@ -500,7 +477,7 @@ static av_cold int phm_dec_init(AVCodecContext *avctx)
 {
     PNMContext *s = avctx->priv_data;
 
-    half2float_table(s->mantissatable, s->exponenttable, s->offsettable);
+    ff_init_half2float_tables(&s->h2f_tables);
 
     return 0;
 }

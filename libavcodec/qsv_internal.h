@@ -39,7 +39,7 @@
 #include "libavutil/hwcontext_vaapi.h"
 #endif
 
-#include <mfx/mfxvideo.h>
+#include <mfxvideo.h>
 
 #include "libavutil/frame.h"
 
@@ -64,6 +64,9 @@
 #define QSV_RUNTIME_VERSION_ATLEAST(MFX_VERSION, MAJOR, MINOR) \
     ((MFX_VERSION.Major > (MAJOR)) ||                           \
     (MFX_VERSION.Major == (MAJOR) && MFX_VERSION.Minor >= (MINOR)))
+
+#define QSV_ONEVPL       QSV_VERSION_ATLEAST(2, 0)
+#define QSV_HAVE_OPAQUE  !QSV_ONEVPL
 
 typedef struct QSVMid {
     AVBufferRef *hw_frames_ref;
@@ -100,6 +103,7 @@ typedef struct QSVSession {
     AVBufferRef *va_device_ref;
     AVHWDeviceContext *va_device_ctx;
 #endif
+    void *loader;
 } QSVSession;
 
 typedef struct QSVFramesContext {
