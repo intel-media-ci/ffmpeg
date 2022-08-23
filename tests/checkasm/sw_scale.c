@@ -187,7 +187,6 @@ static void check_yuv2yuvX(int accurate)
     uint8_t d_val = rnd();
     memset(dither, d_val, LARGEST_INPUT_SIZE);
     randomize_buffers((uint8_t*)src_pixels, LARGEST_FILTER * LARGEST_INPUT_SIZE * sizeof(int16_t));
-    randomize_buffers((uint8_t*)filter_coeff, LARGEST_FILTER * sizeof(int16_t));
     ctx = sws_alloc_context();
     if (accurate)
         ctx->flags |= SWS_ACCURATE_RND;
@@ -201,6 +200,21 @@ static void check_yuv2yuvX(int accurate)
             if (dstW <= osi)
                 continue;
             for (fsi = 0; fsi < FILTER_SIZES; ++fsi) {
+                // Generate filter coefficients for the given filter size,
+                // with some properties:
+                // - The coefficients add up to the intended sum (4096, 1<<12)
+                // - The coefficients contain negative values
+                // - The filter intermediates don't overflow for worst case
+                //   inputs (all positive coefficients are coupled with
+                //   input_max and all negative coefficients with input_min,
+                //   or vice versa).
+                // Produce a filter with all coefficients set to
+                // -((1<<12)/(filter_size-1)) except for one (randomly chosen)
+                // which is set to ((1<<13)-1).
+                for (i = 0; i < filter_sizes[fsi]; ++i)
+                    filter_coeff[i] = -((1 << 12) / (filter_sizes[fsi] - 1));
+                filter_coeff[rnd() % filter_sizes[fsi]] = (1 << 13) - 1;
+
                 src = av_malloc(sizeof(int16_t*) * filter_sizes[fsi]);
                 vFilterData = av_malloc((filter_sizes[fsi] + 2) * sizeof(union VFilterData));
                 memset(vFilterData, 0, (filter_sizes[fsi] + 2) * sizeof(union VFilterData));
@@ -278,8 +292,6 @@ static void check_hscale(void)
                       const uint8_t *src, const int16_t *filter,
                       const int32_t *filterPos, int filterSize);
 
-    int cpu_flags = av_get_cpu_flags();
-
     ctx = sws_alloc_context();
     if (sws_init_context(ctx, NULL, NULL) < 0)
         fail();
@@ -328,8 +340,7 @@ static void check_hscale(void)
                 ctx->dstW = ctx->chrDstW = input_sizes[dstWi];
                 ff_sws_init_scale(ctx);
                 memcpy(filterAvx2, filter, sizeof(uint16_t) * (SRC_PIXELS * MAX_FILTER_WIDTH + MAX_FILTER_WIDTH));
-                if ((cpu_flags & AV_CPU_FLAG_AVX2) && !(cpu_flags & AV_CPU_FLAG_SLOW_GATHER))
-                    ff_shuffle_filter_coefficients(ctx, filterPosAvx, width, filterAvx2, SRC_PIXELS);
+                ff_shuffle_filter_coefficients(ctx, filterPosAvx, width, filterAvx2, ctx->dstW);
 
                 if (check_func(ctx->hcScale, "hscale_%d_to_%d__fs_%d_dstW_%d", ctx->srcBpc, ctx->dstBpc + 1, width, ctx->dstW)) {
                     memset(dst0, 0, SRC_PIXELS * sizeof(dst0[0]));

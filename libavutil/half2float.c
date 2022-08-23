@@ -16,11 +16,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_HALF2FLOAT_H
-#define AVCODEC_HALF2FLOAT_H
+#include "libavutil/half2float.h"
 
-#include <stdint.h>
-
+#if !HAVE_FAST_FLOAT16
 static uint32_t convertmantissa(uint32_t i)
 {
     int32_t m = i << 13; // Zero pad mantissa bits
@@ -36,39 +34,34 @@ static uint32_t convertmantissa(uint32_t i)
 
     return m | e; // Return combined number
 }
+#endif
 
-static void half2float_table(uint32_t *mantissatable, uint32_t *exponenttable,
-                             uint16_t *offsettable)
+void ff_init_half2float_tables(Half2FloatTables *t)
 {
-    mantissatable[0] = 0;
+#if !HAVE_FAST_FLOAT16
+    t->mantissatable[0] = 0;
     for (int i = 1; i < 1024; i++)
-        mantissatable[i] = convertmantissa(i);
+        t->mantissatable[i] = convertmantissa(i);
     for (int i = 1024; i < 2048; i++)
-        mantissatable[i] = 0x38000000UL + ((i - 1024) << 13UL);
+        t->mantissatable[i] = 0x38000000UL + ((i - 1024) << 13UL);
+    for (int i = 2048; i < 3072; i++)
+        t->mantissatable[i] = t->mantissatable[i - 1024] | 0x400000UL;
+    t->mantissatable[2048] = t->mantissatable[1024];
 
-    exponenttable[0] = 0;
+    t->exponenttable[0] = 0;
     for (int i = 1; i < 31; i++)
-        exponenttable[i] = i << 23;
+        t->exponenttable[i] = i << 23;
     for (int i = 33; i < 63; i++)
-        exponenttable[i] = 0x80000000UL + ((i - 32) << 23UL);
-    exponenttable[31]= 0x47800000UL;
-    exponenttable[32]= 0x80000000UL;
-    exponenttable[63]= 0xC7800000UL;
+        t->exponenttable[i] = 0x80000000UL + ((i - 32) << 23UL);
+    t->exponenttable[31]= 0x47800000UL;
+    t->exponenttable[32]= 0x80000000UL;
+    t->exponenttable[63]= 0xC7800000UL;
 
-    offsettable[0] = 0;
+    t->offsettable[0] = 0;
     for (int i = 1; i < 64; i++)
-        offsettable[i] = 1024;
-    offsettable[32] = 0;
+        t->offsettable[i] = 1024;
+    t->offsettable[31] = 2048;
+    t->offsettable[32] = 0;
+    t->offsettable[63] = 2048;
+#endif
 }
-
-static uint32_t half2float(uint16_t h, const uint32_t *mantissatable, const uint32_t *exponenttable,
-                           const uint16_t *offsettable)
-{
-    uint32_t f;
-
-    f = mantissatable[offsettable[h >> 10] + (h & 0x3ff)] + exponenttable[h >> 10];
-
-    return f;
-}
-
-#endif /* AVCODEC_HALF2FLOAT_H */
