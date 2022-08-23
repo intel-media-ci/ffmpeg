@@ -1,7 +1,4 @@
 /*
- * PNM image format
- * Copyright (c) 2002, 2003 Fabrice Bellard
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -19,25 +16,41 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_PNM_H
-#define AVCODEC_PNM_H
+#ifndef AVUTIL_FLOAT2HALF_H
+#define AVUTIL_FLOAT2HALF_H
 
-#include "libavutil/half2float.h"
-#include "avcodec.h"
+#include <stdint.h>
+#include "intfloat.h"
 
-typedef struct PNMContext {
-    const uint8_t *bytestream;
-    const uint8_t *bytestream_start;
-    const uint8_t *bytestream_end;
-    int maxval;                 ///< maximum value of a pixel
-    int type;
-    int endian;
-    int half;
-    float scale;
+#include "config.h"
 
-    Half2FloatTables h2f_tables;
-} PNMContext;
+typedef struct Float2HalfTables {
+#if HAVE_FAST_FLOAT16
+    uint8_t dummy;
+#else
+    uint16_t basetable[512];
+    uint8_t shifttable[512];
+#endif
+} Float2HalfTables;
 
-int ff_pnm_decode_header(AVCodecContext *avctx, PNMContext * const s);
+void ff_init_float2half_tables(Float2HalfTables *t);
 
-#endif /* AVCODEC_PNM_H */
+static inline uint16_t float2half(uint32_t f, const Float2HalfTables *t)
+{
+#if HAVE_FAST_FLOAT16
+    union {
+        _Float16 f;
+        uint16_t i;
+    } u;
+    u.f = av_int2float(f);
+    return u.i;
+#else
+    uint16_t h;
+
+    h = t->basetable[(f >> 23) & 0x1ff] + ((f & 0x007fffff) >> t->shifttable[(f >> 23) & 0x1ff]);
+
+    return h;
+#endif
+}
+
+#endif /* AVUTIL_FLOAT2HALF_H */
