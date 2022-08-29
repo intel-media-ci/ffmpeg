@@ -348,6 +348,12 @@ typedef struct InputStream {
     int64_t       pts;       ///< current pts of the decoded frame  (in AV_TIME_BASE units)
     int           wrap_correction_done;
 
+    // the value of AVCodecParserContext.repeat_pict from the AVStream parser
+    // for the last packet returned from ifile_get_packet()
+    // -1 if unknown
+    // FIXME: this is a hack, the avstream parser should not be used
+    int last_pkt_repeat_pict;
+
     int64_t filter_in_rescale_delta_last;
 
     int64_t min_pts; /* pts with the smallest value in a current stream */
@@ -509,7 +515,6 @@ typedef struct OutputStream {
     AVBSFContext            *bsf_ctx;
 
     AVCodecContext *enc_ctx;
-    const AVCodec *enc;
     int64_t max_frames;
     AVFrame *filtered_frame;
     AVFrame *last_frame;
@@ -523,7 +528,6 @@ typedef struct OutputStream {
     AVRational max_frame_rate;
     enum VideoSyncMethod vsync_method;
     int is_cfr;
-    const char *fps_mode;
     int force_fps;
     int top_field_first;
     int rotate_overridden;
@@ -581,8 +585,10 @@ typedef struct OutputStream {
     int keep_pix_fmt;
 
     /* stats */
-    // combined size of all the packets written
-    uint64_t data_size;
+    // combined size of all the packets sent to the muxer
+    uint64_t data_size_mux;
+    // combined size of all the packets received from the encoder
+    uint64_t data_size_enc;
     // number of packets send to the muxer
     atomic_uint_least64_t packets_written;
     // number of frames/samples sent to the encoder
@@ -650,7 +656,6 @@ extern float audio_drift_threshold;
 extern float dts_delta_threshold;
 extern float dts_error_threshold;
 
-extern int audio_volume;
 extern int audio_sync_method;
 extern enum VideoSyncMethod video_sync_method;
 extern float frame_drop_threshold;
