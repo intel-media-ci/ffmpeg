@@ -295,7 +295,7 @@ static const FFCodecDefault qsv_enc_defaults[] = {
     { "qmin",      "-1"    },
     { "qmax",      "-1"    },
     { "trellis",   "-1"    },
-    { "flags",     "+cgop" },
+    { "flags",     "-cgop" },
     { NULL },
 };
 
