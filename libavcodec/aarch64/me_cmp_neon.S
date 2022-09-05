@@ -72,6 +72,53 @@ function ff_pix_abs16_neon, export=1
         ret
 endfunc
 
+function ff_pix_abs8_neon, export=1
+        // x0           unused
+        // x1           uint8_t *pix1
+        // x2           uint8_t *pix2
+        // x3           ptrdiff_t stride
+        // w4           int h
+
+        movi            v30.8h, #0
+        cmp             w4, #4
+        b.lt            2f
+
+// make 4 iterations at once
+1:
+        ld1             {v0.8b}, [x1], x3               // Load pix1 for first iteration
+        ld1             {v1.8b}, [x2], x3               // Load pix2 for first iteration
+        ld1             {v2.8b}, [x1], x3               // Load pix1 for second iteration
+        uabal           v30.8h, v0.8b, v1.8b            // Absolute difference, first iteration
+        ld1             {v3.8b}, [x2], x3               // Load pix2 for second iteration
+        ld1             {v4.8b}, [x1], x3               // Load pix1 for third iteration
+        uabal           v30.8h, v2.8b, v3.8b            // Absolute difference, second iteration
+        ld1             {v5.8b}, [x2], x3               // Load pix2 for third iteration
+        sub             w4, w4, #4                      // h -= 4
+        ld1             {v6.8b}, [x1], x3               // Load pix1 for foruth iteration
+        ld1             {v7.8b}, [x2], x3               // Load pix2 for fourth iteration
+        uabal           v30.8h, v4.8b, v5.8b            // Absolute difference, third iteration
+        cmp             w4, #4
+        uabal           v30.8h, v6.8b, v7.8b            // Absolute difference, foruth iteration
+        b.ge            1b
+
+        cbz             w4, 3f
+
+// iterate by one
+2:
+        ld1             {v0.8b}, [x1], x3               // Load pix1
+        ld1             {v1.8b}, [x2], x3               // Load pix2
+
+        subs            w4, w4, #1
+        uabal           v30.8h, v0.8b, v1.8b
+        b.ne            2b
+
+3:
+        uaddlv          s20, v30.8h                     // Add up vector
+        fmov            w0, s20
+
+        ret
+endfunc
+
 function ff_pix_abs16_xy2_neon, export=1
         // x0           unused
         // x1           uint8_t *pix1
@@ -267,6 +314,273 @@ function ff_pix_abs16_x2_neon, export=1
         add             v16.8h, v16.8h, v17.8h
         uaddlv          s16, v16.8h
         fmov            w0, s16
+
+        ret
+endfunc
+
+function ff_pix_abs16_y2_neon, export=1
+        // x0           unused
+        // x1           uint8_t *pix1
+        // x2           uint8_t *pix2
+        // x3           ptrdiff_t stride
+        // w4           int h
+
+        // initialize buffers
+        movi            v29.8h, #0                      // clear the accumulator
+        movi            v28.8h, #0                      // clear the accumulator
+        add             x5, x2, x3                      // pix2 + stride
+        cmp             w4, #4
+        b.lt            2f
+
+// make 4 iterations at once
+1:
+
+        // abs(pix1[0], avg2(pix2[0], pix2[0 + stride]))
+        // avg2(a, b) = (((a) + (b) + 1) >> 1)
+        // abs(x) = (x < 0 ? (-x) : (x))
+
+        ld1             {v1.16b}, [x2], x3              // Load pix2 for first iteration
+        ld1             {v2.16b}, [x5], x3              // Load pix3 for first iteration
+        ld1             {v0.16b}, [x1], x3              // Load pix1 for first iteration
+        urhadd          v30.16b, v1.16b, v2.16b         // Rounding halving add, first iteration
+        ld1             {v4.16b}, [x2], x3              // Load pix2 for second iteration
+        ld1             {v5.16b}, [x5], x3              // Load pix3 for second iteartion
+        uabal           v29.8h, v0.8b, v30.8b           // Absolute difference of lower half, first iteration
+        uabal2          v28.8h, v0.16b, v30.16b         // Absolute difference of upper half, first iteration
+        ld1             {v3.16b}, [x1], x3              // Load pix1 for second iteration
+        urhadd          v27.16b, v4.16b, v5.16b         // Rounding halving add, second iteration
+        ld1             {v7.16b}, [x2], x3              // Load pix2 for third iteration
+        ld1             {v20.16b}, [x5], x3             // Load pix3 for third iteration
+        uabal           v29.8h, v3.8b, v27.8b           // Absolute difference of lower half for second iteration
+        uabal2          v28.8h, v3.16b, v27.16b         // Absolute difference of upper half for second iteration
+        ld1             {v6.16b}, [x1], x3              // Load pix1 for third iteration
+        urhadd          v26.16b, v7.16b, v20.16b        // Rounding halving add, third iteration
+        ld1             {v22.16b}, [x2], x3             // Load pix2 for fourth iteration
+        ld1             {v23.16b}, [x5], x3             // Load pix3 for fourth iteration
+        uabal           v29.8h, v6.8b, v26.8b           // Absolute difference of lower half for third iteration
+        uabal2          v28.8h, v6.16b, v26.16b         // Absolute difference of upper half for third iteration
+        ld1             {v21.16b}, [x1], x3             // Load pix1 for fourth iteration
+        sub             w4, w4, #4                      // h-= 4
+        urhadd          v25.16b, v22.16b, v23.16b       // Rounding halving add
+        cmp             w4, #4
+        uabal           v29.8h, v21.8b, v25.8b          // Absolute difference of lower half for fourth iteration
+        uabal2          v28.8h, v21.16b, v25.16b        // Absolute difference of upper half for fourth iteration
+
+        b.ge            1b
+        cbz             w4, 3f
+
+// iterate by one
+2:
+
+        ld1             {v1.16b}, [x2], x3              // Load pix2
+        ld1             {v2.16b}, [x5], x3              // Load pix3
+        subs            w4, w4, #1
+        ld1             {v0.16b}, [x1], x3              // Load pix1
+        urhadd          v30.16b, v1.16b, v2.16b         // Rounding halving add
+        uabal           v29.8h, v30.8b, v0.8b
+        uabal2          v28.8h, v30.16b, v0.16b
+
+        b.ne            2b
+
+3:
+        add             v29.8h, v29.8h, v28.8h          // Add vectors together
+        uaddlv          s16, v29.8h                     // Add up vector values
+
+        fmov            w0, s16
+
+        ret
+endfunc
+
+function sse16_neon, export=1
+        // x0 - unused
+        // x1 - pix1
+        // x2 - pix2
+        // x3 - stride
+        // w4 - h
+
+        cmp             w4, #4
+        movi            v17.4s, #0
+        b.lt            2f
+
+// Make 4 iterations at once
+1:
+
+        // res = abs(pix1[0] - pix2[0])
+        // res * res
+
+        ld1             {v0.16b}, [x1], x3              // Load pix1 vector for first iteration
+        ld1             {v1.16b}, [x2], x3              // Load pix2 vector for first iteration
+        ld1             {v2.16b}, [x1], x3              // Load pix1 vector for second iteration
+        uabd            v30.16b, v0.16b, v1.16b         // Absolute difference, first iteration
+        ld1             {v3.16b}, [x2], x3              // Load pix2 vector for second iteration
+        umull           v29.8h, v30.8b, v30.8b          // Multiply lower half of vectors, first iteration
+        umull2          v28.8h, v30.16b, v30.16b        // Multiply upper half of vectors, first iteration
+        uabd            v27.16b, v2.16b, v3.16b         // Absolute difference, second iteration
+        uadalp          v17.4s, v29.8h                  // Pairwise add, first iteration
+        ld1             {v4.16b}, [x1], x3              // Load pix1 for third iteration
+        umull           v26.8h, v27.8b, v27.8b          // Mulitply lower half, second iteration
+        umull2          v25.8h, v27.16b, v27.16b        // Multiply upper half, second iteration
+        ld1             {v5.16b}, [x2], x3              // Load pix2 for third iteration
+        uadalp          v17.4s, v26.8h                  // Pairwise add and accumulate, second iteration
+        uabd            v24.16b, v4.16b, v5.16b         // Absolute difference, third iteration
+        ld1             {v6.16b}, [x1], x3              // Load pix1 for fourth iteration
+        uadalp          v17.4s, v25.8h                  // Pairwise add and accumulate, second iteration
+        umull           v23.8h, v24.8b, v24.8b          // Multiply lower half, third iteration
+        umull2          v22.8h, v24.16b, v24.16b        // Multiply upper half, third iteration
+        uadalp          v17.4s, v23.8h                  // Pairwise add and accumulate, third iteration
+        ld1             {v7.16b}, [x2], x3              // Load pix2 for fouth iteration
+        uadalp          v17.4s, v22.8h                  // Pairwise add and accumulate, third iteration
+        uabd            v21.16b, v6.16b, v7.16b         // Absolute difference, fourth iteration
+        uadalp          v17.4s, v28.8h                  // Pairwise add and accumulate, first iteration
+        umull           v20.8h, v21.8b, v21.8b          // Multiply lower half, fourth iteration
+        sub             w4, w4, #4                      // h -= 4
+        umull2          v19.8h, v21.16b, v21.16b        // Multiply upper half, fourth iteration
+        uadalp          v17.4s, v20.8h                  // Pairwise add and accumulate, fourth iteration
+        cmp             w4, #4
+        uadalp          v17.4s, v19.8h                  // Pairwise add and accumulate, fourth iteration
+        b.ge            1b
+
+        cbz             w4, 3f
+
+// iterate by one
+2:
+
+        ld1             {v0.16b}, [x1], x3              // Load pix1
+        ld1             {v1.16b}, [x2], x3              // Load pix2
+
+        uabd            v30.16b, v0.16b, v1.16b
+        umull           v29.8h, v30.8b, v30.8b
+        umull2          v28.8h, v30.16b, v30.16b
+        uadalp          v17.4s, v29.8h
+        subs            w4, w4, #1
+        uadalp          v17.4s, v28.8h
+
+        b.ne            2b
+
+3:
+        uaddlv          d16, v17.4s                     // add up accumulator vector
+
+        fmov            w0, s16
+
+        ret
+endfunc
+
+function sse8_neon, export=1
+        // x0 - unused
+        // x1 - pix1
+        // x2 - pix2
+        // x3 - stride
+        // w4 - h
+
+        movi            v21.4s, #0
+        movi            v20.4s, #0
+        cmp             w4, #4
+        b.le            2f
+
+// make 4 iterations at once
+1:
+
+        // res = abs(pix1[0] - pix2[0])
+        // res * res
+
+        ld1             {v0.8b}, [x1], x3               // Load pix1 for first iteration
+        ld1             {v1.8b}, [x2], x3               // Load pix2 for second iteration
+        ld1             {v2.8b}, [x1], x3               // Load pix1 for second iteration
+        ld1             {v3.8b}, [x2], x3               // Load pix2 for second iteration
+        uabdl           v30.8h, v0.8b, v1.8b            // Absolute difference, first iteration
+        ld1             {v4.8b}, [x1], x3               // Load pix1 for third iteration
+        ld1             {v5.8b}, [x2], x3               // Load pix2 for third iteration
+        uabdl           v29.8h, v2.8b, v3.8b            // Absolute difference, second iteration
+        umlal           v21.4s, v30.4h, v30.4h          // Multiply lower half, first iteration
+        ld1             {v6.8b}, [x1], x3               // Load pix1 for fourth iteration
+        ld1             {v7.8b}, [x2], x3               // Load pix2 for fourth iteration
+        uabdl           v28.8h, v4.8b, v5.8b            // Absolute difference, third iteration
+        umlal           v21.4s, v29.4h, v29.4h          // Multiply lower half, second iteration
+        umlal2          v20.4s, v30.8h, v30.8h          // Multiply upper half, first iteration
+        uabdl           v27.8h, v6.8b, v7.8b            // Absolute difference, fourth iteration
+        umlal           v21.4s, v28.4h, v28.4h          // Multiply lower half, third iteration
+        umlal2          v20.4s, v29.8h, v29.8h          // Multiply upper half, second iteration
+        sub             w4, w4, #4                      // h -= 4
+        umlal2          v20.4s, v28.8h, v28.8h          // Multiply upper half, third iteration
+        umlal           v21.4s, v27.4h, v27.4h          // Multiply lower half, fourth iteration
+        cmp             w4, #4
+        umlal2          v20.4s, v27.8h, v27.8h          // Multiply upper half, fourth iteration
+        b.ge            1b
+
+        cbz             w4, 3f
+
+// iterate by one
+2:
+        ld1             {v0.8b}, [x1], x3               // Load pix1
+        ld1             {v1.8b}, [x2], x3               // Load pix2
+        subs            w4, w4, #1
+        uabdl           v30.8h, v0.8b, v1.8b
+        umlal           v21.4s, v30.4h, v30.4h
+        umlal2          v20.4s, v30.8h, v30.8h
+
+        b.ne            2b
+
+3:
+        add             v21.4s, v21.4s, v20.4s          // Add accumulator vectors together
+        uaddlv          d17, v21.4s                     // Add up vector
+
+        fmov            w0, s17
+        ret
+
+endfunc
+
+function sse4_neon, export=1
+        // x0 - unused
+        // x1 - pix1
+        // x2 - pix2
+        // x3 - stride
+        // w4 - h
+
+        movi            v16.4s, #0                      // clear the result accumulator
+        cmp             w4, #4
+        b.le            2f
+
+// make 4 iterations at once
+1:
+
+        // res = abs(pix1[0] - pix2[0])
+        // res * res
+
+        ld1             {v0.s}[0], [x1], x3             // Load pix1, first iteration
+        ld1             {v1.s}[0], [x2], x3             // Load pix2, first iteration
+        ld1             {v2.s}[0], [x1], x3             // Load pix1, second iteration
+        ld1             {v3.s}[0], [x2], x3             // Load pix2, second iteration
+        uabdl           v30.8h, v0.8b, v1.8b            // Absolute difference, first iteration
+        ld1             {v4.s}[0], [x1], x3             // Load pix1, third iteration
+        ld1             {v5.s}[0], [x2], x3             // Load pix2, third iteration
+        uabdl           v29.8h, v2.8b, v3.8b            // Absolute difference, second iteration
+        umlal           v16.4s, v30.4h, v30.4h          // Multiply vectors, first iteration
+        ld1             {v6.s}[0], [x1], x3             // Load pix1, fourth iteration
+        ld1             {v7.s}[0], [x2], x3             // Load pix2, fourth iteration
+        uabdl           v28.8h, v4.8b, v5.8b            // Absolute difference, third iteration
+        umlal           v16.4s, v29.4h, v29.4h          // Multiply and accumulate, second iteration
+        sub             w4, w4, #4
+        uabdl           v27.8h, v6.8b, v7.8b            // Absolue difference, fourth iteration
+        umlal           v16.4s, v28.4h, v28.4h          // Multiply and accumulate, third iteration
+        cmp             w4, #4
+        umlal           v16.4s, v27.4h, v27.4h          // Multiply and accumulate, fourth iteration
+        b.ge            1b
+
+        cbz             w4, 3f
+
+// iterate by one
+2:
+        ld1             {v0.s}[0], [x1], x3               // Load pix1
+        ld1             {v1.s}[0], [x2], x3               // Load pix2
+        uabdl           v30.8h, v0.8b, v1.8b
+        subs            w4, w4, #1
+        umlal           v16.4s, v30.4h, v30.4h
+
+        b.ne            2b
+
+3:
+        uaddlv          d17, v16.4s                     // Add vector
+        fmov            w0, s17
 
         ret
 endfunc

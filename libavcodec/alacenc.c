@@ -651,15 +651,15 @@ static const AVClass alacenc_class = {
 FF_DISABLE_DEPRECATION_WARNINGS
 const FFCodec ff_alac_encoder = {
     .p.name         = "alac",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("ALAC (Apple Lossless Audio Codec)"),
+    CODEC_LONG_NAME("ALAC (Apple Lossless Audio Codec)"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ALAC,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME,
     .priv_data_size = sizeof(AlacEncodeContext),
     .p.priv_class   = &alacenc_class,
     .init           = alac_encode_init,
     FF_CODEC_ENCODE_CB(alac_encode_frame),
     .close          = alac_encode_close,
-    .p.capabilities = AV_CODEC_CAP_SMALL_LAST_FRAME,
 #if FF_API_OLD_CHANNEL_LAYOUT
     .p.channel_layouts = alac_channel_layouts,
 #endif

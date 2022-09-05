@@ -20,8 +20,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define BITSTREAM_READER_LE
@@ -32,9 +30,9 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "copy_block.h"
+#include "decode.h"
 #include "get_bits.h"
 #include "idctdsp.h"
-#include "internal.h"
 
 static const uint8_t unscaled_luma[64] = {
     16, 11, 10, 16, 24, 40, 51, 61, 12, 12, 14, 19,
@@ -1287,7 +1285,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 
 const FFCodec ff_agm_decoder = {
     .p.name           = "agm",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("Amuse Graphics Movie"),
+    CODEC_LONG_NAME("Amuse Graphics Movie"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_AGM,
     .p.capabilities   = AV_CODEC_CAP_DR1,

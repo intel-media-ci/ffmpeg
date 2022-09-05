@@ -27,7 +27,6 @@
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "encode.h"
-#include "internal.h"
 #include "wma.h"
 #include "libavutil/avassert.h"
 
@@ -435,9 +434,10 @@ static int encode_superframe(AVCodecContext *avctx, AVPacket *avpkt,
 #if CONFIG_WMAV1_ENCODER
 const FFCodec ff_wmav1_encoder = {
     .p.name         = "wmav1",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Windows Media Audio 1"),
+    CODEC_LONG_NAME("Windows Media Audio 1"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_WMAV1,
+    .p.capabilities = AV_CODEC_CAP_DR1,
     .priv_data_size = sizeof(WMACodecContext),
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_superframe),
@@ -450,9 +450,10 @@ const FFCodec ff_wmav1_encoder = {
 #if CONFIG_WMAV2_ENCODER
 const FFCodec ff_wmav2_encoder = {
     .p.name         = "wmav2",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Windows Media Audio 2"),
+    CODEC_LONG_NAME("Windows Media Audio 2"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_WMAV2,
+    .p.capabilities = AV_CODEC_CAP_DR1,
     .priv_data_size = sizeof(WMACodecContext),
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_superframe),

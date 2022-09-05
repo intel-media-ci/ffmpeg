@@ -21,16 +21,14 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 #include "zlib_wrapper.h"
 
 #include <zlib.h>
@@ -799,7 +797,7 @@ static const AVClass rasc_decoder_class = {
 
 const FFCodec ff_rasc_decoder = {
     .p.name           = "rasc",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("RemotelyAnywhere Screen Capture"),
+    CODEC_LONG_NAME("RemotelyAnywhere Screen Capture"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_RASC,
     .priv_data_size   = sizeof(RASCContext),

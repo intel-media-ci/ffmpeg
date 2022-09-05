@@ -29,7 +29,6 @@
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "encode.h"
-#include "internal.h"
 
 #define MAX_PACKET_SIZE  (1 + (477 + 7) / 8)
 
@@ -142,10 +141,10 @@ static int amr_wb_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
 const FFCodec ff_libvo_amrwbenc_encoder = {
     .p.name         = "libvo_amrwbenc",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Android VisualOn AMR-WB "
-                                           "(Adaptive Multi-Rate Wide-Band)"),
+    CODEC_LONG_NAME("Android VisualOn AMR-WB (Adaptive Multi-Rate Wide-Band)"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_AMR_WB,
+    .p.capabilities = AV_CODEC_CAP_DR1,
     .p.priv_class   = &amrwb_class,
     .p.wrapper_name = "libvo_amrwbenc",
     .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE,

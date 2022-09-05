@@ -228,9 +228,9 @@ static av_cold int vaapi_encode_vp9_configure(AVCodecContext *avctx)
 
 static const VAAPIEncodeProfile vaapi_encode_vp9_profiles[] = {
     { FF_PROFILE_VP9_0,  8, 3, 1, 1, VAProfileVP9Profile0 },
-    // Four channels because this uses the AYUV format which has Alpha
-    { FF_PROFILE_VP9_1,  8, 4, 0, 0, VAProfileVP9Profile1 },
+    { FF_PROFILE_VP9_1,  8, 3, 0, 0, VAProfileVP9Profile1 },
     { FF_PROFILE_VP9_2, 10, 3, 1, 1, VAProfileVP9Profile2 },
+    { FF_PROFILE_VP9_3, 10, 3, 0, 0, VAProfileVP9Profile3 },
     { FF_PROFILE_UNKNOWN }
 };
 
@@ -299,7 +299,7 @@ static const AVClass vaapi_encode_vp9_class = {
 
 const FFCodec ff_vp9_vaapi_encoder = {
     .p.name         = "vp9_vaapi",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("VP9 (VAAPI)"),
+    CODEC_LONG_NAME("VP9 (VAAPI)"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_VP9,
     .priv_data_size = sizeof(VAAPIEncodeVP9Context),

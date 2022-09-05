@@ -21,13 +21,12 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 #define BLOCK_HEIGHT 112u
 #define BLOCK_WIDTH  84u
@@ -628,7 +627,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 
 const FFCodec ff_fmvc_decoder = {
     .p.name           = "fmvc",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("FM Screen Capture Codec"),
+    CODEC_LONG_NAME("FM Screen Capture Codec"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_FMVC,
     .priv_data_size   = sizeof(FMVCContext),

@@ -20,18 +20,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "libavutil/intreadwrite.h"
 
 #include "avcodec.h"
-#include "bytestream.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
-#include "internal.h"
 #include "lossless_videodsp.h"
 #include "zlib_wrapper.h"
 
@@ -300,7 +295,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 
 const FFCodec ff_mvha_decoder = {
     .p.name           = "mvha",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("MidiVid Archive Codec"),
+    CODEC_LONG_NAME("MidiVid Archive Codec"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_MVHA,
     .priv_data_size   = sizeof(MVHAContext),

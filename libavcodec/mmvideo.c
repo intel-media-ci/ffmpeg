@@ -35,7 +35,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 #define MM_PREAMBLE_SIZE    6
 
@@ -240,7 +240,7 @@ static av_cold int mm_decode_end(AVCodecContext *avctx)
 
 const FFCodec ff_mmvideo_decoder = {
     .p.name         = "mmvideo",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("American Laser Games MM Video"),
+    CODEC_LONG_NAME("American Laser Games MM Video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_MMVIDEO,
     .priv_data_size = sizeof(MmContext),

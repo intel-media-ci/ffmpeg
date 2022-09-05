@@ -26,8 +26,8 @@
 #include "libavutil/opt.h"
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "encode.h"
-#include "internal.h"
 
 #ifndef LIBILBC_VERSION_MAJOR
 #define LIBILBC_VERSION_MAJOR 2
@@ -119,7 +119,7 @@ static int ilbc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
 const FFCodec ff_libilbc_decoder = {
     .p.name         = "libilbc",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("iLBC (Internet Low Bitrate Codec)"),
+    CODEC_LONG_NAME("iLBC (Internet Low Bitrate Codec)"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ILBC,
     .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE,
@@ -202,9 +202,10 @@ static const FFCodecDefault ilbc_encode_defaults[] = {
 
 const FFCodec ff_libilbc_encoder = {
     .p.name         = "libilbc",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("iLBC (Internet Low Bitrate Codec)"),
+    CODEC_LONG_NAME("iLBC (Internet Low Bitrate Codec)"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ILBC,
+    .p.capabilities = AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE,
     .priv_data_size = sizeof(ILBCEncContext),
     .init           = ilbc_encode_init,

@@ -114,6 +114,7 @@ static const AVOption options[] = {
     QSV_OPTION_DBLK_IDC
     QSV_OPTION_LOW_DELAY_BRC
     QSV_OPTION_MAX_MIN_QP
+    QSV_OPTION_SCENARIO
 
     { "cavlc",          "Enable CAVLC",                           OFFSET(qsv.cavlc),          AV_OPT_TYPE_BOOL, { .i64 = 0 },   0,          1, VE },
 #if QSV_HAVE_VCM
@@ -185,7 +186,7 @@ static const FFCodecDefault qsv_enc_defaults[] = {
 
 const FFCodec ff_h264_qsv_encoder = {
     .p.name         = "h264_qsv",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (Intel Quick Sync Video acceleration)"),
+    CODEC_LONG_NAME("H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (Intel Quick Sync Video acceleration)"),
     .priv_data_size = sizeof(QSVH264EncContext),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_H264,

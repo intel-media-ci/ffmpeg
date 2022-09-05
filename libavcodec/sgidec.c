@@ -19,11 +19,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/imgutils.h"
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 #include "sgi.h"
 
 typedef struct SgiState {
@@ -288,7 +287,7 @@ static av_cold int sgi_decode_init(AVCodecContext *avctx)
 
 const FFCodec ff_sgi_decoder = {
     .p.name         = "sgi",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("SGI image"),
+    CODEC_LONG_NAME("SGI image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_SGI,
     .priv_data_size = sizeof(SgiState),

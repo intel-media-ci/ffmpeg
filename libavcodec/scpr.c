@@ -20,14 +20,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 #include "scpr.h"
 #include "scpr3.h"
 
@@ -669,7 +667,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 
 const FFCodec ff_scpr_decoder = {
     .p.name           = "scpr",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("ScreenPressor"),
+    CODEC_LONG_NAME("ScreenPressor"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_SCPR,
     .priv_data_size   = sizeof(SCPRContext),

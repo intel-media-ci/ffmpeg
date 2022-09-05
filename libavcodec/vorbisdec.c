@@ -35,9 +35,9 @@
 #define BITSTREAM_READER_LE
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "fft.h"
 #include "get_bits.h"
-#include "internal.h"
 #include "vorbis.h"
 #include "vorbisdsp.h"
 #include "xiph.h"
@@ -1886,7 +1886,7 @@ static av_cold void vorbis_decode_flush(AVCodecContext *avctx)
 
 const FFCodec ff_vorbis_decoder = {
     .p.name          = "vorbis",
-    .p.long_name     = NULL_IF_CONFIG_SMALL("Vorbis"),
+    CODEC_LONG_NAME("Vorbis"),
     .p.type          = AVMEDIA_TYPE_AUDIO,
     .p.id            = AV_CODEC_ID_VORBIS,
     .priv_data_size  = sizeof(vorbis_context),

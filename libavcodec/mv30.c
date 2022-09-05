@@ -20,8 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "libavutil/thread.h"
@@ -30,10 +29,10 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "copy_block.h"
+#include "decode.h"
 #include "mathops.h"
 #include "blockdsp.h"
 #include "get_bits.h"
-#include "internal.h"
 #include "aandcttab.h"
 
 #define CBP_VLC_BITS  9
@@ -704,7 +703,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 
 const FFCodec ff_mv30_decoder = {
     .p.name           = "mv30",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("MidiVid 3.0"),
+    CODEC_LONG_NAME("MidiVid 3.0"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_MV30,
     .priv_data_size   = sizeof(MV30Context),

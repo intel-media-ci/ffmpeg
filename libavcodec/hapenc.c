@@ -348,12 +348,12 @@ static const AVClass hapenc_class = {
 
 const FFCodec ff_hap_encoder = {
     .p.name         = "hap",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Vidvox Hap"),
+    CODEC_LONG_NAME("Vidvox Hap"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_HAP,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SLICE_THREADS,
     .priv_data_size = sizeof(HapContext),
     .p.priv_class   = &hapenc_class,
-    .p.capabilities = AV_CODEC_CAP_SLICE_THREADS,
     .init           = hap_init,
     FF_CODEC_ENCODE_CB(hap_encode),
     .close          = hap_close,

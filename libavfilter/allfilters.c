@@ -180,6 +180,7 @@ extern const AVFilter ff_vf_avgblur_vulkan;
 extern const AVFilter ff_vf_bbox;
 extern const AVFilter ff_vf_bench;
 extern const AVFilter ff_vf_bilateral;
+extern const AVFilter ff_vf_bilateral_cuda;
 extern const AVFilter ff_vf_bitplanenoise;
 extern const AVFilter ff_vf_blackdetect;
 extern const AVFilter ff_vf_blackframe;
@@ -546,6 +547,7 @@ extern const AVFilter ff_vsrc_yuvtestsrc;
 extern const AVFilter ff_vsink_nullsink;
 
 /* multimedia filters */
+extern const AVFilter ff_avf_a3dscope;
 extern const AVFilter ff_avf_abitscope;
 extern const AVFilter ff_avf_adrawgraph;
 extern const AVFilter ff_avf_agraphmonitor;

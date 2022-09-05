@@ -585,15 +585,16 @@ static const int libopus_sample_rates[] = {
 
 const FFCodec ff_libopus_encoder = {
     .p.name          = "libopus",
-    .p.long_name     = NULL_IF_CONFIG_SMALL("libopus Opus"),
+    CODEC_LONG_NAME("libopus Opus"),
     .p.type          = AVMEDIA_TYPE_AUDIO,
     .p.id            = AV_CODEC_ID_OPUS,
+    .p.capabilities  = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
+                       AV_CODEC_CAP_SMALL_LAST_FRAME,
     .caps_internal   = FF_CODEC_CAP_NOT_INIT_THREADSAFE,
     .priv_data_size  = sizeof(LibopusEncContext),
     .init            = libopus_encode_init,
     FF_CODEC_ENCODE_CB(libopus_encode),
     .close           = libopus_encode_close,
-    .p.capabilities  = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_SMALL_LAST_FRAME,
     .p.sample_fmts   = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                       AV_SAMPLE_FMT_FLT,
                                                       AV_SAMPLE_FMT_NONE },

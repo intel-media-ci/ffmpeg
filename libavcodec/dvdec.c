@@ -36,19 +36,17 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/mem_internal.h"
-#include "libavutil/pixdesc.h"
 #include "libavutil/thread.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "dv.h"
 #include "dv_profile_internal.h"
 #include "dvdata.h"
 #include "get_bits.h"
-#include "internal.h"
 #include "put_bits.h"
 #include "simple_idct.h"
 #include "thread.h"
@@ -683,7 +681,7 @@ static int dvvideo_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
 const FFCodec ff_dvvideo_decoder = {
     .p.name         = "dvvideo",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("DV (Digital Video)"),
+    CODEC_LONG_NAME("DV (Digital Video)"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_DVVIDEO,
     .priv_data_size = sizeof(DVVideoContext),

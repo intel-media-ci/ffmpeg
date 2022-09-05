@@ -24,14 +24,10 @@
  * IBM Ultimotion Video Decoder.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 #include "ulti_cb.h"
 
@@ -420,7 +416,7 @@ err:
 
 const FFCodec ff_ulti_decoder = {
     .p.name         = "ultimotion",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("IBM UltiMotion"),
+    CODEC_LONG_NAME("IBM UltiMotion"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_ULTI,
     .priv_data_size = sizeof(UltimotionDecodeContext),

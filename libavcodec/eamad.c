@@ -35,11 +35,11 @@
 #include "bytestream.h"
 #include "bswapdsp.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
 #include "aandcttab.h"
 #include "eaidct.h"
 #include "idctdsp.h"
-#include "internal.h"
 #include "mpeg12data.h"
 #include "mpeg12vlc.h"
 
@@ -342,7 +342,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 const FFCodec ff_eamad_decoder = {
     .p.name         = "eamad",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Electronic Arts Madcow Video"),
+    CODEC_LONG_NAME("Electronic Arts Madcow Video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_MAD,
     .priv_data_size = sizeof(MadContext),

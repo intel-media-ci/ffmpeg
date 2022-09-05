@@ -26,11 +26,10 @@
 
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
-#include "libavutil/intreadwrite.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 typedef struct YopDecContext {
     AVCodecContext *avctx;
@@ -268,7 +267,7 @@ static int yop_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
 
 const FFCodec ff_yop_decoder = {
     .p.name         = "yop",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Psygnosis YOP Video"),
+    CODEC_LONG_NAME("Psygnosis YOP Video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_YOP,
     .priv_data_size = sizeof(YopDecContext),

@@ -32,8 +32,8 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
-#include "internal.h"
 #include "thread.h"
 
 typedef struct CRIContext {
@@ -433,5 +433,5 @@ const FFCodec ff_cri_decoder = {
     .close          = cri_decode_close,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Cintel RAW"),
+    CODEC_LONG_NAME("Cintel RAW"),
 };

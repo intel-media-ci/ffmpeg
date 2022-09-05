@@ -73,8 +73,6 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
         s->bitstream_buffer_size = s->allocated_bitstream_buffer_size = 0;
 
         if (s1->context_initialized) {
-//             s->picture_range_start  += MAX_PICTURE_COUNT;
-//             s->picture_range_end    += MAX_PICTURE_COUNT;
             ff_mpv_idct_init(s);
             if ((err = ff_mpv_common_init(s)) < 0) {
                 memset(s, 0, sizeof(*s));
@@ -91,11 +89,6 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
         if ((ret = ff_mpv_common_frame_size_change(s)) < 0)
             return ret;
     }
-
-    s->avctx->coded_height  = s1->avctx->coded_height;
-    s->avctx->coded_width   = s1->avctx->coded_width;
-    s->avctx->width         = s1->avctx->width;
-    s->avctx->height        = s1->avctx->height;
 
     s->quarter_sample       = s1->quarter_sample;
 
@@ -286,12 +279,12 @@ int ff_mpv_frame_start(MpegEncContext *s, AVCodecContext *avctx)
         ff_mpeg_unref_picture(s->avctx, s->last_picture_ptr);
     }
 
-    /* release forgotten pictures */
-    /* if (MPEG-124 / H.263) */
+    /* release non reference/forgotten frames */
     for (int i = 0; i < MAX_PICTURE_COUNT; i++) {
-        if (&s->picture[i] != s->last_picture_ptr &&
-            &s->picture[i] != s->next_picture_ptr &&
-            s->picture[i].reference && !s->picture[i].needs_realloc) {
+        if (!s->picture[i].reference ||
+            (&s->picture[i] != s->last_picture_ptr &&
+             &s->picture[i] != s->next_picture_ptr &&
+             !s->picture[i].needs_realloc)) {
             ff_mpeg_unref_picture(s->avctx, &s->picture[i]);
         }
     }
@@ -299,12 +292,6 @@ int ff_mpv_frame_start(MpegEncContext *s, AVCodecContext *avctx)
     ff_mpeg_unref_picture(s->avctx, &s->current_picture);
     ff_mpeg_unref_picture(s->avctx, &s->last_picture);
     ff_mpeg_unref_picture(s->avctx, &s->next_picture);
-
-    /* release non reference frames */
-    for (int i = 0; i < MAX_PICTURE_COUNT; i++) {
-        if (!s->picture[i].reference)
-            ff_mpeg_unref_picture(s->avctx, &s->picture[i]);
-    }
 
     if (s->current_picture_ptr && !s->current_picture_ptr->f->buf[0]) {
         // we already have an unused image

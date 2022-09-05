@@ -24,8 +24,8 @@
 #define BITSTREAM_READER_LE
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
-#include "internal.h"
 
 static const int8_t map_1bit[]      = { -1, +1 };
 static const int8_t map_2bit_near[] = { -2, -1, +1, +2 };
@@ -634,7 +634,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 
 const FFCodec ff_interplay_acm_decoder = {
     .p.name         = "interplayacm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Interplay ACM"),
+    CODEC_LONG_NAME("Interplay ACM"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_INTERPLAY_ACM,
     .init           = decode_init,

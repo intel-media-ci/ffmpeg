@@ -28,9 +28,8 @@
 
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
-#include "internal.h"
-#include "mathops.h"
 
 static const uint8_t index_table[8] = {4, 4, 3, 3, 2, 2, 1, 0};
 static const uint8_t vector_dimension[8] = { 2, 2, 2, 4, 4, 5, 5, 1 };
@@ -843,7 +842,7 @@ static av_cold int siren_close(AVCodecContext *avctx)
 
 const FFCodec ff_siren_decoder = {
     .p.name         = "siren",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Siren"),
+    CODEC_LONG_NAME("Siren"),
     .priv_data_size = sizeof(SirenContext),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_SIREN,
@@ -858,7 +857,7 @@ const FFCodec ff_siren_decoder = {
 
 const FFCodec ff_msnsiren_decoder = {
     .p.name         = "msnsiren",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("MSN Siren"),
+    CODEC_LONG_NAME("MSN Siren"),
     .priv_data_size = sizeof(SirenContext),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_MSNSIREN,

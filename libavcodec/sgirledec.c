@@ -30,7 +30,7 @@
 
 #include "avcodec.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 static av_cold int sgirle_decode_init(AVCodecContext *avctx)
 {
@@ -133,7 +133,7 @@ static int sgirle_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
 const FFCodec ff_sgirle_decoder = {
     .p.name         = "sgirle",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Silicon Graphics RLE 8-bit video"),
+    CODEC_LONG_NAME("Silicon Graphics RLE 8-bit video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_SGIRLE,
     .init           = sgirle_decode_init,

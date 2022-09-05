@@ -37,8 +37,8 @@
 #include "bswapdsp.h"
 #include "bytestream.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
-#include "internal.h"
 
 
 #define BLOCK_TYPE_VLC_BITS 5
@@ -950,9 +950,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *picture,
     } else if (frame_4cc == AV_RL32("snd_")) {
         av_log(avctx, AV_LOG_ERROR, "ignoring snd_ chunk length:%d\n",
                buf_size);
+        return AVERROR_INVALIDDATA;
     } else {
         av_log(avctx, AV_LOG_ERROR, "ignoring unknown chunk length:%d\n",
                buf_size);
+        return AVERROR_INVALIDDATA;
     }
 
     picture->key_frame = picture->pict_type == AV_PICTURE_TYPE_I;
@@ -963,8 +965,6 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *picture,
     FFSWAP(uint16_t *, f->frame_buffer, f->last_frame_buffer);
 
     *got_frame = 1;
-
-    emms_c();
 
     return buf_size;
 }
@@ -1028,7 +1028,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
 const FFCodec ff_fourxm_decoder = {
     .p.name         = "4xm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("4X Movie"),
+    CODEC_LONG_NAME("4X Movie"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_4XM,
     .priv_data_size = sizeof(FourXContext),

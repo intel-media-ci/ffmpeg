@@ -20,16 +20,14 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define BITSTREAM_READER_LE
-#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
-#include "internal.h"
 #include "lzf.h"
 #include "thread.h"
 
@@ -537,7 +535,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 const FFCodec ff_notchlc_decoder = {
     .p.name           = "notchlc",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("NotchLC"),
+    CODEC_LONG_NAME("NotchLC"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_NOTCHLC,
     .priv_data_size   = sizeof(NotchLCContext),

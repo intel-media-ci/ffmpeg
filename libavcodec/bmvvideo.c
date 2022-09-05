@@ -25,7 +25,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 enum BMVFlags{
     BMV_NOP = 0,
@@ -287,7 +287,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
 const FFCodec ff_bmv_video_decoder = {
     .p.name         = "bmv_video",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Discworld II BMV video"),
+    CODEC_LONG_NAME("Discworld II BMV video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_BMV_VIDEO,
     .priv_data_size = sizeof(BMVDecContext),

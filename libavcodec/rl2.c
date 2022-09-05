@@ -26,8 +26,6 @@
  * @see http://wiki.multimedia.cx/index.php?title=RL2
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "libavutil/internal.h"
@@ -35,7 +33,7 @@
 #include "libavutil/mem.h"
 #include "avcodec.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 
 #define EXTRADATA1_SIZE (6 + 256 * 3) ///< video base, clr count, palette
@@ -219,7 +217,7 @@ static av_cold int rl2_decode_end(AVCodecContext *avctx)
 
 const FFCodec ff_rl2_decoder = {
     .p.name         = "rl2",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("RL2 video"),
+    CODEC_LONG_NAME("RL2 video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_RL2,
     .priv_data_size = sizeof(Rl2Context),

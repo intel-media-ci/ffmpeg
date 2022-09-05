@@ -424,11 +424,8 @@ static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
         if (svt_enc->eos_flag == EOS_SENT)
             return 0;
 
-        headerPtrLast.n_alloc_len   = 0;
-        headerPtrLast.n_filled_len  = 0;
-        headerPtrLast.n_tick_count  = 0;
-        headerPtrLast.p_app_private = NULL;
-        headerPtrLast.p_buffer      = NULL;
+        memset(&headerPtrLast, 0, sizeof(headerPtrLast));
+        headerPtrLast.pic_type      = EB_AV1_INVALID_PICTURE;
         headerPtrLast.flags         = EB_BUFFERFLAG_EOS;
 
         svt_av1_enc_send_picture(svt_enc->svt_handle, &headerPtrLast);
@@ -658,7 +655,7 @@ static const FFCodecDefault eb_enc_defaults[] = {
 
 const FFCodec ff_libsvtav1_encoder = {
     .p.name         = "libsvtav1",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("SVT-AV1(Scalable Video Technology for AV1) encoder"),
+    CODEC_LONG_NAME("SVT-AV1(Scalable Video Technology for AV1) encoder"),
     .priv_data_size = sizeof(SvtContext),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_AV1,

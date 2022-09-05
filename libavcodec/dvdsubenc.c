@@ -21,7 +21,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "dvdsub.h"
 #include "libavutil/avassert.h"
 #include "libavutil/bprint.h"
 #include "libavutil/imgutils.h"
@@ -502,7 +502,7 @@ static const AVClass dvdsubenc_class = {
 
 const FFCodec ff_dvdsub_encoder = {
     .p.name         = "dvdsub",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("DVD subtitles"),
+    CODEC_LONG_NAME("DVD subtitles"),
     .p.type         = AVMEDIA_TYPE_SUBTITLE,
     .p.id           = AV_CODEC_ID_DVD_SUBTITLE,
     .init           = dvdsub_init,

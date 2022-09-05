@@ -26,9 +26,9 @@
 
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
 #include "golomb.h"
-#include "internal.h"
 #include "mathops.h"
 
 enum LOCO_MODE {
@@ -338,7 +338,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
 const FFCodec ff_loco_decoder = {
     .p.name         = "loco",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("LOCO"),
+    CODEC_LONG_NAME("LOCO"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_LOCO,
     .priv_data_size = sizeof(LOCOContext),

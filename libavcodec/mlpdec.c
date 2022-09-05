@@ -36,10 +36,8 @@
 #include "libavutil/thread.h"
 #include "libavutil/opt.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
-#include "internal.h"
-#include "libavutil/crc.h"
-#include "parser.h"
 #include "mlp_parse.h"
 #include "mlpdsp.h"
 #include "mlp.h"
@@ -1418,7 +1416,7 @@ static const AVClass truehd_decoder_class = {
 #if CONFIG_MLP_DECODER
 const FFCodec ff_mlp_decoder = {
     .p.name         = "mlp",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("MLP (Meridian Lossless Packing)"),
+    CODEC_LONG_NAME("MLP (Meridian Lossless Packing)"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_MLP,
     .priv_data_size = sizeof(MLPDecodeContext),
@@ -1432,7 +1430,7 @@ const FFCodec ff_mlp_decoder = {
 #if CONFIG_TRUEHD_DECODER
 const FFCodec ff_truehd_decoder = {
     .p.name         = "truehd",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("TrueHD"),
+    CODEC_LONG_NAME("TrueHD"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_TRUEHD,
     .priv_data_size = sizeof(MLPDecodeContext),

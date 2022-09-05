@@ -22,7 +22,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 /**
  * @file
@@ -389,7 +389,7 @@ static av_cold int cdg_decode_end(AVCodecContext *avctx)
 
 const FFCodec ff_cdgraphics_decoder = {
     .p.name         = "cdgraphics",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("CD Graphics video"),
+    CODEC_LONG_NAME("CD Graphics video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_CDGRAPHICS,
     .priv_data_size = sizeof(CDGraphicsContext),

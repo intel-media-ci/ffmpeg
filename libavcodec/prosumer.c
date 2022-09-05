@@ -23,7 +23,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
@@ -31,7 +30,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 typedef struct ProSumerContext {
     GetByteContext gb;
@@ -367,7 +366,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 
 const FFCodec ff_prosumer_decoder = {
     .p.name         = "prosumer",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Brooktree ProSumer Video"),
+    CODEC_LONG_NAME("Brooktree ProSumer Video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PROSUMER,
     .priv_data_size = sizeof(ProSumerContext),

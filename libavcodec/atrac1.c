@@ -29,17 +29,15 @@
 /* Many thanks to Tim Craig for all the help! */
 
 #include <math.h>
-#include <stddef.h>
-#include <stdio.h>
 
 #include "libavutil/float_dsp.h"
 #include "libavutil/mem_internal.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
 #include "fft.h"
-#include "internal.h"
 #include "sinewin.h"
 
 #include "atrac.h"
@@ -386,7 +384,7 @@ static av_cold int atrac1_decode_init(AVCodecContext *avctx)
 
 const FFCodec ff_atrac1_decoder = {
     .p.name         = "atrac1",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("ATRAC1 (Adaptive TRansform Acoustic Coding)"),
+    CODEC_LONG_NAME("ATRAC1 (Adaptive TRansform Acoustic Coding)"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ATRAC1,
     .priv_data_size = sizeof(AT1Ctx),

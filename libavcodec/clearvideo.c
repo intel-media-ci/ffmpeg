@@ -30,9 +30,9 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
 #include "idctdsp.h"
-#include "internal.h"
 #include "mathops.h"
 #include "clearvideodata.h"
 
@@ -769,7 +769,7 @@ static av_cold int clv_decode_end(AVCodecContext *avctx)
 
 const FFCodec ff_clearvideo_decoder = {
     .p.name         = "clearvideo",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Iterated Systems ClearVideo"),
+    CODEC_LONG_NAME("Iterated Systems ClearVideo"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_CLEARVIDEO,
     .priv_data_size = sizeof(CLVContext),

@@ -848,15 +848,15 @@ static const AVClass cfhd_class = {
 
 const FFCodec ff_cfhd_encoder = {
     .p.name           = "cfhd",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("GoPro CineForm HD"),
+    CODEC_LONG_NAME("GoPro CineForm HD"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_CFHD,
+    .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
     .priv_data_size   = sizeof(CFHDEncContext),
     .p.priv_class     = &cfhd_class,
     .init             = cfhd_encode_init,
     .close            = cfhd_encode_close,
     FF_CODEC_ENCODE_CB(cfhd_encode_frame),
-    .p.capabilities   = AV_CODEC_CAP_FRAME_THREADS,
     .p.pix_fmts       = (const enum AVPixelFormat[]) {
                           AV_PIX_FMT_YUV422P10,
                           AV_PIX_FMT_GBRP12,

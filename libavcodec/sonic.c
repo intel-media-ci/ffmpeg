@@ -23,10 +23,10 @@
 
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "encode.h"
 #include "get_bits.h"
 #include "golomb.h"
-#include "internal.h"
 #include "put_golomb.h"
 #include "rangecoder.h"
 
@@ -1078,7 +1078,7 @@ static int sonic_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
 const FFCodec ff_sonic_decoder = {
     .p.name         = "sonic",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Sonic"),
+    CODEC_LONG_NAME("Sonic"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_SONIC,
     .priv_data_size = sizeof(SonicContext),
@@ -1093,14 +1093,14 @@ const FFCodec ff_sonic_decoder = {
 #if CONFIG_SONIC_ENCODER
 const FFCodec ff_sonic_encoder = {
     .p.name         = "sonic",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Sonic"),
+    CODEC_LONG_NAME("Sonic"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_SONIC,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_EXPERIMENTAL,
     .priv_data_size = sizeof(SonicContext),
     .init           = sonic_encode_init,
     FF_CODEC_ENCODE_CB(sonic_encode_frame),
     .p.sample_fmts  = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_NONE },
-    .p.capabilities = AV_CODEC_CAP_EXPERIMENTAL,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
     .close          = sonic_encode_close,
 };
@@ -1109,14 +1109,14 @@ const FFCodec ff_sonic_encoder = {
 #if CONFIG_SONIC_LS_ENCODER
 const FFCodec ff_sonic_ls_encoder = {
     .p.name         = "sonicls",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Sonic lossless"),
+    CODEC_LONG_NAME("Sonic lossless"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_SONIC_LS,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_EXPERIMENTAL,
     .priv_data_size = sizeof(SonicContext),
     .init           = sonic_encode_init,
     FF_CODEC_ENCODE_CB(sonic_encode_frame),
     .p.sample_fmts  = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_NONE },
-    .p.capabilities = AV_CODEC_CAP_EXPERIMENTAL,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
     .close          = sonic_encode_close,
 };

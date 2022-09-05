@@ -20,8 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "libavutil/mem_internal.h"
@@ -30,10 +29,10 @@
 #include "avcodec.h"
 #include "bswapdsp.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "copy_block.h"
 #include "get_bits.h"
 #include "idctdsp.h"
-#include "internal.h"
 
 #define CBPLO_VLC_BITS   6
 #define CBPHI_VLC_BITS   6
@@ -534,7 +533,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
 
 const FFCodec ff_imm4_decoder = {
     .p.name           = "imm4",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("Infinity IMM4"),
+    CODEC_LONG_NAME("Infinity IMM4"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_IMM4,
     .priv_data_size   = sizeof(IMM4Context),

@@ -101,6 +101,7 @@ static struct{
     CFStringRef kVTCompressionPropertyKey_RealTime;
     CFStringRef kVTCompressionPropertyKey_TargetQualityForAlpha;
     CFStringRef kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality;
+    CFStringRef kVTCompressionPropertyKey_ConstantBitRate;
 
     CFStringRef kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder;
     CFStringRef kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder;
@@ -164,6 +165,7 @@ static void loadVTEncSymbols(){
             "TargetQualityForAlpha");
     GET_SYM(kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality,
             "PrioritizeEncodingSpeedOverQuality");
+    GET_SYM(kVTCompressionPropertyKey_ConstantBitRate, "ConstantBitRate");
 
     GET_SYM(kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
             "EnableHardwareAcceleratedVideoEncoder");
@@ -236,6 +238,7 @@ typedef struct VTEncContext {
     int realtime;
     int frames_before;
     int frames_after;
+    bool constant_bit_rate;
 
     int allow_sw;
     int require_sw;
@@ -1079,6 +1082,7 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
                                 CFNumberRef      gamma_level,
                                 CFDictionaryRef  enc_info,
                                 CFDictionaryRef  pixel_buffer_info,
+                                bool constant_bit_rate,
                                 VTCompressionSessionRef *session)
 {
     VTEncContext *vtctx = avctx->priv_data;
@@ -1139,9 +1143,20 @@ static int vtenc_create_encoder(AVCodecContext   *avctx,
                                       &bit_rate);
         if (!bit_rate_num) return AVERROR(ENOMEM);
 
-        status = VTSessionSetProperty(vtctx->session,
-                                      kVTCompressionPropertyKey_AverageBitRate,
-                                      bit_rate_num);
+        if (constant_bit_rate) {
+            status = VTSessionSetProperty(vtctx->session,
+                                          compat_keys.kVTCompressionPropertyKey_ConstantBitRate,
+                                          bit_rate_num);
+            if (status == kVTPropertyNotSupportedErr) {
+                av_log(avctx, AV_LOG_ERROR, "Error: -constant_bit_rate true is not supported by the encoder.\n");
+                return AVERROR_EXTERNAL;
+            }
+        } else {
+            status = VTSessionSetProperty(vtctx->session,
+                                          kVTCompressionPropertyKey_AverageBitRate,
+                                          bit_rate_num);
+        }
+
         CFRelease(bit_rate_num);
     }
 
@@ -1530,6 +1545,7 @@ static int vtenc_configure_encoder(AVCodecContext *avctx)
                                   gamma_level,
                                   enc_info,
                                   pixel_buffer_info,
+                                  vtctx->constant_bit_rate,
                                   &vtctx->session);
 
 init_cleanup:
@@ -2532,6 +2548,7 @@ static int vtenc_populate_extradata(AVCodecContext   *avctx,
                                   gamma_level,
                                   enc_info,
                                   pixel_buffer_info,
+                                  vtctx->constant_bit_rate,
                                   &vtctx->session);
     if (status)
         goto pe_cleanup;
@@ -2727,6 +2744,8 @@ static const AVOption h264_options[] = {
 
     { "a53cc", "Use A53 Closed Captions (if available)", OFFSET(a53_cc), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, VE },
 
+    { "constant_bit_rate", "Require constant bit rate (macOS 13 or newer)", OFFSET(constant_bit_rate), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+
     COMMON_OPTIONS
     { NULL },
 };
@@ -2740,7 +2759,7 @@ static const AVClass h264_videotoolbox_class = {
 
 const FFCodec ff_h264_videotoolbox_encoder = {
     .p.name           = "h264_videotoolbox",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("VideoToolbox H.264 Encoder"),
+    CODEC_LONG_NAME("VideoToolbox H.264 Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_H264,
     .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
@@ -2760,6 +2779,8 @@ static const AVOption hevc_options[] = {
 
     { "alpha_quality", "Compression quality for the alpha channel", OFFSET(alpha_quality), AV_OPT_TYPE_DOUBLE, { .dbl = 0.0 }, 0.0, 1.0, VE },
 
+    { "constant_bit_rate", "Require constant bit rate (macOS 13 or newer)", OFFSET(constant_bit_rate), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+
     COMMON_OPTIONS
     { NULL },
 };
@@ -2773,7 +2794,7 @@ static const AVClass hevc_videotoolbox_class = {
 
 const FFCodec ff_hevc_videotoolbox_encoder = {
     .p.name           = "hevc_videotoolbox",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("VideoToolbox H.265 Encoder"),
+    CODEC_LONG_NAME("VideoToolbox H.265 Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_HEVC,
     .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
@@ -2811,7 +2832,7 @@ static const AVClass prores_videotoolbox_class = {
 
 const FFCodec ff_prores_videotoolbox_encoder = {
     .p.name           = "prores_videotoolbox",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("VideoToolbox ProRes Encoder"),
+    CODEC_LONG_NAME("VideoToolbox ProRes Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_PRORES,
     .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |

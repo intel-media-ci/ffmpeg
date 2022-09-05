@@ -16,6 +16,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "avassert.h"
 #include "cpu.h"
 #include "qsort.h"
 #include "bprint.h"
@@ -456,6 +457,9 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
         ff_tx_null_list,
 #if HAVE_X86ASM
         ff_tx_codelet_list_float_x86,
+#endif
+#if ARCH_AARCH64
+        ff_tx_codelet_list_float_aarch64,
 #endif
     };
     int codelet_list_num = FF_ARRAY_ELEMS(codelet_list);

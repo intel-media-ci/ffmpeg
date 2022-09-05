@@ -21,13 +21,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/intreadwrite.h"
-
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
-#include "mathops.h"
+#include "decode.h"
 
 typedef struct ChannelItems {
     float f[8];
@@ -189,7 +186,7 @@ static av_cold int fastaudio_close(AVCodecContext *avctx)
 
 const FFCodec ff_fastaudio_decoder = {
     .p.name         = "fastaudio",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("MobiClip FastAudio"),
+    CODEC_LONG_NAME("MobiClip FastAudio"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_FASTAUDIO,
     .priv_data_size = sizeof(FastAudioContext),

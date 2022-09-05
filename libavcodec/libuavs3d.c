@@ -30,7 +30,7 @@
 #include "avcodec.h"
 #include "avs3.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 #include "uavs3d.h"
 
 typedef struct uavs3d_context {
@@ -248,7 +248,7 @@ static int libuavs3d_decode_frame(AVCodecContext *avctx, AVFrame *frm,
 
 const FFCodec ff_libuavs3d_decoder = {
     .p.name         = "libuavs3d",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("libuavs3d AVS3-P2/IEEE1857.10"),
+    CODEC_LONG_NAME("libuavs3d AVS3-P2/IEEE1857.10"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_AVS3,
     .priv_data_size = sizeof(uavs3d_context),

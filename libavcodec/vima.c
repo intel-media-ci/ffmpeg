@@ -31,8 +31,8 @@
 #include "adpcm_data.h"
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
-#include "internal.h"
 
 static uint16_t predict_table[5786 * 2];
 
@@ -209,7 +209,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
 const FFCodec ff_adpcm_vima_decoder = {
     .p.name       = "adpcm_vima",
-    .p.long_name  = NULL_IF_CONFIG_SMALL("LucasArts VIMA audio"),
+    CODEC_LONG_NAME("LucasArts VIMA audio"),
     .p.type       = AVMEDIA_TYPE_AUDIO,
     .p.id         = AV_CODEC_ID_ADPCM_VIMA,
     .init         = decode_init,

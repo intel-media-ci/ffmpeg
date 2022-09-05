@@ -21,12 +21,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 #include "lzw.h"
 #include "gif.h"
 
@@ -558,7 +557,7 @@ static const AVClass decoder_class = {
 
 const FFCodec ff_gif_decoder = {
     .p.name         = "gif",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("GIF (Graphics Interchange Format)"),
+    CODEC_LONG_NAME("GIF (Graphics Interchange Format)"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_GIF,
     .priv_data_size = sizeof(GifState),

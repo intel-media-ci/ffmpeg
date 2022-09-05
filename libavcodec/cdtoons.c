@@ -32,7 +32,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 #define CDTOONS_HEADER_SIZE   44
 #define CDTOONS_MAX_SPRITES 1200
@@ -445,7 +445,7 @@ static av_cold int cdtoons_decode_end(AVCodecContext *avctx)
 
 const FFCodec ff_cdtoons_decoder = {
     .p.name         = "cdtoons",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("CDToons video"),
+    CODEC_LONG_NAME("CDToons video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_CDTOONS,
     .priv_data_size = sizeof(CDToonsContext),

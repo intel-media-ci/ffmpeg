@@ -33,7 +33,7 @@
 #include "libavutil/thread.h"
 #include "avcodec.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 #include "get_bits.h"
 #include "put_bits.h"
 #include "wmavoice_data.h"
@@ -2000,7 +2000,7 @@ static av_cold int wmavoice_decode_end(AVCodecContext *ctx)
 
 const FFCodec ff_wmavoice_decoder = {
     .p.name           = "wmavoice",
-    .p.long_name      = NULL_IF_CONFIG_SMALL("Windows Media Audio Voice"),
+    CODEC_LONG_NAME("Windows Media Audio Voice"),
     .p.type           = AVMEDIA_TYPE_AUDIO,
     .p.id             = AV_CODEC_ID_WMAVOICE,
     .priv_data_size   = sizeof(WMAVoiceContext),

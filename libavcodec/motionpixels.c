@@ -27,7 +27,7 @@
 #include "get_bits.h"
 #include "bswapdsp.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 #define MAX_HUFF_CODES 16
 
@@ -347,7 +347,7 @@ end:
 
 const FFCodec ff_motionpixels_decoder = {
     .p.name         = "motionpixels",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Motion Pixels video"),
+    CODEC_LONG_NAME("Motion Pixels video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_MOTIONPIXELS,
     .priv_data_size = sizeof(MotionPixelsContext),

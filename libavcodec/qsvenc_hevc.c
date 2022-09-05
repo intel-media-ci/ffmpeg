@@ -233,6 +233,9 @@ static const AVOption options[] = {
     QSV_OPTION_DBLK_IDC
     QSV_OPTION_LOW_DELAY_BRC
     QSV_OPTION_MAX_MIN_QP
+    QSV_OPTION_ADAPTIVE_I
+    QSV_OPTION_ADAPTIVE_B
+    QSV_OPTION_SCENARIO
 
     { "idr_interval", "Distance (in I-frames) between IDR frames", OFFSET(qsv.idr_interval), AV_OPT_TYPE_INT, { .i64 = 0 }, -1, INT_MAX, VE, "idr_interval" },
     { "begin_only", "Output an IDR-frame only at the beginning of the stream", 0, AV_OPT_TYPE_CONST, { .i64 = -1 }, 0, 0, VE, "idr_interval" },
@@ -296,7 +299,7 @@ static const FFCodecDefault qsv_enc_defaults[] = {
 
 const FFCodec ff_hevc_qsv_encoder = {
     .p.name         = "hevc_qsv",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("HEVC (Intel Quick Sync Video acceleration)"),
+    CODEC_LONG_NAME("HEVC (Intel Quick Sync Video acceleration)"),
     .priv_data_size = sizeof(QSVHEVCEncContext),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_HEVC,

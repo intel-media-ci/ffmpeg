@@ -912,9 +912,10 @@ static av_cold int flashsv2_encode_end(AVCodecContext * avctx)
 
 const FFCodec ff_flashsv2_encoder = {
     .p.name         = "flashsv2",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Flash Screen Video Version 2"),
+    CODEC_LONG_NAME("Flash Screen Video Version 2"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_FLASHSV2,
+    .p.capabilities = AV_CODEC_CAP_DR1,
     .priv_data_size = sizeof(FlashSV2Context),
     .init           = flashsv2_encode_init,
     FF_CODEC_ENCODE_CB(flashsv2_encode_frame),

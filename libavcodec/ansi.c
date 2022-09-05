@@ -26,12 +26,11 @@
 
 #include "libavutil/common.h"
 #include "libavutil/frame.h"
-#include "libavutil/lfg.h"
 #include "libavutil/xga_font_data.h"
 #include "avcodec.h"
 #include "cga_data.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 #define ATTR_BOLD         0x01  /**< Bold/Bright-foreground (mode 1) */
 #define ATTR_FAINT        0x02  /**< Faint (mode 2) */
@@ -482,7 +481,7 @@ static const FFCodecDefault ansi_defaults[] = {
 
 const FFCodec ff_ansi_decoder = {
     .p.name         = "ansi",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("ASCII/ANSI art"),
+    CODEC_LONG_NAME("ASCII/ANSI art"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_ANSI,
     .priv_data_size = sizeof(AnsiContext),

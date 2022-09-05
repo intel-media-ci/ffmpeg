@@ -38,9 +38,9 @@
 #include "libavutil/opt.h"
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
 #include "g722.h"
-#include "internal.h"
 
 #define OFFSET(x) offsetof(G722Context, x)
 #define AD AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_DECODING_PARAM
@@ -141,7 +141,7 @@ static int g722_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
 const FFCodec ff_adpcm_g722_decoder = {
     .p.name         = "g722",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("G.722 ADPCM"),
+    CODEC_LONG_NAME("G.722 ADPCM"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ADPCM_G722,
     .priv_data_size = sizeof(G722Context),

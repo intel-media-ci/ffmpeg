@@ -36,10 +36,10 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "eaidct.h"
 #include "get_bits.h"
 #include "idctdsp.h"
-#include "internal.h"
 
 typedef struct TgqContext {
     AVCodecContext *avctx;
@@ -248,7 +248,7 @@ static int tgq_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
 const FFCodec ff_eatgq_decoder = {
     .p.name         = "eatgq",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Electronic Arts TGQ video"),
+    CODEC_LONG_NAME("Electronic Arts TGQ video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_TGQ,
     .priv_data_size = sizeof(TgqContext),

@@ -39,8 +39,6 @@
 #include "dcaenc.h"
 #include "encode.h"
 #include "fft.h"
-#include "internal.h"
-#include "mathops.h"
 #include "put_bits.h"
 
 #define MAX_CHANNELS 6
@@ -1215,8 +1213,6 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     flush_put_bits(&c->pb);
     memset(put_bits_ptr(&c->pb), 0, put_bytes_left(&c->pb, 0));
 
-    avpkt->pts      = frame->pts;
-    avpkt->duration = ff_samples_to_time_base(avctx, frame->nb_samples);
     *got_packet_ptr = 1;
     return 0;
 }
@@ -1242,7 +1238,7 @@ static const FFCodecDefault defaults[] = {
 
 const FFCodec ff_dca_encoder = {
     .p.name                = "dca",
-    .p.long_name           = NULL_IF_CONFIG_SMALL("DCA (DTS Coherent Acoustics)"),
+    CODEC_LONG_NAME("DCA (DTS Coherent Acoustics)"),
     .p.type                = AVMEDIA_TYPE_AUDIO,
     .p.id                  = AV_CODEC_ID_DTS,
     .p.capabilities        = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_EXPERIMENTAL,

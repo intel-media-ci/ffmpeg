@@ -42,6 +42,7 @@
 #include "bytestream.h"
 #include "cabac_functions.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "golomb.h"
 #include "hevc.h"
 #include "hevc_data.h"
@@ -481,11 +482,19 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #endif
     case AV_PIX_FMT_YUV420P12:
     case AV_PIX_FMT_YUV444P12:
+#if CONFIG_HEVC_VAAPI_HWACCEL
+       *fmt++ = AV_PIX_FMT_VAAPI;
+#endif
 #if CONFIG_HEVC_VDPAU_HWACCEL
         *fmt++ = AV_PIX_FMT_VDPAU;
 #endif
 #if CONFIG_HEVC_NVDEC_HWACCEL
         *fmt++ = AV_PIX_FMT_CUDA;
+#endif
+        break;
+    case AV_PIX_FMT_YUV422P12:
+#if CONFIG_HEVC_VAAPI_HWACCEL
+       *fmt++ = AV_PIX_FMT_VAAPI;
 #endif
         break;
     }
@@ -3498,7 +3507,7 @@ static int hevc_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
         }
     } else {
         /* verify the SEI checksum */
-        if (avctx->err_recognition & AV_EF_CRCCHECK && s->is_decoded &&
+        if (avctx->err_recognition & AV_EF_CRCCHECK && s->ref && s->is_decoded &&
             s->sei.picture_hash.is_md5) {
             ret = verify_md5(s, s->ref->frame);
             if (ret < 0 && avctx->err_recognition & AV_EF_EXPLODE) {
@@ -3844,7 +3853,7 @@ static const AVClass hevc_decoder_class = {
 
 const FFCodec ff_hevc_decoder = {
     .p.name                = "hevc",
-    .p.long_name           = NULL_IF_CONFIG_SMALL("HEVC (High Efficiency Video Coding)"),
+    CODEC_LONG_NAME("HEVC (High Efficiency Video Coding)"),
     .p.type                = AVMEDIA_TYPE_VIDEO,
     .p.id                  = AV_CODEC_ID_HEVC,
     .priv_data_size        = sizeof(HEVCContext),
@@ -3853,7 +3862,7 @@ const FFCodec ff_hevc_decoder = {
     .close                 = hevc_decode_free,
     FF_CODEC_DECODE_CB(hevc_decode_frame),
     .flush                 = hevc_decode_flush,
-    .update_thread_context = ONLY_IF_THREADS_ENABLED(hevc_update_thread_context),
+    UPDATE_THREAD_CONTEXT(hevc_update_thread_context),
     .p.capabilities        = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
                              AV_CODEC_CAP_SLICE_THREADS | AV_CODEC_CAP_FRAME_THREADS,
     .caps_internal         = FF_CODEC_CAP_EXPORTS_CROPPING |

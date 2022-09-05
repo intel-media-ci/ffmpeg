@@ -90,6 +90,7 @@ choose_pixel_fmt(const AVCodec *codec, enum AVPixelFormat target,
 static const char *choose_pix_fmts(OutputFilter *ofilter, AVBPrint *bprint)
 {
     OutputStream *ost = ofilter->ost;
+    AVCodecContext *enc = ost->enc_ctx;
     const AVDictionaryEntry *strict_dict = av_dict_get(ost->encoder_opts, "strict", NULL, 0);
     if (strict_dict)
         // used by choose_pixel_fmt() and below
@@ -103,14 +104,14 @@ static const char *choose_pix_fmts(OutputFilter *ofilter, AVBPrint *bprint)
         return av_get_pix_fmt_name(ost->enc_ctx->pix_fmt);
     }
     if (ost->enc_ctx->pix_fmt != AV_PIX_FMT_NONE) {
-        return av_get_pix_fmt_name(choose_pixel_fmt(ost->enc, ost->enc_ctx->pix_fmt,
+        return av_get_pix_fmt_name(choose_pixel_fmt(enc->codec, enc->pix_fmt,
                                                     ost->enc_ctx->strict_std_compliance));
-    } else if (ost->enc && ost->enc->pix_fmts) {
+    } else if (enc->codec->pix_fmts) {
         const enum AVPixelFormat *p;
 
-        p = ost->enc->pix_fmts;
+        p = enc->codec->pix_fmts;
         if (ost->enc_ctx->strict_std_compliance > FF_COMPLIANCE_UNOFFICIAL) {
-            p = get_compliance_normal_pix_fmts(ost->enc, p);
+            p = get_compliance_normal_pix_fmts(enc->codec, p);
         }
 
         for (; *p != AV_PIX_FMT_NONE; p++) {
@@ -118,7 +119,7 @@ static const char *choose_pix_fmts(OutputFilter *ofilter, AVBPrint *bprint)
             av_bprintf(bprint, "%s%c", name, p[1] == AV_PIX_FMT_NONE ? '\0' : '|');
         }
         if (!av_bprint_is_complete(bprint))
-            exit_program(1);
+            report_and_exit(AVERROR(ENOMEM));
         return bprint->str;
     } else
         return NULL;
@@ -182,7 +183,7 @@ int init_simple_filtergraph(InputStream *ist, OutputStream *ost)
     InputFilter  *ifilter;
 
     if (!fg)
-        exit_program(1);
+        report_and_exit(AVERROR(ENOMEM));
     fg->index = nb_filtergraphs;
 
     ofilter = ALLOC_ARRAY_ELEM(fg->outputs, fg->nb_outputs);
@@ -199,7 +200,7 @@ int init_simple_filtergraph(InputStream *ist, OutputStream *ost)
 
     ifilter->frame_queue = av_fifo_alloc2(8, sizeof(AVFrame*), AV_FIFO_FLAG_AUTO_GROW);
     if (!ifilter->frame_queue)
-        exit_program(1);
+        report_and_exit(AVERROR(ENOMEM));
 
     GROW_ARRAY(ist->filters, ist->nb_filters);
     ist->filters[ist->nb_filters - 1] = ifilter;
@@ -223,7 +224,7 @@ static char *describe_filter_link(FilterGraph *fg, AVFilterInOut *inout, int in)
         res = av_asprintf("%s:%s", ctx->filter->name,
                           avfilter_pad_get_name(pads, inout->pad_idx));
     if (!res)
-        exit_program(1);
+        report_and_exit(AVERROR(ENOMEM));
     return res;
 }
 
@@ -308,7 +309,7 @@ static void init_input_filter(FilterGraph *fg, AVFilterInOut *in)
 
     ifilter->frame_queue = av_fifo_alloc2(8, sizeof(AVFrame*), AV_FIFO_FLAG_AUTO_GROW);
     if (!ifilter->frame_queue)
-        exit_program(1);
+        report_and_exit(AVERROR(ENOMEM));
 
     GROW_ARRAY(ist->filters, ist->nb_filters);
     ist->filters[ist->nb_filters - 1] = ifilter;
@@ -738,7 +739,7 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     }
 
     if (!fr.num)
-        fr = av_guess_frame_rate(input_files[ist->file_index]->ctx, ist->st, NULL);
+        fr = ist->framerate_guessed;
 
     if (ist->dec_ctx->codec_type == AVMEDIA_TYPE_SUBTITLE) {
         ret = sub2video_prepare(ist, ifilter);
@@ -1095,16 +1096,8 @@ int configure_filtergraph(FilterGraph *fg)
 
     for (i = 0; i < fg->nb_outputs; i++) {
         OutputStream *ost = fg->outputs[i]->ost;
-        if (!ost->enc) {
-            /* identical to the same check in ffmpeg.c, needed because
-               complex filter graphs are initialized earlier */
-            av_log(NULL, AV_LOG_ERROR, "Encoder (codec %s) not found for output stream #%d:%d\n",
-                     avcodec_get_name(ost->st->codecpar->codec_id), ost->file_index, ost->index);
-            ret = AVERROR(EINVAL);
-            goto fail;
-        }
-        if (ost->enc->type == AVMEDIA_TYPE_AUDIO &&
-            !(ost->enc->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE))
+        if (ost->enc_ctx->codec_type == AVMEDIA_TYPE_AUDIO &&
+            !(ost->enc_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE))
             av_buffersink_set_frame_size(ost->filter->filter,
                                          ost->enc_ctx->frame_size);
     }

@@ -21,14 +21,12 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/bswap.h"
-#include "libavutil/imgutils.h"
 
 #include "avcodec.h"
 #include "bytestream.h"
 #include "copy_block.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 
 #define NGLYPHS 256
 #define GLYPH_COORD_VECT_SIZE 16
@@ -1518,7 +1516,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
 const FFCodec ff_sanm_decoder = {
     .p.name         = "sanm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("LucasArts SANM/Smush video"),
+    CODEC_LONG_NAME("LucasArts SANM/Smush video"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_SANM,
     .priv_data_size = sizeof(SANMVideoContext),

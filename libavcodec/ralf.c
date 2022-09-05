@@ -30,9 +30,9 @@
 #include "libavutil/channel_layout.h"
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "get_bits.h"
 #include "golomb.h"
-#include "internal.h"
 #include "unary.h"
 #include "ralfdata.h"
 
@@ -515,7 +515,7 @@ static void decode_flush(AVCodecContext *avctx)
 
 const FFCodec ff_ralf_decoder = {
     .p.name         = "ralf",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("RealAudio Lossless"),
+    CODEC_LONG_NAME("RealAudio Lossless"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_RALF,
     .priv_data_size = sizeof(RALFContext),

@@ -70,6 +70,7 @@ typedef struct AOMEncoderContext {
     struct aom_codec_ctx encoder;
     struct aom_image rawimg;
     struct aom_fixed_buf twopass_stats;
+    unsigned twopass_stats_size;
     struct FrameListData *coded_frame_list;
     int cpu_used;
     int auto_alt_ref;
@@ -399,7 +400,7 @@ static av_cold int aom_free(AVCodecContext *avctx)
 #if defined(AOM_CTRL_AV1E_GET_NUM_OPERATING_POINTS) && \
     defined(AOM_CTRL_AV1E_GET_SEQ_LEVEL_IDX) && \
     defined(AOM_CTRL_AV1E_GET_TARGET_SEQ_LEVEL_IDX)
-    if (!(avctx->flags & AV_CODEC_FLAG_PASS1)) {
+    if (ctx->encoder.iface && !(avctx->flags & AV_CODEC_FLAG_PASS1)) {
         int num_operating_points;
         int levels[32];
         int target_levels[32];
@@ -1200,14 +1201,17 @@ static int queue_frames(AVCodecContext *avctx, AVPacket *pkt_out)
         case AOM_CODEC_STATS_PKT:
         {
             struct aom_fixed_buf *stats = &ctx->twopass_stats;
-            int err;
-            if ((err = av_reallocp(&stats->buf,
-                                   stats->sz +
-                                   pkt->data.twopass_stats.sz)) < 0) {
+            uint8_t *tmp = av_fast_realloc(stats->buf,
+                                           &ctx->twopass_stats_size,
+                                           stats->sz +
+                                           pkt->data.twopass_stats.sz);
+            if (!tmp) {
+                av_freep(&stats->buf);
                 stats->sz = 0;
                 av_log(avctx, AV_LOG_ERROR, "Stat buffer realloc failed\n");
-                return err;
+                return AVERROR(ENOMEM);
             }
+            stats->buf = tmp;
             memcpy((uint8_t *)stats->buf + stats->sz,
                    pkt->data.twopass_stats.buf, pkt->data.twopass_stats.sz);
             stats->sz += pkt->data.twopass_stats.sz;
@@ -1303,6 +1307,8 @@ static int aom_encode(AVCodecContext *avctx, AVPacket *pkt,
         return AVERROR_INVALIDDATA;
     }
     coded_size = queue_frames(avctx, pkt);
+    if (coded_size < 0)
+        return coded_size;
 
     if (!frame && avctx->flags & AV_CODEC_FLAG_PASS1) {
         size_t b64_size = AV_BASE64_SIZE(ctx->twopass_stats.sz);
@@ -1526,7 +1532,7 @@ static const AVClass class_aom = {
 
 FFCodec ff_libaom_av1_encoder = {
     .p.name         = "libaom-av1",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("libaom AV1"),
+    CODEC_LONG_NAME("libaom AV1"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_AV1,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
@@ -1540,6 +1546,7 @@ FFCodec ff_libaom_av1_encoder = {
     FF_CODEC_ENCODE_CB(aom_encode),
     .close          = aom_free,
     .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE |
+                      FF_CODEC_CAP_INIT_CLEANUP |
                       FF_CODEC_CAP_AUTO_THREADS,
     .defaults       = defaults,
     .init_static_data = av1_init_static,

@@ -21,12 +21,13 @@
 
 #include "config_components.h"
 
+#include "libavutil/half2float.h"
+
 #include "avcodec.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 #include "put_bits.h"
 #include "pnm.h"
-#include "half2float.h"
 
 static void samplecpy(uint8_t *dst, const uint8_t *src, int n, int maxval)
 {
@@ -312,18 +313,9 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
                 b = (float *)p->data[1];
                 for (int i = 0; i < avctx->height; i++) {
                     for (int j = 0; j < avctx->width; j++) {
-                        r[j] = av_int2float(half2float(AV_RL16(s->bytestream+0),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
-                        g[j] = av_int2float(half2float(AV_RL16(s->bytestream+2),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
-                        b[j] = av_int2float(half2float(AV_RL16(s->bytestream+4),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
+                        r[j] = av_int2float(half2float(AV_RL16(s->bytestream+0), &s->h2f_tables)) * scale;
+                        g[j] = av_int2float(half2float(AV_RL16(s->bytestream+2), &s->h2f_tables)) * scale;
+                        b[j] = av_int2float(half2float(AV_RL16(s->bytestream+4), &s->h2f_tables)) * scale;
                         s->bytestream += 6;
                     }
 
@@ -339,18 +331,9 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
                 b = (float *)p->data[1];
                 for (int i = 0; i < avctx->height; i++) {
                     for (int j = 0; j < avctx->width; j++) {
-                        r[j] = av_int2float(half2float(AV_RB16(s->bytestream+0),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
-                        g[j] = av_int2float(half2float(AV_RB16(s->bytestream+2),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
-                        b[j] = av_int2float(half2float(AV_RB16(s->bytestream+4),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
+                        r[j] = av_int2float(half2float(AV_RB16(s->bytestream+0), &s->h2f_tables)) * scale;
+                        g[j] = av_int2float(half2float(AV_RB16(s->bytestream+2), &s->h2f_tables)) * scale;
+                        b[j] = av_int2float(half2float(AV_RB16(s->bytestream+4), &s->h2f_tables)) * scale;
                         s->bytestream += 6;
                     }
 
@@ -393,10 +376,7 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
                 float *g = (float *)p->data[0];
                 for (int i = 0; i < avctx->height; i++) {
                     for (int j = 0; j < avctx->width; j++) {
-                        g[j] = av_int2float(half2float(AV_RL16(s->bytestream),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
+                        g[j] = av_int2float(half2float(AV_RL16(s->bytestream), &s->h2f_tables)) * scale;
                         s->bytestream += 2;
                     }
                     g += p->linesize[0] / 4;
@@ -405,10 +385,7 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
                 float *g = (float *)p->data[0];
                 for (int i = 0; i < avctx->height; i++) {
                     for (int j = 0; j < avctx->width; j++) {
-                        g[j] = av_int2float(half2float(AV_RB16(s->bytestream),
-                                                       s->mantissatable,
-                                                       s->exponenttable,
-                                                       s->offsettable)) * scale;
+                        g[j] = av_int2float(half2float(AV_RB16(s->bytestream), &s->h2f_tables)) * scale;
                         s->bytestream += 2;
                     }
                     g += p->linesize[0] / 4;
@@ -426,7 +403,7 @@ static int pnm_decode_frame(AVCodecContext *avctx, AVFrame *p,
 #if CONFIG_PGM_DECODER
 const FFCodec ff_pgm_decoder = {
     .p.name         = "pgm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PGM (Portable GrayMap) image"),
+    CODEC_LONG_NAME("PGM (Portable GrayMap) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PGM,
     .p.capabilities = AV_CODEC_CAP_DR1,
@@ -438,7 +415,7 @@ const FFCodec ff_pgm_decoder = {
 #if CONFIG_PGMYUV_DECODER
 const FFCodec ff_pgmyuv_decoder = {
     .p.name         = "pgmyuv",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PGMYUV (Portable GrayMap YUV) image"),
+    CODEC_LONG_NAME("PGMYUV (Portable GrayMap YUV) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PGMYUV,
     .p.capabilities = AV_CODEC_CAP_DR1,
@@ -450,7 +427,7 @@ const FFCodec ff_pgmyuv_decoder = {
 #if CONFIG_PPM_DECODER
 const FFCodec ff_ppm_decoder = {
     .p.name         = "ppm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PPM (Portable PixelMap) image"),
+    CODEC_LONG_NAME("PPM (Portable PixelMap) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PPM,
     .p.capabilities = AV_CODEC_CAP_DR1,
@@ -462,7 +439,7 @@ const FFCodec ff_ppm_decoder = {
 #if CONFIG_PBM_DECODER
 const FFCodec ff_pbm_decoder = {
     .p.name         = "pbm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PBM (Portable BitMap) image"),
+    CODEC_LONG_NAME("PBM (Portable BitMap) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PBM,
     .p.capabilities = AV_CODEC_CAP_DR1,
@@ -474,7 +451,7 @@ const FFCodec ff_pbm_decoder = {
 #if CONFIG_PAM_DECODER
 const FFCodec ff_pam_decoder = {
     .p.name         = "pam",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PAM (Portable AnyMap) image"),
+    CODEC_LONG_NAME("PAM (Portable AnyMap) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PAM,
     .p.capabilities = AV_CODEC_CAP_DR1,
@@ -486,7 +463,7 @@ const FFCodec ff_pam_decoder = {
 #if CONFIG_PFM_DECODER
 const FFCodec ff_pfm_decoder = {
     .p.name         = "pfm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PFM (Portable FloatMap) image"),
+    CODEC_LONG_NAME("PFM (Portable FloatMap) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PFM,
     .p.capabilities = AV_CODEC_CAP_DR1,
@@ -500,14 +477,14 @@ static av_cold int phm_dec_init(AVCodecContext *avctx)
 {
     PNMContext *s = avctx->priv_data;
 
-    half2float_table(s->mantissatable, s->exponenttable, s->offsettable);
+    ff_init_half2float_tables(&s->h2f_tables);
 
     return 0;
 }
 
 const FFCodec ff_phm_decoder = {
     .p.name         = "phm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PHM (Portable HalfFloatMap) image"),
+    CODEC_LONG_NAME("PHM (Portable HalfFloatMap) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PHM,
     .p.capabilities = AV_CODEC_CAP_DR1,

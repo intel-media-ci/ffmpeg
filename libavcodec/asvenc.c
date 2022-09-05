@@ -345,9 +345,10 @@ static av_cold int encode_init(AVCodecContext *avctx)
 #if CONFIG_ASV1_ENCODER
 const FFCodec ff_asv1_encoder = {
     .p.name         = "asv1",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("ASUS V1"),
+    CODEC_LONG_NAME("ASUS V1"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_ASV1,
+    .p.capabilities = AV_CODEC_CAP_DR1,
     .priv_data_size = sizeof(ASV1Context),
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_frame),
@@ -359,9 +360,10 @@ const FFCodec ff_asv1_encoder = {
 #if CONFIG_ASV2_ENCODER
 const FFCodec ff_asv2_encoder = {
     .p.name         = "asv2",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("ASUS V2"),
+    CODEC_LONG_NAME("ASUS V2"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_ASV2,
+    .p.capabilities = AV_CODEC_CAP_DR1,
     .priv_data_size = sizeof(ASV1Context),
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_frame),

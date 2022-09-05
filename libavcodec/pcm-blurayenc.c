@@ -23,7 +23,6 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "encode.h"
-#include "internal.h"
 
 typedef struct BlurayPCMEncContext {
     uint16_t header;      // Header added to every frame
@@ -266,8 +265,6 @@ static int pcm_bluray_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         return AVERROR_BUG;
     }
 
-    avpkt->pts = frame->pts;
-    avpkt->duration = ff_samples_to_time_base(avctx, frame->nb_samples);
     *got_packet_ptr = 1;
 
     return 0;
@@ -275,7 +272,7 @@ static int pcm_bluray_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
 const FFCodec ff_pcm_bluray_encoder = {
     .p.name                = "pcm_bluray",
-    .p.long_name           = NULL_IF_CONFIG_SMALL("PCM signed 16|20|24-bit big-endian for Blu-ray media"),
+    CODEC_LONG_NAME("PCM signed 16|20|24-bit big-endian for Blu-ray media"),
     .p.type                = AVMEDIA_TYPE_AUDIO,
     .p.id                  = AV_CODEC_ID_PCM_BLURAY,
     .priv_data_size        = sizeof(BlurayPCMEncContext),
