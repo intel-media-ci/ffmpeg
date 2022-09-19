@@ -89,11 +89,6 @@
 
 #ifdef __loongarch_sx
 #include <lsxintrin.h>
-
-/* __lsx_vldx() from lsxintrin.h does not accept a const void*;
- * remove the following once it does. */
-#define LSX_VLDX(cptr, stride) __lsx_vldx((void*)(cptr), (stride))
-
 /*
  * =============================================================================
  * Description : Dot product & addition of byte vector elements
@@ -721,11 +716,6 @@ static inline __m128i __lsx_vclip255_w(__m128i _in) {
 
 #ifdef __loongarch_asx
 #include <lasxintrin.h>
-
-/* __lasx_xvldx() in lasxintrin.h does not accept a const void*;
- * remove the following once it does. */
-#define LASX_XVLDX(ptr, stride) __lasx_xvldx((void*)ptr, stride)
-
 /*
  * =============================================================================
  * Description : Dot product of byte vector elements

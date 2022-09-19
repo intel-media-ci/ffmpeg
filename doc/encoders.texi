@@ -3244,9 +3244,9 @@ the average bitrate.
 than the average bitrate.
 
 @item
-@var{AVBR} - average VBR mode, when @option{maxrate} is not specified. This mode
-is further configured by the @option{avbr_accuracy} and
-@option{avbr_convergence} options.
+@var{AVBR} - average VBR mode, when @option{maxrate} is not specified, both
+@option{avbr_accuracy} and @option{avbr_convergence} are set to non-zero. This
+mode is available for H264 and HEVC on Windows.
 @end itemize
 @end itemize
 
@@ -3300,19 +3300,6 @@ Specifies how many asynchronous operations an application performs
 before the application explicitly synchronizes the result. If zero,
 the value is not specified.
 
-@item @var{avbr_accuracy}
-Accuracy of the AVBR ratecontrol (unit of tenth of percent).
-
-@item @var{avbr_convergence}
-Convergence of the AVBR ratecontrol (unit of 100 frames)
-
-The parameters @var{avbr_accuracy} and @var{avbr_convergence} are for the
-average variable bitrate control (AVBR) algorithm.
-The algorithm focuses on overall encoding quality while meeting the specified
-bitrate, @var{target_bitrate}, within the accuracy range @var{avbr_accuracy},
-after a @var{avbr_Convergence} period. This method does not follow HRD and the
-instant bitrate is not capped or padded.
-
 @item @var{preset}
 This option itemizes a range of choices from veryfast (best speed) to veryslow
 (best quality).
@@ -3344,6 +3331,35 @@ Following options can be used durning qsv encoding.
 @item @var{b_quant_offset}
 Supported in h264_qsv and hevc_qsv.
 Change these value to reset qsv codec's qp configuration.
+
+@item @var{max_frame_size}
+Supported in h264_qsv and hevc_qsv.
+Change this value to reset qsv codec's MaxFrameSize configuration.
+
+@item @var{gop_size}
+Change this value to reset qsv codec's gop configuration.
+
+@item @var{int_ref_type}
+@item @var{int_ref_cycle_size}
+@item @var{int_ref_qp_delta}
+@item @var{int_ref_cycle_dist}
+Supported in h264_qsv and hevc_qsv.
+Change these value to reset qsv codec's Intra Refresh configuration.
+
+@item @var{qmax}
+@item @var{qmin}
+@item @var{max_qp_i}
+@item @var{min_qp_i}
+@item @var{max_qp_p}
+@item @var{min_qp_p}
+@item @var{max_qp_b}
+@item @var{min_qp_b}
+Supported in h264_qsv.
+Change these value to reset qsv codec's max/min qp configuration.
+
+@item @var{low_delay_brc}
+Supported in h264_qsv and hevc_qsv.
+Change this value to reset qsv codec's low_delay_brc configuration.
 @end table
 
 @subsection H264 options
@@ -3447,8 +3463,10 @@ Specifies intra refresh type. The major goal of intra refresh is improvement of
 error resilience without significant impact on encoded bitstream size caused by
 I frames. The SDK encoder achieves this by encoding part of each frame in
 refresh cycle using intra MBs. @var{none} means no refresh. @var{vertical} means
-vertical refresh, by column of MBs. To enable intra refresh, B frame should be
-set to 0.
+vertical refresh, by column of MBs. @var{horizontal} means horizontal refresh,
+by rows of MBs. @var{slice} means horizontal refresh by slices without
+overlapping. In case of @var{slice}, in_ref_cycle_size is ignored. To enable
+intra refresh, B frame should be set to 0.
 
 @item @var{int_ref_cycle_size}
 Specifies number of pictures within refresh cycle starting from 2. 0 and 1 are
@@ -3517,6 +3535,19 @@ Provides a hint to encoder about the scenario for the encoding session.
 @item gamestreaming
 @item remotegaming
 @end table
+
+@item @var{avbr_accuracy}
+Accuracy of the AVBR ratecontrol (unit of tenth of percent).
+
+@item @var{avbr_convergence}
+Convergence of the AVBR ratecontrol (unit of 100 frames)
+
+The parameters @var{avbr_accuracy} and @var{avbr_convergence} are for the
+average variable bitrate control (AVBR) algorithm.
+The algorithm focuses on overall encoding quality while meeting the specified
+bitrate, @var{target_bitrate}, within the accuracy range @var{avbr_accuracy},
+after a @var{avbr_Convergence} period. This method does not follow HRD and the
+instant bitrate is not capped or padded.
 
 @end table
 
@@ -3634,8 +3665,10 @@ Specifies intra refresh type. The major goal of intra refresh is improvement of
 error resilience without significant impact on encoded bitstream size caused by
 I frames. The SDK encoder achieves this by encoding part of each frame in
 refresh cycle using intra MBs. @var{none} means no refresh. @var{vertical} means
-vertical refresh, by column of MBs. To enable intra refresh, B frame should be
-set to 0.
+vertical refresh, by column of MBs. @var{horizontal} means horizontal refresh,
+by rows of MBs. @var{slice} means horizontal refresh by slices without
+overlapping. In case of @var{slice}, in_ref_cycle_size is ignored. To enable
+intra refresh, B frame should be set to 0.
 
 @item @var{int_ref_cycle_size}
 Specifies number of pictures within refresh cycle starting from 2. 0 and 1 are
@@ -3680,6 +3713,19 @@ Provides a hint to encoder about the scenario for the encoding session.
 @item gamestreaming
 @item remotegaming
 @end table
+
+@item @var{avbr_accuracy}
+Accuracy of the AVBR ratecontrol (unit of tenth of percent).
+
+@item @var{avbr_convergence}
+Convergence of the AVBR ratecontrol (unit of 100 frames)
+
+The parameters @var{avbr_accuracy} and @var{avbr_convergence} are for the
+average variable bitrate control (AVBR) algorithm.
+The algorithm focuses on overall encoding quality while meeting the specified
+bitrate, @var{target_bitrate}, within the accuracy range @var{avbr_accuracy},
+after a @var{avbr_Convergence} period. This method does not follow HRD and the
+instant bitrate is not capped or padded.
 
 @end table
 

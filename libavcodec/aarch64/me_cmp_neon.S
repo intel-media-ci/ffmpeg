@@ -584,3 +584,388 @@ function sse4_neon, export=1
 
         ret
 endfunc
+
+function vsad16_neon, export=1
+        // x0           unused
+        // x1           uint8_t *pix1
+        // x2           uint8_t *pix2
+        // x3           ptrdiff_t stride
+        // w4           int h
+
+        ld1             {v0.16b}, [x1], x3              // Load pix1[0], first iteration
+        ld1             {v1.16b}, [x2], x3              // Load pix2[0], first iteration
+
+        sub             w4, w4, #1                      // we need to make h-1 iterations
+        movi            v16.8h, #0
+
+        cmp             w4, #3                          // check if we can make 3 iterations at once
+        usubl           v31.8h, v0.8b, v1.8b            // Signed difference pix1[0] - pix2[0], first iteration
+        usubl2          v30.8h, v0.16b, v1.16b          // Signed difference pix1[0] - pix2[0], first iteration
+
+        b.lt            2f
+
+1:
+        // abs(pix1[0] - pix2[0] - pix1[0 + stride] + pix2[0 + stride])
+        ld1             {v0.16b}, [x1], x3              // Load pix1[0 + stride], first iteration
+        ld1             {v1.16b}, [x2], x3              // Load pix2[0 + stride], first iteration
+        ld1             {v2.16b}, [x1], x3              // Load pix1[0 + stride], second iteration
+        ld1             {v3.16b}, [x2], x3              // Load pix2[0 + stride], second iteration
+        usubl           v29.8h, v0.8b,  v1.8b           // Signed difference pix1[0 + stride] - pix2[0 + stride], first iteration
+        usubl2          v28.8h, v0.16b, v1.16b          // Signed difference pix1[0 + stride] - pix2[0 + stride], first iteration
+        ld1             {v4.16b}, [x1], x3              // Load pix1[0 + stride], third iteration
+        ld1             {v5.16b}, [x2], x3              // Load pix2[0 + stride], third iteration
+        usubl           v27.8h, v2.8b,  v3.8b           // Signed difference pix1[0 + stride] - pix2[0 + stride], second iteration
+        saba            v16.8h, v31.8h, v29.8h          // Signed absolute difference and accumulate the result. first iteration
+        usubl2          v26.8h, v2.16b, v3.16b          // Signed difference pix1[0 + stride] - pix2[0 + stride], second iteration
+        saba            v16.8h, v30.8h, v28.8h          // Signed absolute difference and accumulate the result. first iteration
+        usubl           v25.8h, v4.8b,  v5.8b           // Signed difference pix1[0 + stride] - pix2[0 + stride], third iteration
+        usubl2          v24.8h, v4.16b, v5.16b          // Signed difference pix1[0 + stride] - pix2[0 + stride], third iteration
+        saba            v16.8h, v29.8h, v27.8h          // Signed absolute difference and accumulate the result. second iteration
+        mov             v31.16b, v25.16b
+        saba            v16.8h, v28.8h, v26.8h          // Signed absolute difference and accumulate the result. second iteration
+        sub             w4, w4, #3                      // h -= 3
+        mov             v30.16b, v24.16b
+        saba            v16.8h, v27.8h, v25.8h          // Signed absolute difference and accumulate the result. third iteration
+        cmp             w4, #3
+        saba            v16.8h, v26.8h, v24.8h          // Signed absolute difference and accumulate the result. third iteration
+
+        b.ge            1b
+        cbz             w4, 3f
+2:
+        ld1             {v0.16b}, [x1], x3
+        ld1             {v1.16b}, [x2], x3
+        subs            w4, w4, #1
+        usubl           v29.8h,  v0.8b,   v1.8b
+        usubl2          v28.8h,  v0.16b,  v1.16b
+        saba            v16.8h,  v31.8h,  v29.8h
+        mov             v31.16b, v29.16b
+        saba            v16.8h,  v30.8h,  v28.8h
+        mov             v30.16b, v28.16b
+
+        b.ne            2b
+3:
+        uaddlv          s17, v16.8h
+        fmov            w0, s17
+
+        ret
+endfunc
+
+function vsse16_neon, export=1
+        // x0           unused
+        // x1           uint8_t *pix1
+        // x2           uint8_t *pix2
+        // x3           ptrdiff_t stride
+        // w4           int h
+
+        ld1             {v0.16b}, [x1], x3              // Load pix1[0], first iteration
+        ld1             {v1.16b}, [x2], x3              // Load pix2[0], first iteration
+
+        sub             w4, w4, #1                      // we need to make h-1 iterations
+        movi            v16.4s, #0
+        movi            v17.4s, #0
+
+        cmp             w4, #3                          // check if we can make 3 iterations at once
+        usubl           v31.8h, v0.8b, v1.8b            // Signed difference of pix1[0] - pix2[0], first iteration
+        usubl2          v30.8h, v0.16b, v1.16b          // Signed difference of pix1[0] - pix2[0], first iteration
+        b.le            2f
+
+
+1:
+        // x = abs(pix1[0] - pix2[0] - pix1[0 + stride] + pix2[0 + stride])
+        // res = (x) * (x)
+        ld1             {v0.16b}, [x1], x3              // Load pix1[0 + stride], first iteration
+        ld1             {v1.16b}, [x2], x3              // Load pix2[0 + stride], first iteration
+        ld1             {v2.16b}, [x1], x3              // Load pix1[0 + stride], second iteration
+        ld1             {v3.16b}, [x2], x3              // Load pix2[0 + stride], second iteration
+        usubl           v29.8h, v0.8b, v1.8b
+        usubl2          v28.8h, v0.16b, v1.16b
+        ld1             {v4.16b}, [x1], x3              // Load pix1[0 + stride], third iteration
+        ld1             {v5.16b}, [x2], x3              // Load pix1[0 + stride], third iteration
+        sabd            v31.8h, v31.8h, v29.8h
+        sabd            v30.8h, v30.8h, v28.8h
+        usubl           v27.8h, v2.8b, v3.8b
+        usubl2          v26.8h, v2.16b, v3.16b
+        usubl           v25.8h, v4.8b, v5.8b
+        usubl2          v24.8h, v4.16b, v5.16b
+        sabd            v29.8h, v29.8h, v27.8h
+        sabd            v27.8h, v27.8h, v25.8h
+        umlal           v16.4s, v31.4h, v31.4h
+        umlal2          v17.4s, v31.8h, v31.8h
+        sabd            v28.8h, v28.8h, v26.8h
+        sabd            v26.8h, v26.8h, v24.8h
+        umlal           v16.4s, v30.4h, v30.4h
+        umlal2          v17.4s, v30.8h, v30.8h
+        mov             v31.16b, v25.16b
+        umlal           v16.4s, v29.4h, v29.4h
+        umlal2          v17.4s, v29.8h, v29.8h
+        mov             v30.16b, v24.16b
+        umlal           v16.4s, v28.4h, v28.4h
+        umlal2          v17.4s, v28.8h, v28.8h
+        sub             w4, w4, #3
+        umlal           v16.4s, v27.4h, v27.4h
+        umlal2          v17.4s, v27.8h, v27.8h
+        cmp             w4, #3
+        umlal           v16.4s, v26.4h, v26.4h
+        umlal2          v17.4s, v26.8h, v26.8h
+
+        b.ge            1b
+
+        cbz             w4, 3f
+
+// iterate by once
+2:
+        ld1             {v0.16b}, [x1], x3
+        ld1             {v1.16b}, [x2], x3
+        subs            w4, w4, #1
+        usubl           v29.8h, v0.8b, v1.8b
+        usubl2          v28.8h, v0.16b, v1.16b
+        sabd            v31.8h, v31.8h, v29.8h
+        sabd            v30.8h, v30.8h, v28.8h
+        umlal           v16.4s, v31.4h, v31.4h
+        umlal2          v17.4s, v31.8h, v31.8h
+        mov             v31.16b, v29.16b
+        umlal           v16.4s, v30.4h, v30.4h
+        umlal2          v17.4s, v30.8h, v30.8h
+        mov             v30.16b, v28.16b
+        b.ne            2b
+
+3:
+        add             v16.4s, v16.4s, v17.4s
+        uaddlv          d17, v16.4s
+        fmov            w0, s17
+
+        ret
+endfunc
+
+function vsad_intra16_neon, export=1
+        // x0           unused
+        // x1           uint8_t *pix1
+        // x2           uint8_t *dummy
+        // x3           ptrdiff_t stride
+        // w4           int h
+
+        ld1             {v0.16b}, [x1], x3
+        sub             w4, w4, #1 // we need to make h-1 iterations
+        cmp             w4, #3
+        movi            v16.8h, #0
+        b.lt            2f
+
+// make 4 iterations at once
+1:
+        // v = abs( pix1[0] - pix1[0 + stride] )
+        // score = sum(v)
+        ld1             {v1.16b}, [x1], x3
+        ld1             {v2.16b}, [x1], x3
+        uabal           v16.8h, v0.8b, v1.8b
+        ld1             {v3.16b}, [x1], x3
+        uabal2          v16.8h, v0.16b, v1.16b
+        sub             w4, w4, #3
+        uabal           v16.8h, v1.8b, v2.8b
+        cmp             w4, #3
+        uabal2          v16.8h, v1.16b, v2.16b
+        mov             v0.16b, v3.16b
+        uabal           v16.8h, v2.8b, v3.8b
+        uabal2          v16.8h, v2.16b, v3.16b
+        b.ge            1b
+        cbz             w4, 3f
+
+// iterate by one
+2:
+        ld1             {v1.16b}, [x1], x3
+        subs            w4, w4, #1
+        uabal           v16.8h, v0.8b, v1.8b
+        uabal2          v16.8h, v0.16b, v1.16b
+        mov             v0.16b, v1.16b
+        cbnz            w4, 2b
+
+3:
+        uaddlv          s17, v16.8h
+        fmov            w0, s17
+
+        ret
+endfunc
+
+function vsse_intra16_neon, export=1
+        // x0           unused
+        // x1           uint8_t *pix1
+        // x2           uint8_t *dummy
+        // x3           ptrdiff_t stride
+        // w4           int h
+
+        ld1             {v0.16b}, [x1], x3
+        movi            v16.4s, #0
+        movi            v17.4s, #0
+
+        sub             w4, w4, #1 // we need to make h-1 iterations
+        cmp             w4, #3
+        b.lt            2f
+
+1:
+        // v = abs( pix1[0] - pix1[0 + stride] )
+        // score = sum( v * v )
+        ld1             {v1.16b}, [x1], x3
+        ld1             {v2.16b}, [x1], x3
+        uabd            v30.16b, v0.16b, v1.16b
+        ld1             {v3.16b}, [x1], x3
+        umull           v29.8h, v30.8b, v30.8b
+        umull2          v28.8h, v30.16b, v30.16b
+        uabd            v27.16b, v1.16b, v2.16b
+        uadalp          v16.4s, v29.8h
+        umull           v26.8h, v27.8b, v27.8b
+        umull2          v27.8h, v27.16b, v27.16b
+        uadalp          v17.4s, v28.8h
+        uabd            v25.16b, v2.16b, v3.16b
+        uadalp          v16.4s, v26.8h
+        umull           v24.8h, v25.8b, v25.8b
+        umull2          v25.8h, v25.16b, v25.16b
+        uadalp          v17.4s, v27.8h
+        sub             w4, w4, #3
+        uadalp          v16.4s, v24.8h
+        cmp             w4, #3
+        uadalp          v17.4s, v25.8h
+        mov             v0.16b, v3.16b
+
+        b.ge            1b
+        cbz             w4, 3f
+
+// iterate by one
+2:
+        ld1             {v1.16b}, [x1], x3
+        subs            w4, w4, #1
+        uabd            v30.16b, v0.16b, v1.16b
+        mov             v0.16b, v1.16b
+        umull           v29.8h, v30.8b, v30.8b
+        umull2          v30.8h, v30.16b, v30.16b
+        uadalp          v16.4s, v29.8h
+        uadalp          v17.4s, v30.8h
+        cbnz            w4, 2b
+
+3:
+        add             v16.4s, v16.4s, v17.4S
+        uaddlv          d17, v16.4s
+        fmov            w0, s17
+
+        ret
+endfunc
+
+function nsse16_neon, export=1
+        // x0           multiplier
+        // x1           uint8_t *pix1
+        // x2           uint8_t *pix2
+        // x3           ptrdiff_t stride
+        // w4           int h
+
+        str             x0, [sp, #-0x40]!
+        stp             x1, x2, [sp, #0x10]
+        stp             x3, x4, [sp, #0x20]
+        str             x30, [sp, #0x30]
+        bl              X(sse16_neon)
+        ldr             x30, [sp, #0x30]
+        mov             w9, w0                                  // here we store score1
+        ldr             x5, [sp]
+        ldp             x1, x2, [sp, #0x10]
+        ldp             x3, x4, [sp, #0x20]
+        add             sp, sp, #0x40
+
+        movi            v16.8h, #0
+        movi            v17.8h, #0
+        movi            v18.8h, #0
+        movi            v19.8h, #0
+
+        ld1             {v0.16b}, [x1], x3
+        subs            w4, w4, #1                              // we need to make h-1 iterations
+        ld1             {v2.16b}, [x2], x3
+        ext             v1.16b, v0.16b, v0.16b, #1              // x1 + 1
+        cmp             w4, #2
+        ext             v3.16b, v2.16b, v2.16b, #1              // x2 + 1
+
+        b.lt            2f
+
+// make 2 iterations at once
+1:
+        ld1             {v4.16b}, [x1], x3
+        ld1             {v6.16b}, [x2], x3
+        ld1             {v20.16b}, [x1], x3
+        ext             v5.16b, v4.16b, v4.16b, #1              // x1 + stride + 1
+        usubl           v31.8h, v0.8b, v4.8b
+        usubl2          v30.8h, v0.16b, v4.16b
+        ld1             {v22.16b}, [x2], x3
+        usubl           v29.8h, v1.8b, v5.8b
+        usubl2          v28.8h, v1.16b, v5.16b
+        ext             v7.16b, v6.16b, v6.16b, #1              // x2 + stride + 1
+        saba            v16.8h, v31.8h, v29.8h
+        ext             v21.16b, v20.16b, v20.16b, #1
+        saba            v17.8h, v30.8h, v28.8h
+        usubl           v27.8h, v2.8b, v6.8b
+        usubl2          v26.8h, v2.16b, v6.16b
+        ext             v23.16b, v22.16b, v22.16b, #1
+        usubl           v25.8h, v3.8b, v7.8b
+        usubl2          v24.8h, v3.16b, v7.16b
+        saba            v18.8h, v27.8h, v25.8h
+        saba            v19.8h, v26.8h, v24.8h
+
+        usubl           v31.8h, v4.8b, v20.8b
+        usubl2          v30.8h, v4.16b, v20.16b
+        usubl           v29.8h, v5.8b, v21.8b
+        usubl2          v28.8h, v5.16b, v21.16b
+        saba            v16.8h, v31.8h, v29.8h
+        saba            v17.8h, v30.8h, v28.8h
+        usubl           v27.8h, v6.8b, v22.8b
+        usubl2          v26.8h, v6.16b, v22.16b
+        usubl           v25.8h, v7.8b, v23.8b
+        usubl2          v24.8h, v7.16b, v23.16b
+        saba            v18.8h, v27.8h, v25.8h
+        saba            v19.8h, v26.8h, v24.8h
+        sub             w4, w4, #2
+
+        mov             v0.16b, v20.16b
+        mov             v1.16b, v21.16b
+        cmp             w4, #2
+        mov             v2.16b, v22.16b
+        mov             v3.16b, v23.16b
+
+        b.ge            1b
+        cbz             w4, 3f
+
+// iterate by one
+2:
+        ld1             {v4.16b}, [x1], x3
+        subs            w4, w4, #1
+        ld1             {v6.16b}, [x2], x3
+        ext             v5.16b, v4.16b, v4.16b, #1              // x1 + stride + 1
+        usubl           v31.8h, v0.8b, v4.8b
+        ext             v7.16b, v6.16b, v6.16b, #1              // x2 + stride + 1
+
+        usubl2          v30.8h, v0.16b, v4.16b
+        usubl           v29.8h, v1.8b, v5.8b
+        usubl2          v28.8h, v1.16b, v5.16b
+        saba            v16.8h, v31.8h, v29.8h
+        saba            v17.8h, v30.8h, v28.8h
+        usubl           v27.8h, v2.8b, v6.8b
+        usubl2          v26.8h, v2.16b, v6.16b
+        usubl           v25.8h, v3.8b, v7.8b
+        usubl2          v24.8h, v3.16b, v7.16b
+        saba            v18.8h, v27.8h, v25.8h
+        saba            v19.8h, v26.8h, v24.8h
+
+        mov             v0.16b, v4.16b
+        mov             v1.16b, v5.16b
+        mov             v2.16b, v6.16b
+        mov             v3.16b, v7.16b
+
+        cbnz            w4, 2b
+
+3:
+        sqsub           v17.8h, v17.8h, v19.8h
+        sqsub           v16.8h, v16.8h, v18.8h
+        ins             v17.h[7], wzr
+        sqadd           v16.8h, v16.8h, v17.8h
+        saddlv          s16, v16.8h
+        sqabs           s16, s16
+        fmov            w0, s16
+
+        mul             w0, w0, w5
+        add             w0, w0, w9
+
+        ret
+endfunc
