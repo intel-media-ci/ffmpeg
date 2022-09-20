@@ -690,8 +690,7 @@ static void videotoolbox_decoder_callback(void *opaque,
                                           CMTime pts,
                                           CMTime duration)
 {
-    AVCodecContext *avctx = opaque;
-    VTContext *vtctx = avctx->internal->hwaccel_priv_data;
+    VTContext *vtctx = opaque;
 
     if (vtctx->frame) {
         CVPixelBufferRelease(vtctx->frame);
@@ -699,7 +698,8 @@ static void videotoolbox_decoder_callback(void *opaque,
     }
 
     if (!image_buffer) {
-        av_log(avctx, status ? AV_LOG_WARNING : AV_LOG_DEBUG, "vt decoder cb: output image buffer is null: %i\n", status);
+        av_log(vtctx->logctx, status ? AV_LOG_WARNING : AV_LOG_DEBUG,
+               "vt decoder cb: output image buffer is null: %i\n", status);
         return;
     }
 
@@ -949,7 +949,7 @@ static int videotoolbox_start(AVCodecContext *avctx)
                                                      videotoolbox->cv_pix_fmt_type);
 
     decoder_cb.decompressionOutputCallback = videotoolbox_decoder_callback;
-    decoder_cb.decompressionOutputRefCon   = avctx;
+    decoder_cb.decompressionOutputRefCon   = avctx->internal->hwaccel_priv_data;
 
     status = VTDecompressionSessionCreate(NULL,                      // allocator
                                           videotoolbox->cm_fmt_desc, // videoFormatDescription
@@ -1179,6 +1179,8 @@ int ff_videotoolbox_common_init(AVCodecContext *avctx)
     AVHWFramesContext *hw_frames;
     int err;
 
+    vtctx->logctx = avctx;
+
     // Old API - do nothing.
     if (avctx->hwaccel_context)
         return 0;
@@ -1375,8 +1377,6 @@ static AVVideotoolboxContext *av_videotoolbox_alloc_context_with_pix_fmt(enum AV
     AVVideotoolboxContext *ret = av_mallocz(sizeof(*ret));
 
     if (ret) {
-        ret->output_callback = videotoolbox_decoder_callback;
-
         OSType cv_pix_fmt_type = av_map_videotoolbox_format_from_pixfmt2(pix_fmt, full_range);
         if (cv_pix_fmt_type == 0) {
             cv_pix_fmt_type = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
