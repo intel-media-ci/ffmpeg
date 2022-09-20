@@ -1579,30 +1579,6 @@ static inline int vorbis_residue_decode(vorbis_context *vc, vorbis_residue *vr,
     }
 }
 
-void ff_vorbis_inverse_coupling(float *mag, float *ang, intptr_t blocksize)
-{
-    int i;
-    for (i = 0;  i < blocksize;  i++) {
-        if (mag[i] > 0.0) {
-            if (ang[i] > 0.0) {
-                ang[i] = mag[i] - ang[i];
-            } else {
-                float temp = ang[i];
-                ang[i]     = mag[i];
-                mag[i]    += temp;
-            }
-        } else {
-            if (ang[i] > 0.0) {
-                ang[i] += mag[i];
-            } else {
-                float temp = ang[i];
-                ang[i]     = mag[i];
-                mag[i]    -= temp;
-            }
-        }
-    }
-}
-
 // Decode the audio packet using the functions above
 
 static int vorbis_parse_audio_packet(vorbis_context *vc, float **floor_ptr)
