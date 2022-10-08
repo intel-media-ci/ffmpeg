@@ -68,6 +68,7 @@ void checkasm_check_idctdsp(void);
 void checkasm_check_jpeg2000dsp(void);
 void checkasm_check_llviddsp(void);
 void checkasm_check_llviddspenc(void);
+void checkasm_check_lpc(void);
 void checkasm_check_motion(void);
 void checkasm_check_nlmeans(void);
 void checkasm_check_opusdsp(void);
@@ -88,6 +89,7 @@ void checkasm_check_vf_threshold(void);
 void checkasm_check_vp8dsp(void);
 void checkasm_check_vp9dsp(void);
 void checkasm_check_videodsp(void);
+void checkasm_check_vorbisdsp(void);
 
 struct CheckasmPerf;
 

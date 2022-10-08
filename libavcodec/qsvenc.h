@@ -52,9 +52,7 @@
 
 #define QSV_COMMON_OPTS \
 { "async_depth", "Maximum processing parallelism", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = ASYNC_DEPTH_DEFAULT }, 1, INT_MAX, VE },                          \
-{ "avbr_accuracy",    "Accuracy of the AVBR ratecontrol (unit of tenth of percent)",    OFFSET(qsv.avbr_accuracy),    AV_OPT_TYPE_INT, { .i64 = 1 }, 1, UINT16_MAX, VE }, \
-{ "avbr_convergence", "Convergence of the AVBR ratecontrol (unit of 100 frames)", OFFSET(qsv.avbr_convergence), AV_OPT_TYPE_INT, { .i64 = 1 }, 1, UINT16_MAX, VE },     \
-{ "preset", NULL, OFFSET(qsv.preset), AV_OPT_TYPE_INT, { .i64 = MFX_TARGETUSAGE_BALANCED }, MFX_TARGETUSAGE_BEST_QUALITY, MFX_TARGETUSAGE_BEST_SPEED,   VE, "preset" }, \
+{ "preset", NULL, OFFSET(qsv.preset), AV_OPT_TYPE_INT, { .i64 = MFX_TARGETUSAGE_UNKNOWN }, MFX_TARGETUSAGE_UNKNOWN, MFX_TARGETUSAGE_BEST_SPEED,   VE, "preset" },       \
 { "veryfast",    NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_TARGETUSAGE_BEST_SPEED  },   INT_MIN, INT_MAX, VE, "preset" },                                                \
 { "faster",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_TARGETUSAGE_6  },            INT_MIN, INT_MAX, VE, "preset" },                                                \
 { "fast",        NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_TARGETUSAGE_5  },            INT_MIN, INT_MAX, VE, "preset" },                                                \
@@ -123,6 +121,10 @@
 { "videosurveillance",  NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_VIDEO_SURVEILLANCE }, .flags = VE, "scenario" },                                      \
 { "gamestreaming",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_GAME_STREAMING },     .flags = VE, "scenario" },                                      \
 { "remotegaming",       NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_SCENARIO_REMOTE_GAMING },      .flags = VE, "scenario" },
+
+#define QSV_OPTION_AVBR \
+{ "avbr_accuracy",    "Accuracy of the AVBR ratecontrol (unit of tenth of percent)",    OFFSET(qsv.avbr_accuracy),    AV_OPT_TYPE_INT, { .i64 = 0 }, 0, UINT16_MAX, VE }, \
+{ "avbr_convergence", "Convergence of the AVBR ratecontrol (unit of 100 frames)", OFFSET(qsv.avbr_convergence), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, UINT16_MAX, VE },
 
 extern const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[];
 
@@ -249,6 +251,35 @@ typedef struct QSVEncContext {
     float old_i_quant_offset;
     float old_b_quant_factor;
     float old_b_quant_offset;
+    // This is used for max_frame_size reset
+    int old_max_frame_size;
+    // This is used for gop reset
+    int old_gop_size;
+    // These are used for intra refresh reset
+    int old_int_ref_type;
+    int old_int_ref_cycle_size;
+    int old_int_ref_qp_delta;
+    int old_int_ref_cycle_dist;
+    // These are used for max/min qp reset;
+    int old_qmax;
+    int old_qmin;
+    int old_max_qp_i;
+    int old_min_qp_i;
+    int old_max_qp_p;
+    int old_min_qp_p;
+    int old_max_qp_b;
+    int old_min_qp_b;
+    // This is used for low_delay_brc reset
+    int old_low_delay_brc;
+    // This is used for framerate reset
+    AVRational old_framerate;
+    // These are used for bitrate control reset
+    int old_bit_rate;
+    int old_rc_buffer_size;
+    int old_rc_initial_buffer_occupancy;
+    int old_rc_max_rate;
+    // This is used for SEI Timing reset
+    int old_pic_timing_sei;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);

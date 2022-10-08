@@ -27,6 +27,7 @@
 #include "audio_frame_queue.h"
 #include "codec_internal.h"
 #include "encode.h"
+#include "internal.h"
 
 typedef struct AptXEncContext {
     AptXContext common;
@@ -257,6 +258,10 @@ static av_cold int aptx_encode_init(AVCodecContext *avctx)
 
     ff_af_queue_init(avctx, &s->afq);
 
+    if (!avctx->frame_size || avctx->frame_size % 4)
+        avctx->frame_size = 1024;
+    avctx->internal->pad_samples = 4;
+
     return ff_aptx_init(avctx);
 }
 
@@ -266,14 +271,12 @@ const FFCodec ff_aptx_encoder = {
     CODEC_LONG_NAME("aptX (Audio Processing Technology for Bluetooth)"),
     .p.type                = AVMEDIA_TYPE_AUDIO,
     .p.id                  = AV_CODEC_ID_APTX,
-    .p.capabilities        = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME,
+    .p.capabilities        = AV_CODEC_CAP_DR1,
     .priv_data_size        = sizeof(AptXEncContext),
     .init                  = aptx_encode_init,
     FF_CODEC_ENCODE_CB(aptx_encode_frame),
     .close                 = aptx_close,
-#if FF_API_OLD_CHANNEL_LAYOUT
-    .p.channel_layouts     = (const uint64_t[]) { AV_CH_LAYOUT_STEREO, 0},
-#endif
+    CODEC_OLD_CHANNEL_LAYOUTS(AV_CH_LAYOUT_STEREO)
     .p.ch_layouts          = (const AVChannelLayout[]) { AV_CHANNEL_LAYOUT_STEREO, { 0 } },
     .p.sample_fmts         = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S32P,
                                                              AV_SAMPLE_FMT_NONE },
@@ -287,14 +290,12 @@ const FFCodec ff_aptx_hd_encoder = {
     CODEC_LONG_NAME("aptX HD (Audio Processing Technology for Bluetooth)"),
     .p.type                = AVMEDIA_TYPE_AUDIO,
     .p.id                  = AV_CODEC_ID_APTX_HD,
-    .p.capabilities        = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME,
+    .p.capabilities        = AV_CODEC_CAP_DR1,
     .priv_data_size        = sizeof(AptXEncContext),
     .init                  = aptx_encode_init,
     FF_CODEC_ENCODE_CB(aptx_encode_frame),
     .close                 = aptx_close,
-#if FF_API_OLD_CHANNEL_LAYOUT
-    .p.channel_layouts     = (const uint64_t[]) { AV_CH_LAYOUT_STEREO, 0},
-#endif
+    CODEC_OLD_CHANNEL_LAYOUTS(AV_CH_LAYOUT_STEREO)
     .p.ch_layouts          = (const AVChannelLayout[]) { AV_CHANNEL_LAYOUT_STEREO, { 0 } },
     .p.sample_fmts         = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S32P,
                                                              AV_SAMPLE_FMT_NONE },

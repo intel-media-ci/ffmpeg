@@ -29,6 +29,7 @@
 #include "libavutil/ffmath.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
+#include "libavutil/thread.h"
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "dca.h"
@@ -159,8 +160,49 @@ static void subband_bufer_free(DCAEncContext *c)
     }
 }
 
+static uint16_t bitalloc_12_table[DCA_BITALLOC_12_COUNT][12 + 1][2];
+
+static uint16_t bitalloc_table[DCA_NUM_BITALLOC_CODES][2];
+static const uint16_t (*bitalloc_tables[DCA_CODE_BOOKS][8])[2];
+
+static av_cold void create_enc_table(uint16_t dst[][2], unsigned count,
+                                     const uint8_t (**src_tablep)[2])
+{
+    const uint8_t (*src_table)[2] = *src_tablep;
+    uint16_t code = 0;
+
+    for (unsigned i = 0; i < count; i++) {
+        unsigned dst_idx = src_table[i][0];
+
+        dst[dst_idx][0] = code >> (16 - src_table[i][1]);
+        dst[dst_idx][1] = src_table[i][1];
+
+        code += 1 << (16 - src_table[i][1]);
+    }
+    *src_tablep += count;
+}
+
+static av_cold void dcaenc_init_static_tables(void)
+{
+    uint16_t (*bitalloc_dst)[2] = bitalloc_table;
+    const uint8_t (*src_table)[2] = ff_dca_vlc_src_tables;
+
+    for (unsigned i = 0; i < DCA_CODE_BOOKS; i++) {
+        for (unsigned j = 0; j < ff_dca_quant_index_group_size[i]; j++) {
+            create_enc_table(bitalloc_dst, ff_dca_bitalloc_sizes[i],
+                             &src_table);
+            bitalloc_tables[i][j] = bitalloc_dst - ff_dca_bitalloc_offsets[i];
+            bitalloc_dst += ff_dca_bitalloc_sizes[i];
+        }
+    }
+
+    for (unsigned i = 0; i < DCA_BITALLOC_12_COUNT; i++)
+        create_enc_table(&bitalloc_12_table[i][1], 12, &src_table);
+}
+
 static int encode_init(AVCodecContext *avctx)
 {
+    static AVOnce init_static_once = AV_ONCE_INIT;
     DCAEncContext *c = avctx->priv_data;
     AVChannelLayout layout = avctx->ch_layout;
     int i, j, k, min_frame_bits;
@@ -180,26 +222,24 @@ static int encode_init(AVCodecContext *avctx)
     if (ff_dcaadpcm_init(&c->adpcm_ctx))
         return AVERROR(ENOMEM);
 
-    if (layout.order == AV_CHANNEL_ORDER_UNSPEC) {
-        av_log(avctx, AV_LOG_WARNING, "No channel layout specified. The "
-                                      "encoder will guess the layout, but it "
-                                      "might be incorrect.\n");
-        av_channel_layout_default(&layout, layout.nb_channels);
-    }
-
-    if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_MONO))
+    switch (layout.nb_channels) {
+    case 1: /* mono */
         c->channel_config = 0;
-    else if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO))
+        break;
+    case 2: /* stereo */
         c->channel_config = 2;
-    else if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_2_2))
+        break;
+    case 4: /* 2.2 */
         c->channel_config = 8;
-    else if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT0))
+        break;
+    case 5: /* 5.0 */
         c->channel_config = 9;
-    else if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1))
+        break;
+    case 6: /* 5.1 */
         c->channel_config = 9;
-    else {
-        av_log(avctx, AV_LOG_ERROR, "Unsupported channel layout!\n");
-        return AVERROR_PATCHWELCOME;
+        break;
+    default:
+        av_assert1(!"impossible channel layout");
     }
 
     if (c->lfe_channel) {
@@ -307,6 +347,7 @@ static int encode_init(AVCodecContext *avctx)
         c->band_spectrum_tab[1][j] = (int32_t)(200 * log10(accum));
     }
 
+    ff_thread_once(&init_static_once, dcaenc_init_static_tables);
     return 0;
 }
 
@@ -398,6 +439,39 @@ static void lfe_downsample(DCAEncContext *c, const int32_t *input)
 
         hist_start = (hist_start + 64) & 511;
     }
+}
+
+static uint32_t dca_vlc_calc_alloc_bits(const int values[], uint8_t n, uint8_t sel)
+{
+    uint32_t sum = 0;
+    for (unsigned i = 0; i < n; i++)
+        sum += bitalloc_12_table[sel][values[i]][1];
+    return sum;
+}
+
+static void dca_vlc_enc_alloc(PutBitContext *pb, const int values[],
+                              uint8_t n, uint8_t sel)
+{
+    for (unsigned i = 0; i < n; i++)
+        put_bits(pb, bitalloc_12_table[sel][values[i]][1],
+                     bitalloc_12_table[sel][values[i]][0]);
+}
+
+static uint32_t dca_vlc_calc_quant_bits(const int values[], uint8_t n,
+                                        uint8_t sel, uint8_t table)
+{
+    uint32_t sum = 0;
+    for (unsigned i = 0; i < n; i++)
+        sum += bitalloc_tables[table][sel][values[i]][1];
+    return sum;
+}
+
+static void dca_vlc_enc_quant(PutBitContext *pb, const int values[],
+                              uint8_t n, uint8_t sel, uint8_t table)
+{
+    for (unsigned i = 0; i < n; i++)
+        put_bits(pb, bitalloc_tables[table][sel][values[i]][1],
+                     bitalloc_tables[table][sel][values[i]][0]);
 }
 
 static int32_t get_cb(DCAEncContext *c, int32_t in)
@@ -695,8 +769,8 @@ static void accumulate_huff_bit_consumption(int abits, int32_t *quantized,
 {
     uint8_t sel, id = abits - 1;
     for (sel = 0; sel < ff_dca_quant_index_group_size[id]; sel++)
-        result[sel] += ff_dca_vlc_calc_quant_bits(quantized, SUBBAND_SAMPLES,
-                                                  sel, id);
+        result[sel] += dca_vlc_calc_quant_bits(quantized, SUBBAND_SAMPLES,
+                                               sel, id);
 }
 
 static uint32_t set_best_code(uint32_t vlc_bits[DCA_CODE_BOOKS][7],
@@ -757,7 +831,7 @@ static uint32_t set_best_abits_code(int abits[DCAENC_SUBBANDS], int bands,
     }
 
     for (i = 0; i < DCA_BITALLOC_12_COUNT; i++) {
-        t = ff_dca_vlc_calc_alloc_bits(abits, bands, i);
+        t = dca_vlc_calc_alloc_bits(abits, bands, i);
         if (t < best_bits) {
             best_bits = t;
             best_sel = i;
@@ -1081,8 +1155,8 @@ static void put_subframe_samples(DCAEncContext *c, int ss, int band, int ch)
         sel = c->quant_index_sel[ch][c->abits[ch][band] - 1];
         // Huffman codes
         if (sel < ff_dca_quant_index_group_size[c->abits[ch][band] - 1]) {
-            ff_dca_vlc_enc_quant(&c->pb, &c->quantized[ch][band][ss * 8], 8,
-                                 sel, c->abits[ch][band] - 1);
+            dca_vlc_enc_quant(&c->pb, &c->quantized[ch][band][ss * 8], 8,
+                              sel, c->abits[ch][band] - 1);
             return;
         }
 
@@ -1135,8 +1209,8 @@ static void put_subframe(DCAEncContext *c, int subframe)
                 put_bits(&c->pb, 5, c->abits[ch][band]);
             }
         } else {
-            ff_dca_vlc_enc_alloc(&c->pb, c->abits[ch], DCAENC_SUBBANDS,
-                                 c->bit_allocation_sel[ch]);
+            dca_vlc_enc_alloc(&c->pb, c->abits[ch], DCAENC_SUBBANDS,
+                              c->bit_allocation_sel[ch]);
         }
     }
 
@@ -1250,14 +1324,9 @@ const FFCodec ff_dca_encoder = {
     .p.sample_fmts         = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S32,
                                                             AV_SAMPLE_FMT_NONE },
     .p.supported_samplerates = sample_rates,
-#if FF_API_OLD_CHANNEL_LAYOUT
-    .p.channel_layouts     = (const uint64_t[]) { AV_CH_LAYOUT_MONO,
-                                                  AV_CH_LAYOUT_STEREO,
-                                                  AV_CH_LAYOUT_2_2,
-                                                  AV_CH_LAYOUT_5POINT0,
-                                                  AV_CH_LAYOUT_5POINT1,
-                                                  0 },
-#endif
+    CODEC_OLD_CHANNEL_LAYOUTS(AV_CH_LAYOUT_MONO, AV_CH_LAYOUT_STEREO,
+                              AV_CH_LAYOUT_2_2,  AV_CH_LAYOUT_5POINT0,
+                              AV_CH_LAYOUT_5POINT1)
     .p.ch_layouts     = (const AVChannelLayout[]){
         AV_CHANNEL_LAYOUT_MONO,
         AV_CHANNEL_LAYOUT_STEREO,

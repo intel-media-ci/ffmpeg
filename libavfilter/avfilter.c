@@ -21,6 +21,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
+#include "libavutil/bprint.h"
 #include "libavutil/buffer.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
@@ -45,6 +46,7 @@
 
 static void tlog_ref(void *ctx, AVFrame *ref, int end)
 {
+#ifdef TRACE
     ff_tlog(ctx,
             "ref[%p buf:%p data:%p linesize[%d, %d, %d, %d] pts:%"PRId64" pos:%"PRId64,
             ref, ref->buf, ref->data[0],
@@ -61,16 +63,22 @@ static void tlog_ref(void *ctx, AVFrame *ref, int end)
                 av_get_picture_type_char(ref->pict_type));
     }
     if (ref->nb_samples) {
-        ff_tlog(ctx, " cl:%"PRId64"d n:%d r:%d",
-                ref->channel_layout,
+        AVBPrint bprint;
+
+        av_bprint_init(&bprint, 1, AV_BPRINT_SIZE_UNLIMITED);
+        av_channel_layout_describe_bprint(&ref->ch_layout, &bprint);
+        ff_tlog(ctx, " cl:%s n:%d r:%d",
+                bprint.str,
                 ref->nb_samples,
                 ref->sample_rate);
+        av_bprint_finalize(&bprint, NULL);
     }
 
     ff_tlog(ctx, "]%s", end ? "\n" : "");
+#endif
 }
 
-void ff_command_queue_pop(AVFilterContext *filter)
+static void command_queue_pop(AVFilterContext *filter)
 {
     AVFilterCommand *c= filter->command_queue;
     av_freep(&c->arg);
@@ -373,6 +381,7 @@ int avfilter_config_links(AVFilterContext *filter)
     return 0;
 }
 
+#ifdef TRACE
 void ff_tlog_link(void *ctx, AVFilterLink *link, int end)
 {
     if (link->type == AVMEDIA_TYPE_VIDEO) {
@@ -396,6 +405,7 @@ void ff_tlog_link(void *ctx, AVFilterLink *link, int end)
                 end ? "\n" : "");
     }
 }
+#endif
 
 int ff_request_frame(AVFilterLink *link)
 {
@@ -770,7 +780,7 @@ void avfilter_free(AVFilterContext *filter)
     av_freep(&filter->outputs);
     av_freep(&filter->priv);
     while(filter->command_queue){
-        ff_command_queue_pop(filter);
+        command_queue_pop(filter);
     }
     av_opt_free(filter);
     av_expr_free(filter->enable);
@@ -1484,7 +1494,7 @@ int ff_inlink_process_commands(AVFilterLink *link, const AVFrame *frame)
                "Processing command time:%f command:%s arg:%s\n",
                cmd->time, cmd->command, cmd->arg);
         avfilter_process_command(link->dst, cmd->command, cmd->arg, 0, 0, cmd->flags);
-        ff_command_queue_pop(link->dst);
+        command_queue_pop(link->dst);
         cmd= link->dst->command_queue;
     }
     return 0;

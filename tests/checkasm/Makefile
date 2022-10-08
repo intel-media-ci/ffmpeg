@@ -11,6 +11,7 @@ AVCODECOBJS-$(CONFIG_H264QPEL)          += h264qpel.o
 AVCODECOBJS-$(CONFIG_IDCTDSP)           += idctdsp.o
 AVCODECOBJS-$(CONFIG_LLVIDDSP)          += llviddsp.o
 AVCODECOBJS-$(CONFIG_LLVIDENCDSP)       += llviddspenc.o
+AVCODECOBJS-$(CONFIG_LPC)               += lpc.o
 AVCODECOBJS-$(CONFIG_ME_CMP)            += motion.o
 AVCODECOBJS-$(CONFIG_VC1DSP)            += vc1dsp.o
 AVCODECOBJS-$(CONFIG_VP8DSP)            += vp8dsp.o
@@ -31,6 +32,7 @@ AVCODECOBJS-$(CONFIG_HEVC_DECODER)      += hevc_add_res.o hevc_idct.o hevc_sao.o
 AVCODECOBJS-$(CONFIG_UTVIDEO_DECODER)   += utvideodsp.o
 AVCODECOBJS-$(CONFIG_V210_DECODER)      += v210dec.o
 AVCODECOBJS-$(CONFIG_V210_ENCODER)      += v210enc.o
+AVCODECOBJS-$(CONFIG_VORBIS_DECODER)    += vorbisdsp.o
 AVCODECOBJS-$(CONFIG_VP9_DECODER)       += vp9dsp.o
 
 CHECKASMOBJS-$(CONFIG_AVCODEC)          += $(AVCODECOBJS-yes)

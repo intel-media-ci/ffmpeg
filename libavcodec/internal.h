@@ -57,10 +57,16 @@ typedef struct AVCodecInternal {
     int is_copy;
 
     /**
-     * An audio frame with less than required samples has been submitted and
-     * padded with silence. Reject all subsequent frames.
+     * An audio frame with less than required samples has been submitted (and
+     * potentially padded with silence). Reject all subsequent frames.
      */
     int last_audio_frame;
+
+    /**
+     * Audio encoders can set this flag during init to indicate that they
+     * want the small last frame to be padded to a multiple of pad_samples.
+     */
+    int pad_samples;
 
     AVBufferRef *pool;
 
@@ -153,10 +159,6 @@ typedef struct AVCodecInternal {
     int initial_format;
     int initial_width, initial_height;
     int initial_sample_rate;
-#if FF_API_OLD_CHANNEL_LAYOUT
-    int initial_channels;
-    uint64_t initial_channel_layout;
-#endif
     AVChannelLayout initial_ch_layout;
 
 #if CONFIG_LCMS2

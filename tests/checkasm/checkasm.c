@@ -135,6 +135,9 @@ static const struct {
     #if CONFIG_LLVIDENCDSP
         { "llviddspenc", checkasm_check_llviddspenc },
     #endif
+    #if CONFIG_LPC
+        { "lpc", checkasm_check_lpc },
+    #endif
     #if CONFIG_ME_CMP
         { "motion", checkasm_check_motion },
     #endif
@@ -164,6 +167,9 @@ static const struct {
     #endif
     #if CONFIG_VIDEODSP
         { "videodsp", checkasm_check_videodsp },
+    #endif
+    #if CONFIG_VORBIS_DECODER
+        { "vorbisdsp", checkasm_check_vorbisdsp },
     #endif
 #endif
 #if CONFIG_AVFILTER
@@ -226,6 +232,15 @@ static const struct {
     { "ALTIVEC",  "altivec",  AV_CPU_FLAG_ALTIVEC },
     { "VSX",      "vsx",      AV_CPU_FLAG_VSX },
     { "POWER8",   "power8",   AV_CPU_FLAG_POWER8 },
+#elif ARCH_RISCV
+    { "RVI",      "rvi",      AV_CPU_FLAG_RVI },
+    { "RVF",      "rvf",      AV_CPU_FLAG_RVF },
+    { "RVD",      "rvd",      AV_CPU_FLAG_RVD },
+    { "RVVi32",   "rvv_i32",  AV_CPU_FLAG_RVV_I32 },
+    { "RVVf32",   "rvv_f32",  AV_CPU_FLAG_RVV_F32 },
+    { "RVVi64",   "rvv_i64",  AV_CPU_FLAG_RVV_I64 },
+    { "RVVf64",   "rvv_f64",  AV_CPU_FLAG_RVV_F64 },
+    { "RVBbasic", "rvb_b",    AV_CPU_FLAG_RVB_BASIC },
 #elif ARCH_MIPS
     { "MMI",      "mmi",      AV_CPU_FLAG_MMI },
     { "MSA",      "msa",      AV_CPU_FLAG_MSA },

@@ -146,7 +146,7 @@ static int ape_read_header(AVFormatContext * s)
     AVStream *st;
     uint32_t tag;
     int i, ret;
-    int total_blocks;
+    int64_t total_blocks;
     int64_t final_size = 0;
     int64_t pts, file_size;
 
@@ -298,6 +298,8 @@ static int ape_read_header(AVFormatContext * s)
             ape->frames[i].pos  -= ape->frames[i].skip;
             ape->frames[i].size += ape->frames[i].skip;
         }
+        if (ape->frames[i].size > INT_MAX - 3)
+            return AVERROR_INVALIDDATA;
         ape->frames[i].size = (ape->frames[i].size + 3) & ~3;
     }
     if (ape->fileversion < 3810) {
@@ -327,7 +329,7 @@ static int ape_read_header(AVFormatContext * s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    total_blocks = (ape->totalframes == 0) ? 0 : ((ape->totalframes - 1) * ape->blocksperframe) + ape->finalframeblocks;
+    total_blocks = (ape->totalframes == 0) ? 0 : ((int64_t)(ape->totalframes - 1) * ape->blocksperframe) + ape->finalframeblocks;
 
     st->codecpar->codec_type      = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id        = AV_CODEC_ID_APE;
@@ -411,6 +413,7 @@ static int ape_read_packet(AVFormatContext * s, AVPacket * pkt)
     /* note: we need to modify the packet size here to handle the last
        packet */
     pkt->size = ret + extra_size;
+    pkt->duration = nblocks;
 
     ape->currentframe++;
 

@@ -94,13 +94,15 @@ static void parse_waveformatex(AVFormatContext *s, AVIOContext *pb, AVCodecParam
 int ff_get_wav_header(AVFormatContext *s, AVIOContext *pb,
                       AVCodecParameters *par, int size, int big_endian)
 {
-    int id, channels;
+    int id, channels = 0;
     uint64_t bitrate = 0;
 
     if (size < 14) {
         avpriv_request_sample(s, "wav header size < 14");
         return AVERROR_INVALIDDATA;
     }
+
+    av_channel_layout_uninit(&par->ch_layout);
 
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     if (!big_endian) {
@@ -189,9 +191,12 @@ int ff_get_wav_header(AVFormatContext *s, AVIOContext *pb,
     if (par->codec_id == AV_CODEC_ID_ADPCM_G726 && par->sample_rate)
         par->bits_per_coded_sample = par->bit_rate / par->sample_rate;
 
-    av_channel_layout_uninit(&par->ch_layout);
-    par->ch_layout.order       = AV_CHANNEL_ORDER_UNSPEC;
-    par->ch_layout.nb_channels = channels;
+    /* ignore WAVEFORMATEXTENSIBLE layout if different from channel count */
+    if (channels != par->ch_layout.nb_channels) {
+        av_channel_layout_uninit(&par->ch_layout);
+        par->ch_layout.order       = AV_CHANNEL_ORDER_UNSPEC;
+        par->ch_layout.nb_channels = channels;
+    }
 
     return 0;
 }

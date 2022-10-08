@@ -233,7 +233,12 @@ static int parse_imf_asset_map_from_xml_dom(AVFormatContext *s,
 
         asset = &(asset_map->assets[asset_map->asset_count]);
 
-        if (ff_imf_xml_read_uuid(ff_imf_xml_get_child_element_by_name(asset_element, "Id"), asset->uuid)) {
+        if (!(node = ff_imf_xml_get_child_element_by_name(asset_element, "Id"))) {
+            av_log(s, AV_LOG_ERROR, "Unable to parse asset map XML - missing Id node\n");
+            return AVERROR_INVALIDDATA;
+        }
+
+        if (ff_imf_xml_read_uuid(node, asset->uuid)) {
             av_log(s, AV_LOG_ERROR, "Could not parse UUID from asset in asset map.\n");
             return AVERROR_INVALIDDATA;
         }
@@ -681,8 +686,11 @@ static IMFVirtualTrackPlaybackCtx *get_next_track_with_minimum_timestamp(AVForma
 {
     IMFContext *c = s->priv_data;
     IMFVirtualTrackPlaybackCtx *track;
-
     AVRational minimum_timestamp = av_make_q(INT32_MAX, 1);
+
+    if (!c->track_count)
+        return NULL;
+
     for (uint32_t i = c->track_count; i > 0; i--) {
         av_log(s, AV_LOG_TRACE, "Compare track %d timestamp " AVRATIONAL_FORMAT
                " to minimum " AVRATIONAL_FORMAT
@@ -697,8 +705,6 @@ static IMFVirtualTrackPlaybackCtx *get_next_track_with_minimum_timestamp(AVForma
         }
     }
 
-    av_log(s, AV_LOG_DEBUG, "Found next track to read: %d (timestamp: %lf / %lf)\n",
-           track->index, av_q2d(track->current_timestamp), av_q2d(minimum_timestamp));
     return track;
 }
 
@@ -760,6 +766,14 @@ static int imf_read_packet(AVFormatContext *s, AVPacket *pkt)
     AVRational next_timestamp;
 
     track = get_next_track_with_minimum_timestamp(s);
+
+    if (!track) {
+        av_log(s, AV_LOG_ERROR, "No track found for playback\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    av_log(s, AV_LOG_DEBUG, "Found track %d to read at timestamp %lf\n",
+           track->index, av_q2d(track->current_timestamp));
 
     ret = get_resource_context_for_timestamp(s, track, &resource);
     if (ret)

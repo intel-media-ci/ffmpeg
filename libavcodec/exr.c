@@ -191,6 +191,8 @@ typedef struct EXRContext {
     float gamma;
     union av_intfloat32 gamma_table[65536];
 
+    uint8_t *offset_table;
+
     Half2FloatTables h2f_tables;
 } EXRContext;
 
@@ -830,20 +832,16 @@ static int b44_uncompress(const EXRContext *s, const uint8_t *src, int compresse
         if (s->channels[c].pixel_type == EXR_HALF) {/* B44 only compress half float data */
             for (iY = 0; iY < nb_b44_block_h; iY++) {
                 for (iX = 0; iX < nb_b44_block_w; iX++) {/* For each B44 block */
-                    if (stay_to_uncompress < 3) {
-                        av_log(s->avctx, AV_LOG_ERROR, "Not enough data for B44A block: %d", stay_to_uncompress);
+                    if (stay_to_uncompress < 3)
                         return AVERROR_INVALIDDATA;
-                    }
 
                     if (src[compressed_size - stay_to_uncompress + 2] == 0xfc) { /* B44A block */
                         unpack_3(sr, tmp_buffer);
                         sr += 3;
                         stay_to_uncompress -= 3;
                     }  else {/* B44 Block */
-                        if (stay_to_uncompress < 14) {
-                            av_log(s->avctx, AV_LOG_ERROR, "Not enough data for B44 block: %d", stay_to_uncompress);
+                        if (stay_to_uncompress < 14)
                             return AVERROR_INVALIDDATA;
-                        }
                         unpack_14(sr, tmp_buffer);
                         sr += 14;
                         stay_to_uncompress -= 14;
@@ -865,10 +863,8 @@ static int b44_uncompress(const EXRContext *s, const uint8_t *src, int compresse
             }
             target_channel_offset += 2;
         } else {/* Float or UINT 32 channel */
-            if (stay_to_uncompress < td->ysize * td->xsize * 4) {
-                av_log(s->avctx, AV_LOG_ERROR, "Not enough data for uncompress channel: %d", stay_to_uncompress);
+            if (stay_to_uncompress < td->ysize * td->xsize * 4)
                 return AVERROR_INVALIDDATA;
-            }
 
             for (y = 0; y < td->ysize; y++) {
                 index_out = target_channel_offset * td->xsize + y * td->channel_line_size;
@@ -1942,9 +1938,12 @@ static int decode_header(EXRContext *s, AVFrame *frame)
                                                      "preview", 16)) >= 0) {
             uint32_t pw = bytestream2_get_le32(gb);
             uint32_t ph = bytestream2_get_le32(gb);
-            int64_t psize = 4LL * pw * ph;
+            uint64_t psize = pw * ph;
+            if (psize > INT64_MAX / 4)
+                return AVERROR_INVALIDDATA;
+            psize *= 4;
 
-            if (psize >= bytestream2_get_bytes_left(gb))
+            if ((int64_t)psize >= bytestream2_get_bytes_left(gb))
                 return AVERROR_INVALIDDATA;
 
             bytestream2_skip(gb, psize);
@@ -1963,7 +1962,7 @@ static int decode_header(EXRContext *s, AVFrame *frame)
         {
             uint8_t name[256] = { 0 };
             uint8_t type[256] = { 0 };
-            uint8_t value[256] = { 0 };
+            uint8_t value[8192] = { 0 };
             int i = 0, size;
 
             while (bytestream2_get_bytes_left(gb) > 0 &&
@@ -1981,6 +1980,8 @@ static int decode_header(EXRContext *s, AVFrame *frame)
             size = bytestream2_get_le32(gb);
 
             bytestream2_get_buffer(gb, value, FFMIN(sizeof(value) - 1, size));
+            if (size > sizeof(value) - 1)
+                bytestream2_skip(gb, size - (sizeof(value) - 1));
             if (!strcmp(type, "string"))
                 av_dict_set(&metadata, name, value, 0);
         }
@@ -2029,7 +2030,6 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *picture,
     int nb_blocks;   /* nb scanline or nb tile */
     uint64_t start_offset_table;
     uint64_t start_next_scanline;
-    PutByteContext offset_table_writer;
 
     bytestream2_init(gb, avpkt->data, avpkt->size);
 
@@ -2121,6 +2121,9 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *picture,
 
     ff_set_sar(s->avctx, av_d2q(av_int2float(s->sar), 255));
 
+    if (avctx->skip_frame >= AVDISCARD_ALL)
+        return avpkt->size;
+
     s->desc          = av_pix_fmt_desc_get(avctx->pix_fmt);
     if (!s->desc)
         return AVERROR_INVALIDDATA;
@@ -2149,11 +2152,17 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *picture,
 
     // check offset table and recreate it if need
     if (!s->is_tile && bytestream2_peek_le64(gb) == 0) {
+        PutByteContext offset_table_writer;
+
         av_log(s->avctx, AV_LOG_DEBUG, "recreating invalid scanline offset table\n");
+
+        s->offset_table = av_realloc_f(s->offset_table, nb_blocks, 8);
+        if (!s->offset_table)
+            return AVERROR(ENOMEM);
 
         start_offset_table = bytestream2_tell(gb);
         start_next_scanline = start_offset_table + nb_blocks * 8;
-        bytestream2_init_writer(&offset_table_writer, &avpkt->data[start_offset_table], nb_blocks * 8);
+        bytestream2_init_writer(&offset_table_writer, s->offset_table, nb_blocks * 8);
 
         for (y = 0; y < nb_blocks; y++) {
             /* write offset of prev scanline in offset table */
@@ -2163,7 +2172,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *picture,
             bytestream2_seek(gb, start_next_scanline + 4, SEEK_SET);/* skip line number */
             start_next_scanline += (bytestream2_get_le32(gb) + 8);
         }
-        bytestream2_seek(gb, start_offset_table, SEEK_SET);
+        bytestream2_init(gb, s->offset_table, nb_blocks * 8);
     }
 
     // save pointer we are going to use in decode_block
@@ -2273,6 +2282,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
     av_freep(&s->thread_data);
     av_freep(&s->channels);
+    av_freep(&s->offset_table);
 
     return 0;
 }
@@ -2344,5 +2354,6 @@ const FFCodec ff_exr_decoder = {
     FF_CODEC_DECODE_CB(decode_frame),
     .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS |
                         AV_CODEC_CAP_SLICE_THREADS,
+    .caps_internal    = FF_CODEC_CAP_SKIP_FRAME_FILL_PARAM,
     .p.priv_class     = &exr_class,
 };

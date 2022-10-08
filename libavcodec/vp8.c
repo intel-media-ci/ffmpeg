@@ -44,14 +44,6 @@
 #   include "arm/vp8.h"
 #endif
 
-#if CONFIG_VP7_DECODER && CONFIG_VP8_DECODER
-#define VPX(vp7, f) (vp7 ? vp7_ ## f : vp8_ ## f)
-#elif CONFIG_VP7_DECODER
-#define VPX(vp7, f) vp7_ ## f
-#else // CONFIG_VP8_DECODER
-#define VPX(vp7, f) vp8_ ## f
-#endif
-
 // fixme: add 1 bit to all the calls to this?
 static int vp8_rac_get_sint(VPXRangeCoder *c, int bits)
 {
@@ -588,6 +580,7 @@ static int vp7_decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_si
     int height = s->avctx->height;
     int alpha = 0;
     int beta  = 0;
+    int fade_present = 1;
 
     if (buf_size < 4) {
         return AVERROR_INVALIDDATA;
@@ -689,7 +682,6 @@ static int vp7_decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_si
 
     s->update_last          = 1;
     s->update_probabilities = 1;
-    s->fade_present         = 1;
 
     if (s->profile > 0) {
         s->update_probabilities = vp89_rac_get(c);
@@ -697,13 +689,13 @@ static int vp7_decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_si
             s->prob[1] = s->prob[0];
 
         if (!s->keyframe)
-            s->fade_present = vp89_rac_get(c);
+            fade_present = vp89_rac_get(c);
     }
 
     if (vpx_rac_is_end(c))
         return AVERROR_INVALIDDATA;
     /* E. Fading information for previous frame */
-    if (s->fade_present && vp89_rac_get(c)) {
+    if (fade_present && vp89_rac_get(c)) {
         alpha = (int8_t) vp89_rac_get_uint(c, 8);
         beta  = (int8_t) vp89_rac_get_uint(c, 8);
     }

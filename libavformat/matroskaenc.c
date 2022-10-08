@@ -51,12 +51,14 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
+#include "libavutil/pixdesc.h"
 #include "libavutil/random_seed.h"
 #include "libavutil/rational.h"
 #include "libavutil/samplefmt.h"
 #include "libavutil/stereo3d.h"
 
 #include "libavcodec/av1.h"
+#include "libavcodec/codec_desc.h"
 #include "libavcodec/xiph.h"
 #include "libavcodec/mpeg4audio.h"
 
@@ -1322,7 +1324,7 @@ static void mkv_write_video_color(EbmlWriter *writer, const AVStream *st,
         par->chroma_location <= AVCHROMA_LOC_TOP) {
         int xpos, ypos;
 
-        avcodec_enum_to_chroma_pos(&xpos, &ypos, par->chroma_location);
+        av_chroma_location_enum_to_pos(&xpos, &ypos, par->chroma_location);
         ebml_writer_add_uint(writer, MATROSKA_ID_VIDEOCOLORCHROMASITINGHORZ,
                              (xpos >> 7) + 1);
         ebml_writer_add_uint(writer, MATROSKA_ID_VIDEOCOLORCHROMASITINGVERT,
@@ -1828,19 +1830,20 @@ static int mkv_write_track(AVFormatContext *s, MatroskaMuxContext *mkv,
         break;
 
     case AVMEDIA_TYPE_AUDIO:
-        if (par->initial_padding && par->codec_id == AV_CODEC_ID_OPUS) {
+        if (par->initial_padding) {
             int64_t codecdelay = av_rescale_q(par->initial_padding,
-                                              (AVRational){ 1, 48000 },
+                                              (AVRational){ 1, par->sample_rate },
                                               (AVRational){ 1, 1000000000 });
             if (codecdelay < 0) {
                 av_log(s, AV_LOG_ERROR, "Initial padding is invalid\n");
                 return AVERROR(EINVAL);
             }
-//            track->ts_offset = av_rescale_q(par->initial_padding,
-//                                            (AVRational){ 1, par->sample_rate },
-//                                            st->time_base);
-
             put_ebml_uint(pb, MATROSKA_ID_CODECDELAY, codecdelay);
+
+            track->ts_offset = av_rescale_q(par->initial_padding,
+                                            (AVRational){ 1, par->sample_rate },
+                                            st->time_base);
+            ffstream(st)->lowest_ts_allowed = -track->ts_offset;
         }
         if (par->codec_id == AV_CODEC_ID_OPUS)
             put_ebml_uint(pb, MATROSKA_ID_SEEKPREROLL, OPUS_SEEK_PREROLL);
@@ -2591,7 +2594,6 @@ static int mkv_write_block(void *logctx, MatroskaMuxContext *mkv,
     uint8_t *side_data;
     size_t side_data_size;
     uint64_t additional_id;
-    int64_t discard_padding = 0;
     unsigned track_number = track->track_num;
     EBML_WRITER(9);
 
@@ -2619,10 +2621,13 @@ static int mkv_write_block(void *logctx, MatroskaMuxContext *mkv,
                                         AV_PKT_DATA_SKIP_SAMPLES,
                                         &side_data_size);
     if (side_data && side_data_size >= 10) {
-        discard_padding = av_rescale_q(AV_RL32(side_data + 4),
-                                       (AVRational){1, par->sample_rate},
-                                       (AVRational){1, 1000000000});
-        ebml_writer_add_sint(&writer, MATROSKA_ID_DISCARDPADDING, discard_padding);
+        int64_t discard_padding = AV_RL32(side_data + 4);
+        if (discard_padding) {
+            discard_padding = av_rescale_q(discard_padding,
+                                           (AVRational){1, par->sample_rate},
+                                           (AVRational){1, 1000000000});
+            ebml_writer_add_sint(&writer, MATROSKA_ID_DISCARDPADDING, discard_padding);
+        }
     }
 
     side_data = av_packet_get_side_data(pkt,

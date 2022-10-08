@@ -65,6 +65,7 @@
 #include "mxf.h"
 
 #define MXF_MAX_CHUNK_SIZE (32 << 20)
+#define RUN_IN_MAX (65535+1)  // S377m-2004 section 5.5 and S377-1-2009 section 6.5, the +1 is to be slightly more tolerant
 
 typedef enum {
     Header,
@@ -520,7 +521,7 @@ static int mxf_get_eia608_packet(AVFormatContext *s, AVStream *st, AVPacket *pkt
     int did, sdid, data_length;
     int i, ret;
 
-    if (count != 1)
+    if (count > 1)
         av_log(s, AV_LOG_WARNING, "unsupported multiple ANC packets (%d) per KLV packet\n", count);
 
     for (i = 0; i < count; i++) {
@@ -1939,10 +1940,10 @@ static int mxf_compute_ptses_fake_index(MXFContext *mxf, MXFIndexTable *index_ta
     if (index_table->nb_ptses <= 0)
         return 0;
 
-    if (!(index_table->ptses      = av_calloc(index_table->nb_ptses, sizeof(int64_t))) ||
+    if (!(index_table->ptses      = av_malloc_array(index_table->nb_ptses, sizeof(int64_t))) ||
         !(index_table->fake_index = av_calloc(index_table->nb_ptses, sizeof(AVIndexEntry))) ||
-        !(index_table->offsets    = av_calloc(index_table->nb_ptses, sizeof(int8_t))) ||
-        !(flags                   = av_calloc(index_table->nb_ptses, sizeof(uint8_t)))) {
+        !(index_table->offsets    = av_malloc_array(index_table->nb_ptses, sizeof(int8_t))) ||
+        !(flags                   = av_malloc_array(index_table->nb_ptses, sizeof(uint8_t)))) {
         av_freep(&index_table->ptses);
         av_freep(&index_table->fake_index);
         av_freep(&index_table->offsets);
@@ -2139,6 +2140,13 @@ static int mxf_compute_index_tables(MXFContext *mxf)
 finish_decoding_index:
     av_free(sorted_segments);
     return ret;
+}
+
+static int mxf_is_st_422(const UID *essence_container_ul) {
+    static const uint8_t st_422_essence_container_ul[] = { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x07,0x0d,0x01,0x03,0x01,0x02,0x0c };
+
+    return essence_container_ul && mxf_match_uid(*essence_container_ul, st_422_essence_container_ul,
+                                                 sizeof(st_422_essence_container_ul));
 }
 
 static int mxf_is_intra_only(MXFDescriptor *descriptor)
@@ -2891,6 +2899,24 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
                     break;
                 default:
                     av_log(mxf->fc, AV_LOG_INFO, "Unknown frame layout type: %d\n", descriptor->frame_layout);
+            }
+
+            if (mxf_is_st_422(essence_container_ul)) {
+                switch ((*essence_container_ul)[14]) {
+                case 2: /* Cn: Clip- wrapped Picture Element */
+                case 3: /* I1: Interlaced Frame, 1 field/KLV */
+                case 4: /* I2: Interlaced Frame, 2 fields/KLV */
+                case 6: /* P1: Frame- wrapped Picture Element */
+                    st->avg_frame_rate = source_track->edit_rate;
+                    st->r_frame_rate = st->avg_frame_rate;
+                    break;
+                case 5: /* F1: Field-wrapped Picture Element */
+                    st->avg_frame_rate = av_mul_q(av_make_q(2, 1), source_track->edit_rate);
+                    st->r_frame_rate = st->avg_frame_rate;
+                    break;
+                default:
+                    break;
+                }
             }
 
             if (st->codecpar->codec_id == AV_CODEC_ID_PRORES) {
@@ -3681,6 +3707,7 @@ static int mxf_read_header(AVFormatContext *s)
     KLVPacket klv;
     int64_t essence_offset = 0;
     int ret;
+    int64_t run_in;
 
     mxf->last_forward_tell = INT64_MAX;
 
@@ -3690,7 +3717,10 @@ static int mxf_read_header(AVFormatContext *s)
     }
     avio_seek(s->pb, -14, SEEK_CUR);
     mxf->fc = s;
-    mxf->run_in = avio_tell(s->pb);
+    run_in = avio_tell(s->pb);
+    if (run_in < 0 || run_in > RUN_IN_MAX)
+        return AVERROR_INVALIDDATA;
+    mxf->run_in = run_in;
 
     mxf_read_random_index_pack(s);
 
@@ -3707,7 +3737,7 @@ static int mxf_read_header(AVFormatContext *s)
 
         PRINT_KEY(s, "read header", klv.key);
         av_log(s, AV_LOG_TRACE, "size %"PRIu64" offset %#"PRIx64"\n", klv.length, klv.offset);
-        if (IS_KLV_KEY(klv.key, mxf_encrypted_triplet_key) ||
+        if (mxf_match_uid(klv.key, mxf_encrypted_triplet_key, sizeof(mxf_encrypted_triplet_key)) ||
             IS_KLV_KEY(klv.key, mxf_essence_element_key) ||
             IS_KLV_KEY(klv.key, mxf_canopus_essence_element_key) ||
             IS_KLV_KEY(klv.key, mxf_avid_essence_element_key) ||
@@ -3953,7 +3983,7 @@ static int mxf_read_packet(AVFormatContext *s, AVPacket *pkt)
             pos = klv.next_klv - klv.length;
             PRINT_KEY(s, "read packet", klv.key);
             av_log(s, AV_LOG_TRACE, "size %"PRIu64" offset %#"PRIx64"\n", klv.length, klv.offset);
-            if (IS_KLV_KEY(klv.key, mxf_encrypted_triplet_key)) {
+            if (mxf_match_uid(klv.key, mxf_encrypted_triplet_key, sizeof(mxf_encrypted_triplet_key))) {
                 ret = mxf_decrypt_triplet(s, pkt, &klv);
                 if (ret < 0) {
                     av_log(s, AV_LOG_ERROR, "invalid encoded triplet\n");
@@ -4096,7 +4126,7 @@ static int mxf_read_close(AVFormatContext *s)
 
 static int mxf_probe(const AVProbeData *p) {
     const uint8_t *bufp = p->buf;
-    const uint8_t *end = p->buf + p->buf_size;
+    const uint8_t *end = p->buf + FFMIN(p->buf_size, RUN_IN_MAX + 1 + sizeof(mxf_header_partition_pack_key));
 
     if (p->buf_size < sizeof(mxf_header_partition_pack_key))
         return 0;

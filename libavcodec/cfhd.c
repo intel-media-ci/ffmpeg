@@ -819,7 +819,7 @@ static int cfhd_decode(AVCodecContext *avctx, AVFrame *pic,
                                    VLC_BITS, 3, 1);
 
                         /* escape */
-                        if (level == 64 && run == 2)
+                        if (!run)
                             break;
 
                         count += run;
@@ -850,7 +850,7 @@ static int cfhd_decode(AVCodecContext *avctx, AVFrame *pic,
                                    VLC_BITS, 3, 1);
 
                         /* escape */
-                        if (level == 255 && run == 2)
+                        if (!run)
                             break;
 
                         count += run;
@@ -1403,9 +1403,6 @@ static av_cold int cfhd_close(AVCodecContext *avctx)
     CFHDContext *s = avctx->priv_data;
 
     free_buffers(s);
-
-    ff_free_vlc(&s->vlc_9);
-    ff_free_vlc(&s->vlc_18);
 
     return 0;
 }

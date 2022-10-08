@@ -67,6 +67,8 @@ typedef struct SubStream {
     uint8_t     min_channel;
     /// The index of the last channel coded in this substream.
     uint8_t     max_channel;
+    /// The coded channels mask in this substream.
+    uint64_t    coded_channels;
     /// The number of channels input into the rematrix stage.
     uint8_t     max_matrix_channel;
     /// For each channel output by the matrix, the output channel to map it to
@@ -423,12 +425,18 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
                         mh.stream_type);
             return AVERROR_PATCHWELCOME;
         }
+        m->substream[1].mask = mh.channel_layout_thd_stream1;
         if (mh.channels_thd_stream1 == 2 &&
             mh.channels_thd_stream2 == 2 &&
             m->avctx->ch_layout.nb_channels == 2)
             m->substream[0].mask = AV_CH_LAYOUT_STEREO;
         if ((substr = (mh.num_substreams > 1)))
             m->substream[0].mask = AV_CH_LAYOUT_STEREO;
+        if (mh.num_substreams == 1 &&
+            mh.channels_thd_stream1 == 1 &&
+            mh.channels_thd_stream2 == 1 &&
+            m->avctx->ch_layout.nb_channels == 1)
+            m->substream[0].mask = AV_CH_LAYOUT_MONO;
         if (mh.num_substreams > 2)
             if (mh.channel_layout_thd_stream2)
                 m->substream[2].mask = mh.channel_layout_thd_stream2;
@@ -436,16 +444,6 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
                 m->substream[2].mask = mh.channel_layout_thd_stream1;
         if (m->avctx->ch_layout.nb_channels > 2)
             m->substream[mh.num_substreams > 1].mask = mh.channel_layout_thd_stream1;
-
-        if (m->avctx->ch_layout.nb_channels <= 2 &&
-            m->substream[substr].mask == AV_CH_LAYOUT_MONO && m->max_decoded_substream == 1) {
-            av_log(m->avctx, AV_LOG_DEBUG, "Mono stream with 2 substreams, ignoring 2nd\n");
-            m->max_decoded_substream = 0;
-            if (m->avctx->ch_layout.nb_channels == 2) {
-                av_channel_layout_uninit(&m->avctx->ch_layout);
-                m->avctx->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
-            }
-        }
     }
 
     m->needs_reordering = mh.channel_arrangement >= 18 && mh.channel_arrangement <= 20;
@@ -539,12 +537,6 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         return AVERROR_INVALIDDATA;
     }
 
-    if (max_channel != max_matrix_channel) {
-        av_log(m->avctx, AV_LOG_ERROR,
-               "Max channel must be equal max matrix channel.\n");
-        return AVERROR_INVALIDDATA;
-    }
-
     /* This should happen for TrueHD streams with >6 channels and MLP's noise
      * type. It is not yet known if this is allowed. */
     if (max_channel > MAX_MATRIX_CHANNEL_MLP && !noise_type) {
@@ -555,14 +547,12 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         return AVERROR_PATCHWELCOME;
     }
 
-    if (min_channel > max_channel) {
-        av_log(m->avctx, AV_LOG_ERROR,
-               "Substream min channel cannot be greater than max channel.\n");
+    if (max_channel + 1 > MAX_CHANNELS || max_channel + 1 < min_channel)
         return AVERROR_INVALIDDATA;
-    }
 
     s->min_channel        = min_channel;
     s->max_channel        = max_channel;
+    s->coded_channels     = ((1LL << (max_channel - min_channel + 1)) - 1) << min_channel;
     s->max_matrix_channel = max_matrix_channel;
     s->noise_type         = noise_type;
 
@@ -1272,11 +1262,6 @@ static int read_access_unit(AVCodecContext *avctx, AVFrame *frame,
     for (substr = 0; substr <= m->max_decoded_substream; substr++) {
         SubStream *s = &m->substream[substr];
 
-        if (substr != m->max_decoded_substream &&
-            m->substream[m->max_decoded_substream].min_channel == 0 &&
-            m->substream[m->max_decoded_substream].max_channel == avctx->ch_layout.nb_channels - 1)
-            goto skip_substr;
-
         init_get_bits(&gb, buf, substream_data_len[substr] * 8);
 
         m->matrix_changed = 0;
@@ -1300,6 +1285,22 @@ static int read_access_unit(AVCodecContext *avctx, AVFrame *frame,
 
             if (!s->restart_seen)
                 goto next_substr;
+
+            if (substr > 0 && substr < m->max_decoded_substream &&
+                (s->min_channel <= m->substream[substr - 1].max_channel)) {
+                av_log(avctx, AV_LOG_DEBUG,
+                       "Previous substream(%d) channels overlaps current substream(%d) channels, skipping.\n",
+                       substr - 1, substr);
+                goto next_substr;
+            }
+
+            if (substr != m->max_decoded_substream &&
+                ((s->coded_channels & m->substream[m->max_decoded_substream].coded_channels) != 0)) {
+                av_log(avctx, AV_LOG_DEBUG,
+                       "Current substream(%d) channels overlaps final substream(%d) channels, skipping.\n",
+                       substr, m->max_decoded_substream);
+                goto next_substr;
+            }
 
             if ((ret = read_block_data(m, &gb, substr)) < 0)
                 return ret;
@@ -1350,7 +1351,6 @@ next_substr:
             av_log(m->avctx, AV_LOG_ERROR,
                    "No restart header present in substream %d.\n", substr);
 
-skip_substr:
         buf += substream_data_len[substr];
     }
 

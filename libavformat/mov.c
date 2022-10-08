@@ -1520,10 +1520,6 @@ static int mov_read_mvhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     av_log(c->fc, AV_LOG_TRACE, "time scale = %i\n", c->time_scale);
 
     c->duration = (version == 1) ? avio_rb64(pb) : avio_rb32(pb); /* duration */
-    // set the AVFormatContext duration because the duration of individual tracks
-    // may be inaccurate
-    if (!c->trex_data)
-        c->fc->duration = av_rescale(c->duration, AV_TIME_BASE, c->time_scale);
     avio_rb32(pb); /* preferred scale */
 
     avio_rb16(pb); /* preferred volume */
@@ -2431,6 +2427,11 @@ static int mov_finalize_stsd_codec(MOVContext *c, AVIOContext *pb,
     switch (st->codecpar->codec_id) {
 #if CONFIG_DV_DEMUXER
     case AV_CODEC_ID_DVAUDIO:
+        if (c->dv_fctx) {
+            avpriv_request_sample(c->fc, "multiple DV audio streams");
+            return AVERROR(ENOSYS);
+        }
+
         c->dv_fctx = avformat_alloc_context();
         if (!c->dv_fctx) {
             av_log(c->fc, AV_LOG_ERROR, "dv demux context alloc error\n");
@@ -4957,9 +4958,10 @@ static int mov_read_tfhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     av_log(c->fc, AV_LOG_TRACE, "frag flags 0x%x\n", frag->flags);
 
     frag_stream_info = get_current_frag_stream_info(&c->frag_index);
-    if (frag_stream_info)
+    if (frag_stream_info) {
         frag_stream_info->next_trun_dts = AV_NOPTS_VALUE;
-
+        frag_stream_info->stsd_id = frag->stsd_id;
+    }
     return 0;
 }
 
@@ -7224,7 +7226,7 @@ static int cenc_filter(MOVContext *mov, AVStream* st, MOVStreamContext *sc, AVPa
     encryption_index = NULL;
     if (frag_stream_info) {
         // Note this only supports encryption info in the first sample descriptor.
-        if (mov->fragment.stsd_id == 1) {
+        if (frag_stream_info->stsd_id == 1) {
             if (frag_stream_info->encryption_index) {
                 encrypted_index = current_index - frag_stream_info->index_base;
                 encryption_index = frag_stream_info->encryption_index;
@@ -8777,7 +8779,7 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
         }
 #if CONFIG_DV_DEMUXER
         if (mov->dv_demux && sc->dv_audio_container) {
-            ret = avpriv_dv_produce_packet(mov->dv_demux, pkt, pkt->data, pkt->size, pkt->pos);
+            ret = avpriv_dv_produce_packet(mov->dv_demux, NULL, pkt->data, pkt->size, pkt->pos);
             av_packet_unref(pkt);
             if (ret < 0)
                 return ret;
