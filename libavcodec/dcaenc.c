@@ -222,26 +222,24 @@ static int encode_init(AVCodecContext *avctx)
     if (ff_dcaadpcm_init(&c->adpcm_ctx))
         return AVERROR(ENOMEM);
 
-    if (layout.order == AV_CHANNEL_ORDER_UNSPEC) {
-        av_log(avctx, AV_LOG_WARNING, "No channel layout specified. The "
-                                      "encoder will guess the layout, but it "
-                                      "might be incorrect.\n");
-        av_channel_layout_default(&layout, layout.nb_channels);
-    }
-
-    if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_MONO))
+    switch (layout.nb_channels) {
+    case 1: /* mono */
         c->channel_config = 0;
-    else if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO))
+        break;
+    case 2: /* stereo */
         c->channel_config = 2;
-    else if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_2_2))
+        break;
+    case 4: /* 2.2 */
         c->channel_config = 8;
-    else if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT0))
+        break;
+    case 5: /* 5.0 */
         c->channel_config = 9;
-    else if (!av_channel_layout_compare(&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1))
+        break;
+    case 6: /* 5.1 */
         c->channel_config = 9;
-    else {
-        av_log(avctx, AV_LOG_ERROR, "Unsupported channel layout!\n");
-        return AVERROR_PATCHWELCOME;
+        break;
+    default:
+        av_assert1(!"impossible channel layout");
     }
 
     if (c->lfe_channel) {
@@ -1326,14 +1324,9 @@ const FFCodec ff_dca_encoder = {
     .p.sample_fmts         = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S32,
                                                             AV_SAMPLE_FMT_NONE },
     .p.supported_samplerates = sample_rates,
-#if FF_API_OLD_CHANNEL_LAYOUT
-    .p.channel_layouts     = (const uint64_t[]) { AV_CH_LAYOUT_MONO,
-                                                  AV_CH_LAYOUT_STEREO,
-                                                  AV_CH_LAYOUT_2_2,
-                                                  AV_CH_LAYOUT_5POINT0,
-                                                  AV_CH_LAYOUT_5POINT1,
-                                                  0 },
-#endif
+    CODEC_OLD_CHANNEL_LAYOUTS(AV_CH_LAYOUT_MONO, AV_CH_LAYOUT_STEREO,
+                              AV_CH_LAYOUT_2_2,  AV_CH_LAYOUT_5POINT0,
+                              AV_CH_LAYOUT_5POINT1)
     .p.ch_layouts     = (const AVChannelLayout[]){
         AV_CHANNEL_LAYOUT_MONO,
         AV_CHANNEL_LAYOUT_STEREO,

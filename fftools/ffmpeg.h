@@ -492,12 +492,9 @@ typedef struct OutputStream {
     AVStream *st;            /* stream in the output file */
     /* number of frames emitted by the video-encoding sync code */
     int64_t vsync_frame_number;
-    /* input pts and corresponding output pts
-       for A/V sync */
-    int64_t sync_opts;       /* output frame counter, could be changed to some true timestamp */ // FIXME look at frame_number
-    /* pts of the first frame encoded for this stream, used for limiting
-     * recording time */
-    int64_t first_pts;
+    /* predicted pts of the next frame to be encoded
+     * audio/video encoding only */
+    int64_t next_pts;
     /* dts of the last packet sent to the muxing queue, in AV_TIME_BASE_Q */
     int64_t last_mux_dts;
     /* pts of the last frame received from the filters, in AV_TIME_BASE_Q */
@@ -656,12 +653,10 @@ extern float audio_drift_threshold;
 extern float dts_delta_threshold;
 extern float dts_error_threshold;
 
-extern int audio_sync_method;
 extern enum VideoSyncMethod video_sync_method;
 extern float frame_drop_threshold;
 extern int do_benchmark;
 extern int do_benchmark_all;
-extern int do_deinterlace;
 extern int do_hex_dump;
 extern int do_pkt_dump;
 extern int copy_ts;
@@ -674,7 +669,6 @@ extern int print_stats;
 extern int64_t stats_period;
 extern int qp_hist;
 extern int stdin_interaction;
-extern int frame_bits_per_raw_sample;
 extern AVIOContext *progress_avio;
 extern float max_error_rate;
 
@@ -686,9 +680,6 @@ extern int auto_conversion_filters;
 extern const AVIOInterruptCB int_cb;
 
 extern const OptionDef options[];
-#if CONFIG_QSV
-extern char *qsv_device;
-#endif
 extern HWDevice *filter_hw_device;
 
 extern unsigned nb_output_dumped;
@@ -714,9 +705,6 @@ void sub2video_update(InputStream *ist, int64_t heartbeat_pts, AVSubtitle *sub);
 int ifilter_parameters_from_frame(InputFilter *ifilter, const AVFrame *frame);
 
 int ffmpeg_parse_options(int argc, char **argv);
-
-int videotoolbox_init(AVCodecContext *s);
-int qsv_init(AVCodecContext *s);
 
 HWDevice *hw_device_get_by_name(const char *name);
 int hw_device_init_from_string(const char *arg, HWDevice **dev);

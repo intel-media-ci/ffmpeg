@@ -46,7 +46,7 @@
 #include "dct.h"
 #include "encode.h"
 #include "idctdsp.h"
-#include "mpeg12.h"
+#include "mpeg12codecs.h"
 #include "mpeg12data.h"
 #include "mpeg12enc.h"
 #include "mpegvideo.h"
@@ -647,17 +647,17 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
     s->time_increment_bits = av_log2(avctx->time_base.den - 1) + 1;
 
     switch (avctx->codec->id) {
+#if CONFIG_MPEG1VIDEO_ENCODER || CONFIG_MPEG2VIDEO_ENCODER
+    case AV_CODEC_ID_MPEG2VIDEO:
+        s->rtp_mode   = 1;
+        /* fallthrough */
     case AV_CODEC_ID_MPEG1VIDEO:
         s->out_format = FMT_MPEG1;
         s->low_delay  = !!(avctx->flags & AV_CODEC_FLAG_LOW_DELAY);
         avctx->delay  = s->low_delay ? 0 : (s->max_b_frames + 1);
+        ff_mpeg1_encode_init(s);
         break;
-    case AV_CODEC_ID_MPEG2VIDEO:
-        s->out_format = FMT_MPEG1;
-        s->low_delay  = !!(avctx->flags & AV_CODEC_FLAG_LOW_DELAY);
-        avctx->delay  = s->low_delay ? 0 : (s->max_b_frames + 1);
-        s->rtp_mode   = 1;
-        break;
+#endif
 #if CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER
     case AV_CODEC_ID_MJPEG:
     case AV_CODEC_ID_AMV:
@@ -682,13 +682,9 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
     case AV_CODEC_ID_H261:
         if (!CONFIG_H261_ENCODER)
             return AVERROR_ENCODER_NOT_FOUND;
-        if (ff_h261_get_picture_format(s->width, s->height) < 0) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "The specified picture size of %dx%d is not valid for the "
-                   "H.261 codec.\nValid sizes are 176x144, 352x288\n",
-                    s->width, s->height);
-            return AVERROR(EINVAL);
-        }
+        ret = ff_h261_encode_init(s);
+        if (ret < 0)
+            return ret;
         s->out_format = FMT_H261;
         avctx->delay  = 0;
         s->low_delay  = 1;
@@ -899,12 +895,7 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
     ff_set_cmp(&s->mecc, s->mecc.ildct_cmp,      avctx->ildct_cmp);
     ff_set_cmp(&s->mecc, s->mecc.frame_skip_cmp, s->frame_skip_cmp);
 
-    if (CONFIG_H261_ENCODER && s->out_format == FMT_H261) {
-        ff_h261_encode_init(s);
-    } else if ((CONFIG_MPEG1VIDEO_ENCODER || CONFIG_MPEG2VIDEO_ENCODER)
-               && s->out_format == FMT_MPEG1) {
-        ff_mpeg1_encode_init(s);
-    } else if (CONFIG_H263_ENCODER && s->out_format == FMT_H263) {
+    if (CONFIG_H263_ENCODER && s->out_format == FMT_H263) {
         ff_h263_encode_init(s);
         if (CONFIG_MSMPEG4ENC && s->msmpeg4_version)
             ff_msmpeg4_encode_init(s);
@@ -3753,9 +3744,6 @@ static int encode_picture(MpegEncContext *s, int picture_number)
                               s->chroma_intra_matrix, s->intra_quant_bias, 8, 8, 1);
             s->qscale = 8;
         }
-    } else if (s->out_format == FMT_SPEEDHQ) {
-        s->y_dc_scale_table=
-        s->c_dc_scale_table= ff_mpeg2_dc_scale_table[3];
     }
 
     //FIXME var duplication

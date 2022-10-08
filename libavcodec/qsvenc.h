@@ -52,7 +52,7 @@
 
 #define QSV_COMMON_OPTS \
 { "async_depth", "Maximum processing parallelism", OFFSET(qsv.async_depth), AV_OPT_TYPE_INT, { .i64 = ASYNC_DEPTH_DEFAULT }, 1, INT_MAX, VE },                          \
-{ "preset", NULL, OFFSET(qsv.preset), AV_OPT_TYPE_INT, { .i64 = MFX_TARGETUSAGE_BALANCED }, MFX_TARGETUSAGE_BEST_QUALITY, MFX_TARGETUSAGE_BEST_SPEED,   VE, "preset" }, \
+{ "preset", NULL, OFFSET(qsv.preset), AV_OPT_TYPE_INT, { .i64 = MFX_TARGETUSAGE_UNKNOWN }, MFX_TARGETUSAGE_UNKNOWN, MFX_TARGETUSAGE_BEST_SPEED,   VE, "preset" },       \
 { "veryfast",    NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_TARGETUSAGE_BEST_SPEED  },   INT_MIN, INT_MAX, VE, "preset" },                                                \
 { "faster",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_TARGETUSAGE_6  },            INT_MIN, INT_MAX, VE, "preset" },                                                \
 { "fast",        NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_TARGETUSAGE_5  },            INT_MIN, INT_MAX, VE, "preset" },                                                \
@@ -271,6 +271,15 @@ typedef struct QSVEncContext {
     int old_min_qp_b;
     // This is used for low_delay_brc reset
     int old_low_delay_brc;
+    // This is used for framerate reset
+    AVRational old_framerate;
+    // These are used for bitrate control reset
+    int old_bit_rate;
+    int old_rc_buffer_size;
+    int old_rc_initial_buffer_occupancy;
+    int old_rc_max_rate;
+    // This is used for SEI Timing reset
+    int old_pic_timing_sei;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);

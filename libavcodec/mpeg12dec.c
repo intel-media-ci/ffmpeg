@@ -47,6 +47,7 @@
 #include "internal.h"
 #include "mpeg_er.h"
 #include "mpeg12.h"
+#include "mpeg12codecs.h"
 #include "mpeg12data.h"
 #include "mpeg12dec.h"
 #include "mpegutils.h"
@@ -1062,7 +1063,6 @@ static av_cold int mpeg_decode_init(AVCodecContext *avctx)
     /* we need some permutation to store matrices,
      * until the decoder sets the real permutation. */
     ff_mpv_idct_init(s2);
-    ff_mpeg12_common_init(&s->mpeg_enc_ctx);
     ff_mpeg12_init_vlcs();
 
     s2->chroma_format              = 1;
@@ -3075,7 +3075,6 @@ static av_cold int ipu_decode_init(AVCodecContext *avctx)
 
     ff_mpv_decode_init(m, avctx);
     ff_mpv_idct_init(m);
-    ff_mpeg12_common_init(m);
     ff_mpeg12_init_vlcs();
 
     for (int i = 0; i < 64; i++) {

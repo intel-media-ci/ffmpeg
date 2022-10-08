@@ -705,6 +705,7 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
         q->param.mfx.FrameInfo.FrameRateExtN  = avctx->time_base.den;
         q->param.mfx.FrameInfo.FrameRateExtD  = avctx->time_base.num;
     }
+    q->old_framerate = avctx->framerate;
 
     ret = select_rc_mode(avctx, q);
     if (ret < 0)
@@ -717,6 +718,10 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     max_bitrate_kbps           = avctx->rc_max_rate / 1000;
     brc_param_multiplier       = (FFMAX(FFMAX3(target_bitrate_kbps, max_bitrate_kbps, buffer_size_in_kilobytes),
                                   initial_delay_in_kilobytes) + 0x10000) / 0x10000;
+    q->old_rc_buffer_size = avctx->rc_buffer_size;
+    q->old_rc_initial_buffer_occupancy = avctx->rc_initial_buffer_occupancy;
+    q->old_bit_rate = avctx->bit_rate;
+    q->old_rc_max_rate = avctx->rc_max_rate;
 
     switch (q->param.mfx.RateControlMethod) {
     case MFX_RATECONTROL_CBR:
@@ -779,6 +784,7 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
 
         q->extco.PicTimingSEI         = q->pic_timing_sei ?
                                         MFX_CODINGOPTION_ON : MFX_CODINGOPTION_UNKNOWN;
+        q->old_pic_timing_sei = q->pic_timing_sei;
 
         if (q->rdo >= 0)
             q->extco.RateDistortionOpt = q->rdo > 0 ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
@@ -1760,8 +1766,8 @@ static int update_min_max_qp(AVCodecContext *avctx, QSVEncContext *q)
     if (avctx->codec_id != AV_CODEC_ID_H264)
         return 0;
 
-    UPDATE_PARAM(q->old_qmax, avctx->qmin);
-    UPDATE_PARAM(q->old_qmax, avctx->qmin);
+    UPDATE_PARAM(q->old_qmin, avctx->qmin);
+    UPDATE_PARAM(q->old_qmax, avctx->qmax);
     UPDATE_PARAM(q->old_min_qp_i, q->min_qp_i);
     UPDATE_PARAM(q->old_max_qp_i, q->max_qp_i);
     UPDATE_PARAM(q->old_min_qp_p, q->min_qp_p);
@@ -1838,6 +1844,82 @@ static int update_low_delay_brc(AVCodecContext *avctx, QSVEncContext *q)
     return updated;
 }
 
+static int update_frame_rate(AVCodecContext *avctx, QSVEncContext *q)
+{
+    int updated = 0;
+
+    UPDATE_PARAM(q->old_framerate.num, avctx->framerate.num);
+    UPDATE_PARAM(q->old_framerate.den, avctx->framerate.den);
+    if (!updated)
+        return 0;
+
+    if (avctx->framerate.den > 0 && avctx->framerate.num > 0) {
+        q->param.mfx.FrameInfo.FrameRateExtN = avctx->framerate.num;
+        q->param.mfx.FrameInfo.FrameRateExtD = avctx->framerate.den;
+    } else {
+        q->param.mfx.FrameInfo.FrameRateExtN = avctx->time_base.den;
+        q->param.mfx.FrameInfo.FrameRateExtD = avctx->time_base.num;
+    }
+    av_log(avctx, AV_LOG_DEBUG, "Reset framerate: %d/%d (%.2f fps).\n",
+           q->param.mfx.FrameInfo.FrameRateExtN,
+           q->param.mfx.FrameInfo.FrameRateExtD,
+           (double)q->param.mfx.FrameInfo.FrameRateExtN / q->param.mfx.FrameInfo.FrameRateExtD);
+
+    return updated;
+}
+
+static int update_bitrate(AVCodecContext *avctx, QSVEncContext *q)
+{
+    int updated = 0;
+    int target_bitrate_kbps, max_bitrate_kbps, brc_param_multiplier;
+    int buffer_size_in_kilobytes, initial_delay_in_kilobytes;
+
+    UPDATE_PARAM(q->old_rc_buffer_size, avctx->rc_buffer_size);
+    UPDATE_PARAM(q->old_rc_initial_buffer_occupancy, avctx->rc_initial_buffer_occupancy);
+    UPDATE_PARAM(q->old_bit_rate, avctx->bit_rate);
+    UPDATE_PARAM(q->old_rc_max_rate, avctx->rc_max_rate);
+    if (!updated)
+        return 0;
+
+    buffer_size_in_kilobytes   = avctx->rc_buffer_size / 8000;
+    initial_delay_in_kilobytes = avctx->rc_initial_buffer_occupancy / 8000;
+    target_bitrate_kbps        = avctx->bit_rate / 1000;
+    max_bitrate_kbps           = avctx->rc_max_rate / 1000;
+    brc_param_multiplier       = (FFMAX(FFMAX3(target_bitrate_kbps, max_bitrate_kbps, buffer_size_in_kilobytes),
+                                    initial_delay_in_kilobytes) + 0x10000) / 0x10000;
+
+    q->param.mfx.BufferSizeInKB = buffer_size_in_kilobytes / brc_param_multiplier;
+    q->param.mfx.InitialDelayInKB = initial_delay_in_kilobytes / brc_param_multiplier;
+    q->param.mfx.TargetKbps = target_bitrate_kbps / brc_param_multiplier;
+    q->param.mfx.MaxKbps = max_bitrate_kbps / brc_param_multiplier;
+    q->param.mfx.BRCParamMultiplier = brc_param_multiplier;
+    av_log(avctx, AV_LOG_VERBOSE,
+            "Reset BufferSizeInKB: %d; InitialDelayInKB: %d; "
+            "TargetKbps: %d; MaxKbps: %d; BRCParamMultiplier: %d\n",
+            q->param.mfx.BufferSizeInKB, q->param.mfx.InitialDelayInKB,
+            q->param.mfx.TargetKbps, q->param.mfx.MaxKbps, q->param.mfx.BRCParamMultiplier);
+    return updated;
+}
+
+static int update_pic_timing_sei(AVCodecContext *avctx, QSVEncContext *q)
+{
+    int updated = 0;
+
+    if (avctx->codec_id != AV_CODEC_ID_H264 && avctx->codec_id != AV_CODEC_ID_HEVC)
+        return 0;
+
+    UPDATE_PARAM(q->old_pic_timing_sei, q->pic_timing_sei);
+    if (!updated)
+        return 0;
+
+    q->extco.PicTimingSEI = q->pic_timing_sei ?
+                            MFX_CODINGOPTION_ON : MFX_CODINGOPTION_UNKNOWN;
+    av_log(avctx, AV_LOG_DEBUG, "Reset PicTimingSEI: %s\n",
+           print_threestate(q->extco.PicTimingSEI));
+
+    return updated;
+}
+
 static int update_parameters(AVCodecContext *avctx, QSVEncContext *q,
                              const AVFrame *frame)
 {
@@ -1851,6 +1933,9 @@ static int update_parameters(AVCodecContext *avctx, QSVEncContext *q,
     needReset |= update_gop_size(avctx, q);
     needReset |= update_rir(avctx, q);
     needReset |= update_low_delay_brc(avctx, q);
+    needReset |= update_frame_rate(avctx, q);
+    needReset |= update_bitrate(avctx, q);
+    needReset |= update_pic_timing_sei(avctx, q);
     ret = update_min_max_qp(avctx, q);
     if (ret < 0)
         return ret;

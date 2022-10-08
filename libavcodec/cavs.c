@@ -793,11 +793,11 @@ av_cold int ff_cavs_init(AVCodecContext *avctx)
 {
     AVSContext *h = avctx->priv_data;
 
-    ff_blockdsp_init(&h->bdsp, avctx);
+    ff_blockdsp_init(&h->bdsp);
     ff_h264chroma_init(&h->h264chroma, 8);
     ff_idctdsp_init(&h->idsp, avctx);
     ff_videodsp_init(&h->vdsp, 8);
-    ff_cavsdsp_init(&h->cdsp, avctx);
+    ff_cavsdsp_init(&h->cdsp);
     ff_init_scantable_permutation(h->idsp.idct_permutation,
                                   h->cdsp.idct_perm);
     ff_init_scantable(h->idsp.idct_permutation, &h->scantable, ff_zigzag_direct);
