@@ -492,7 +492,7 @@ static int config_output(AVFilterLink *outlink)
         }
     }
 
-    if (inlink->w != outlink->w || inlink->h != outlink->h) {
+    if (inlink->w != outlink->w || inlink->h != outlink->h || in_format != vpp->out_format) {
         if (QSV_RUNTIME_VERSION_ATLEAST(mfx_version, 1, 19)) {
             memset(&vpp->scale_conf, 0, sizeof(mfxExtVPPScaling));
             vpp->scale_conf.Header.BufferId    = MFX_EXTBUFF_VPP_SCALING;
