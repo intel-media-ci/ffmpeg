@@ -3582,6 +3582,9 @@ skip_frame metadata indicates the number of missed frames before the current
 frame.
 @end table
 
+@item udu_sei @var{boolean}
+Import user data unregistered SEI if available into output. Default is 0 (off).
+
 @end table
 
 @subsection HEVC Options
@@ -3786,6 +3789,9 @@ the frames after skipped frames will be larger in size.
 skip_frame metadata indicates the number of missed frames before the current
 frame.
 @end table
+
+@item udu_sei @var{boolean}
+Import user data unregistered SEI if available into output. Default is 0 (off).
 
 @end table
 

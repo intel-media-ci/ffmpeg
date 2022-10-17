@@ -255,6 +255,7 @@ typedef struct QSVEncContext {
     int transform_skip;
 
     int a53_cc;
+    int udu_sei;
 
 #if QSV_HAVE_MF
     int mfmode;

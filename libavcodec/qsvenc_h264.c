@@ -166,6 +166,7 @@ static const AVOption options[] = {
 #endif
 
     { "repeat_pps", "repeat pps for every frame", OFFSET(qsv.repeat_pps), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+    { "udu_sei",    "Use user data unregistered SEI if available", OFFSET(qsv.udu_sei), AV_OPT_TYPE_BOOL,   { .i64 = 0 }, 0, 1, VE },
 
     { NULL },
 };

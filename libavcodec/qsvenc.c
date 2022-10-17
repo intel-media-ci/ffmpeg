@@ -2046,6 +2046,49 @@ static void set_skip_frame_encode_ctrl(AVCodecContext *avctx, const AVFrame *fra
     return;
 }
 
+static int set_udu_encode_ctrl(AVCodecContext *avctx,  QSVEncContext *q,
+                               const AVFrame *frame, mfxEncodeCtrl *enc_ctrl)
+{
+    if (!frame || !q->udu_sei)
+        return 0;
+
+    for (int i = 0; i < frame->nb_side_data && enc_ctrl->NumPayload < QSV_MAX_ENC_PAYLOAD; i++) {
+        AVFrameSideData *sd = NULL;
+        mfxPayload *payload = NULL;
+        mfxU8* sei_data;
+        int j;
+
+        sd = frame->side_data[i];
+        if (sd->type != AV_FRAME_DATA_SEI_UNREGISTERED)
+            continue;
+
+        /* SEI type: 1 byte, SEI size: sd->size / 255 + 1 bytes, SEI data: sd->size bytes */
+        payload = av_malloc(sizeof(*payload) + sd->size / 255 + 2 + sd->size);
+        if (!payload)
+            return AVERROR(ENOMEM);
+
+        memset(payload, 0, sizeof(*payload));
+        sei_data = (mfxU8 *)(payload + 1);
+        // SEI header
+        sei_data[0] = 5;
+        for (j = 0; j < sd->size / 255; j++)
+            sei_data[j + 1] = 0xff;
+        sei_data[j + 1] = sd->size % 255;
+        // SEI data
+        memcpy(&sei_data[sd->size / 255 + 2], sd->data, sd->size);
+
+        payload->BufSize = sd->size + sd->size / 255 + 2;
+        payload->NumBit = payload->BufSize * 8;
+        payload->Type = 5;
+        payload->Data = sei_data;
+
+        enc_ctrl->Payload[enc_ctrl->NumPayload] = payload;
+        enc_ctrl->NumPayload++;
+    }
+
+    return 0;
+}
+
 static int update_qp(AVCodecContext *avctx, QSVEncContext *q)
 {
     int updated = 0, new_qp = 0;
@@ -2414,6 +2457,10 @@ static int encode_frame(AVCodecContext *avctx, QSVEncContext *q,
          avctx->codec_id == AV_CODEC_ID_H265) &&
          enc_ctrl && QSV_RUNTIME_VERSION_ATLEAST(q->ver, 1, 8)) {
         ret = set_roi_encode_ctrl(avctx, frame, enc_ctrl);
+        if (ret < 0)
+            goto free;
+
+        ret = set_udu_encode_ctrl(avctx, q, frame, enc_ctrl);
         if (ret < 0)
             goto free;
     }
