@@ -1109,7 +1109,7 @@ static int hwaccel_init(AVCodecContext *avctx,
         return AVERROR_PATCHWELCOME;
     }
 
-    if (hwaccel->priv_data_size) {
+    if (hwaccel->priv_data_size && !avctx->internal->hwaccel_priv_data) {
         avctx->internal->hwaccel_priv_data =
             av_mallocz(hwaccel->priv_data_size);
         if (!avctx->internal->hwaccel_priv_data)
@@ -1134,10 +1134,12 @@ static int hwaccel_init(AVCodecContext *avctx,
 
 static void hwaccel_uninit(AVCodecContext *avctx)
 {
-    if (avctx->hwaccel && avctx->hwaccel->uninit)
-        avctx->hwaccel->uninit(avctx);
+    if (avctx->hwaccel && !(avctx->hwaccel->caps_internal & HWACCEL_CAP_RESET_WITHOUT_UNINIT)) {
+        if (avctx->hwaccel->uninit)
+            avctx->hwaccel->uninit(avctx);
 
-    av_freep(&avctx->internal->hwaccel_priv_data);
+        av_freep(&avctx->internal->hwaccel_priv_data);
+    }
 
     avctx->hwaccel = NULL;
 
