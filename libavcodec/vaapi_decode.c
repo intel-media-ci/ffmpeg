@@ -658,8 +658,10 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     VAStatus vas;
     int err;
 
-    ctx->va_config  = VA_INVALID_ID;
-    ctx->va_context = VA_INVALID_ID;
+    if (!ctx->inited) {
+        ctx->va_config  = VA_INVALID_ID;
+        ctx->va_context = VA_INVALID_ID;
+    }
 
     err = ff_decode_get_hw_frames_ctx(avctx, AV_HWDEVICE_TYPE_VAAPI);
     if (err < 0)
@@ -670,10 +672,25 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     ctx->device = ctx->frames->device_ctx;
     ctx->hwctx  = ctx->device->hwctx;
 
+    if (ctx->va_config != VA_INVALID_ID)
+    {
+        vas = vaDestroyConfig(ctx->hwctx->display, ctx->va_config);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to destroy decode "
+                   "configuration %#x: %d (%s).\n",
+                   ctx->va_config, vas, vaErrorStr(vas));
+            err = AVERROR(EIO);
+            goto fail;
+        }
+    }
+
     err = vaapi_decode_make_config(avctx, ctx->frames->device_ref,
                                    &ctx->va_config, NULL);
     if (err)
         goto fail;
+
+    if (ctx->inited)
+        return 0;
 
     vas = vaCreateContext(ctx->hwctx->display, ctx->va_config,
                           avctx->coded_width, avctx->coded_height,
@@ -690,6 +707,8 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
 
     av_log(avctx, AV_LOG_DEBUG, "Decode context initialised: "
            "%#x/%#x.\n", ctx->va_config, ctx->va_context);
+
+    ctx->inited = 1;
 
     return 0;
 
