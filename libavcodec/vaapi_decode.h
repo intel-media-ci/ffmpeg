@@ -61,6 +61,7 @@ typedef struct VAAPIDecodeContext {
     int                   surface_count;
 
     VASurfaceAttrib       pixel_format_attribute;
+    int                   inited;
 } VAAPIDecodeContext;
 
 

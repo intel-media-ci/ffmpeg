@@ -658,9 +658,6 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     VAStatus vas;
     int err;
 
-    ctx->va_config  = VA_INVALID_ID;
-    ctx->va_context = VA_INVALID_ID;
-
     err = ff_decode_get_hw_frames_ctx(avctx, AV_HWDEVICE_TYPE_VAAPI);
     if (err < 0)
         goto fail;
@@ -669,6 +666,13 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     ctx->hwfc   = ctx->frames->hwctx;
     ctx->device = ctx->frames->device_ctx;
     ctx->hwctx  = ctx->device->hwctx;
+
+    if (ctx->inited)
+        return 0;
+
+    ctx->va_config  = VA_INVALID_ID;
+    ctx->va_context = VA_INVALID_ID;
+
 
     err = vaapi_decode_make_config(avctx, ctx->frames->device_ref,
                                    &ctx->va_config, NULL);
@@ -690,6 +694,8 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
 
     av_log(avctx, AV_LOG_DEBUG, "Decode context initialised: "
            "%#x/%#x.\n", ctx->va_config, ctx->va_context);
+
+    ctx->inited = 1;
 
     return 0;
 
