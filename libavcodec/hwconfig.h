@@ -25,6 +25,13 @@
 
 #define HWACCEL_CAP_ASYNC_SAFE      (1 << 0)
 
+/**
+ * The hwaccel supports reset without calling back AVHWAccel.uninit()
+ * and realloc avctx->internal->hwaccel_priv_data.
+ *
+ * New configuration can set up through AVHWAccel.init().
+ */
+#define HWACCEL_CAP_RESET_WITHOUT_UNINIT     (1 << 1)
 
 typedef struct AVCodecHWConfigInternal {
     /**
