@@ -869,6 +869,8 @@ int ff_qsvvpp_filter_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *picr
             return AVERROR(ENOMEM);
         }
 
+        av_frame_copy_props(out_frame->frame, in_frame->frame);
+
         do {
             ret = MFXVideoVPP_RunFrameVPPAsync(s->session, &in_frame->surface,
                                                &out_frame->surface, NULL, &sync);
