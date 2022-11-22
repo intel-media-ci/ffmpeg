@@ -43,6 +43,12 @@ DEFINE_GUID(ff_DXVA2_ModeVC1_D,          0x1b81beA3, 0xa0c7,0x11d3,0xb9,0x84,0x0
 DEFINE_GUID(ff_DXVA2_ModeVC1_D2010,      0x1b81beA4, 0xa0c7,0x11d3,0xb9,0x84,0x00,0xc0,0x4f,0x2e,0x73,0xc5);
 DEFINE_GUID(ff_DXVA2_ModeHEVC_VLD_Main,  0x5b11d51b, 0x2f4c,0x4452,0xbc,0xc3,0x09,0xf2,0xa1,0x16,0x0c,0xc0);
 DEFINE_GUID(ff_DXVA2_ModeHEVC_VLD_Main10,0x107af0e0, 0xef1a,0x4d19,0xab,0xa8,0x67,0xa1,0x63,0x07,0x3d,0x13);
+DEFINE_GUID(ff_DXVA2_ModeHEVC_VLD_Main12_Intel,     0x8ff8a3aa, 0xc456,0x4132,0xb6,0xef,0x69,0xd9,0xdd,0x72,0x57,0x1d);
+DEFINE_GUID(ff_DXVA2_ModeHEVC_VLD_Main422_10_Intel, 0xe484dcb8, 0xcac9,0x4859,0x99,0xf5,0x5c,0x0d,0x45,0x06,0x90,0x89);
+DEFINE_GUID(ff_DXVA2_ModeHEVC_VLD_Main422_12_Intel, 0xc23dd857, 0x874b,0x423c,0xb6,0xe0,0x82,0xce,0xaa,0x9b,0x11,0x8a);
+DEFINE_GUID(ff_DXVA2_ModeHEVC_VLD_Main444_Intel,    0x41a5af96, 0xe415,0x4b0c,0x9d,0x03,0x90,0x78,0x58,0xe2,0x3e,0x78);
+DEFINE_GUID(ff_DXVA2_ModeHEVC_VLD_Main444_10_Intel, 0x6a6a81ba, 0x912a,0x485d,0xb5,0x7f,0xcc,0xd2,0xd3,0x7b,0x8d,0x94);
+DEFINE_GUID(ff_DXVA2_ModeHEVC_VLD_Main444_12_Intel, 0x5b08e35d, 0x0c66,0x4c51,0xa6,0xf1,0x89,0xd0,0x0c,0xb2,0xc1,0x97);
 DEFINE_GUID(ff_DXVA2_ModeVP9_VLD_Profile0,0x463707f8,0xa1d0,0x4585,0x87,0x6d,0x83,0xaa,0x6d,0x60,0xb8,0x9e);
 DEFINE_GUID(ff_DXVA2_ModeVP9_VLD_10bit_Profile2,0xa4c749ef,0x6ecf,0x48aa,0x84,0x48,0x50,0xa7,0xa1,0x16,0x5f,0xf7);
 DEFINE_GUID(ff_DXVA2_ModeAV1_VLD_Profile0,0xb8be4ccb,0xcf53,0x46ba,0x8d,0x59,0xd6,0xb8,0xa6,0xda,0x5d,0x2a);
@@ -69,6 +75,8 @@ static const int prof_hevc_main[]    = {FF_PROFILE_HEVC_MAIN,
                                         FF_PROFILE_UNKNOWN};
 static const int prof_hevc_main10[]  = {FF_PROFILE_HEVC_MAIN_10,
                                         FF_PROFILE_UNKNOWN};
+static const int prof_hevc_main_rext[] = {FF_PROFILE_HEVC_REXT,
+                                          FF_PROFILE_UNKNOWN};
 static const int prof_vp9_profile0[] = {FF_PROFILE_VP9_0,
                                         FF_PROFILE_UNKNOWN};
 static const int prof_vp9_profile2[] = {FF_PROFILE_VP9_2,
@@ -97,6 +105,14 @@ static const dxva_mode dxva_modes[] = {
     { &ff_DXVA2_ModeHEVC_VLD_Main10, AV_CODEC_ID_HEVC, prof_hevc_main10 },
     { &ff_DXVA2_ModeHEVC_VLD_Main,   AV_CODEC_ID_HEVC, prof_hevc_main },
 
+    /* Intel specific HEVC/H.265 Main Rext mode */
+    { &ff_DXVA2_ModeHEVC_VLD_Main12_Intel,     AV_CODEC_ID_HEVC, prof_hevc_main_rext },
+    { &ff_DXVA2_ModeHEVC_VLD_Main422_10_Intel, AV_CODEC_ID_HEVC, prof_hevc_main_rext },
+    { &ff_DXVA2_ModeHEVC_VLD_Main422_12_Intel, AV_CODEC_ID_HEVC, prof_hevc_main_rext },
+    { &ff_DXVA2_ModeHEVC_VLD_Main444_Intel,    AV_CODEC_ID_HEVC, prof_hevc_main_rext },
+    { &ff_DXVA2_ModeHEVC_VLD_Main444_10_Intel, AV_CODEC_ID_HEVC, prof_hevc_main_rext },
+    { &ff_DXVA2_ModeHEVC_VLD_Main444_12_Intel, AV_CODEC_ID_HEVC, prof_hevc_main_rext },
+
     /* VP8/9 */
     { &ff_DXVA2_ModeVP9_VLD_Profile0,       AV_CODEC_ID_VP9, prof_vp9_profile0 },
     { &ff_DXVA2_ModeVP9_VLD_10bit_Profile2, AV_CODEC_ID_VP9, prof_vp9_profile2 },
@@ -106,6 +122,22 @@ static const dxva_mode dxva_modes[] = {
 
     { NULL,                          0 },
 };
+
+static enum AVPixelFormat dxva_map_sw_to_sw_format(enum AVPixelFormat pix_fmt)
+{
+    switch (pix_fmt) {
+    case AV_PIX_FMT_YUV420P:   return AV_PIX_FMT_NV12;
+    case AV_PIX_FMT_YUV420P10: return AV_PIX_FMT_P010;
+    case AV_PIX_FMT_YUV420P12: return AV_PIX_FMT_P012;
+    case AV_PIX_FMT_YUV422P:   return AV_PIX_FMT_YUYV422;
+    case AV_PIX_FMT_YUV422P10: return AV_PIX_FMT_Y210;
+    case AV_PIX_FMT_YUV422P12: return AV_PIX_FMT_Y212;
+    case AV_PIX_FMT_YUV444P:   return AV_PIX_FMT_VUYX;
+    case AV_PIX_FMT_YUV444P10: return AV_PIX_FMT_XV30;
+    case AV_PIX_FMT_YUV444P12: return AV_PIX_FMT_XV36;
+    default:                   return AV_PIX_FMT_NV12;
+    }
+}
 
 static int dxva_get_decoder_configuration(AVCodecContext *avctx,
                                           const void *cfg_list,
@@ -245,7 +277,14 @@ static void dxva_list_guids_debug(AVCodecContext *avctx, void *service,
 #if CONFIG_DXVA2
         if (sctx->pix_fmt == AV_PIX_FMT_DXVA2_VLD) {
             const D3DFORMAT formats[] = {MKTAG('N', 'V', '1', '2'),
-                                         MKTAG('P', '0', '1', '0')};
+                                         MKTAG('P', '0', '1', '0'),
+                                         MKTAG('P', '0', '1', '6'),
+                                         MKTAG('Y', 'U', 'Y', '2'),
+                                         MKTAG('Y', '2', '1', '0'),
+                                         MKTAG('Y', '2', '1', '6'),
+                                         MKTAG('A', 'Y', 'U', 'V'),
+                                         MKTAG('Y', '4', '1', '0'),
+                                         MKTAG('Y', '4', '1', '6')};
             int i;
             for (i = 0; i < FF_ARRAY_ELEMS(formats); i++) {
                 if (dxva2_validate_output(service, *guid, &formats[i]))
@@ -339,14 +378,28 @@ static int dxva2_get_decoder_configuration(AVCodecContext *avctx, const GUID *de
     return ret;
 }
 
+static D3DFORMAT dxva2_map_sw_to_hw_format(enum AVPixelFormat pix_fmt)
+{
+    switch (pix_fmt) {
+    case AV_PIX_FMT_NV12:    return MKTAG('N', 'V', '1', '2');
+    case AV_PIX_FMT_P010:    return MKTAG('P', '0', '1', '0');
+    case AV_PIX_FMT_P012:    return MKTAG('P', '0', '1', '6');
+    case AV_PIX_FMT_YUYV422: return MKTAG('Y', 'U', 'Y', '2');
+    case AV_PIX_FMT_Y210:    return MKTAG('Y', '2', '1', '0');
+    case AV_PIX_FMT_Y212:    return MKTAG('Y', '2', '1', '6');
+    case AV_PIX_FMT_VUYX:    return MKTAG('A', 'Y', 'U', 'V');
+    case AV_PIX_FMT_XV30:    return MKTAG('Y', '4', '1', '0');
+    case AV_PIX_FMT_XV36:    return MKTAG('Y', '4', '1', '6');
+    default:                 return D3DFMT_UNKNOWN;
+    }
+}
+
 static int dxva2_create_decoder(AVCodecContext *avctx)
 {
     FFDXVASharedContext *sctx = DXVA_SHARED_CONTEXT(avctx);
     GUID *guid_list;
     unsigned guid_count;
     GUID device_guid;
-    D3DFORMAT surface_format = avctx->sw_pix_fmt == AV_PIX_FMT_YUV420P10 ?
-                               MKTAG('P', '0', '1', '0') : MKTAG('N', 'V', '1', '2');
     DXVA2_VideoDesc desc = { 0 };
     DXVA2_ConfigPictureDecode config;
     HRESULT hr;
@@ -355,6 +408,7 @@ static int dxva2_create_decoder(AVCodecContext *avctx)
     AVHWFramesContext *frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
     AVDXVA2FramesContext *frames_hwctx = frames_ctx->hwctx;
     AVDXVA2DeviceContext *device_hwctx = frames_ctx->device_ctx->hwctx;
+    D3DFORMAT surface_format = dxva2_map_sw_to_hw_format(frames_ctx->sw_format);
 
     hr = IDirect3DDeviceManager9_OpenDeviceHandle(device_hwctx->devmgr,
                                                   &device_handle);
@@ -455,10 +509,17 @@ static int d3d11va_get_decoder_configuration(AVCodecContext *avctx,
 static DXGI_FORMAT d3d11va_map_sw_to_hw_format(enum AVPixelFormat pix_fmt)
 {
     switch (pix_fmt) {
-    case AV_PIX_FMT_NV12:       return DXGI_FORMAT_NV12;
-    case AV_PIX_FMT_P010:       return DXGI_FORMAT_P010;
-    case AV_PIX_FMT_YUV420P:    return DXGI_FORMAT_420_OPAQUE;
-    default:                    return DXGI_FORMAT_UNKNOWN;
+    case AV_PIX_FMT_NV12:    return DXGI_FORMAT_NV12;
+    case AV_PIX_FMT_P010:    return DXGI_FORMAT_P010;
+    case AV_PIX_FMT_P012:    return DXGI_FORMAT_P016;
+    case AV_PIX_FMT_YUYV422: return DXGI_FORMAT_YUY2;
+    case AV_PIX_FMT_Y210:    return DXGI_FORMAT_Y210;
+    case AV_PIX_FMT_Y212:    return DXGI_FORMAT_Y216;
+    case AV_PIX_FMT_VUYX:    return DXGI_FORMAT_AYUV;
+    case AV_PIX_FMT_XV30:    return DXGI_FORMAT_Y410;
+    case AV_PIX_FMT_XV36:    return DXGI_FORMAT_Y416;
+    case AV_PIX_FMT_YUV420P: return DXGI_FORMAT_420_OPAQUE;
+    default:                 return DXGI_FORMAT_UNKNOWN;
     }
 }
 
@@ -626,8 +687,7 @@ int ff_dxva2_common_frame_params(AVCodecContext *avctx,
     else
         num_surfaces += 2;
 
-    frames_ctx->sw_format = avctx->sw_pix_fmt == AV_PIX_FMT_YUV420P10 ?
-                            AV_PIX_FMT_P010 : AV_PIX_FMT_NV12;
+    frames_ctx->sw_format = dxva_map_sw_to_sw_format(avctx->sw_pix_fmt);
     frames_ctx->width = FFALIGN(avctx->coded_width, surface_alignment);
     frames_ctx->height = FFALIGN(avctx->coded_height, surface_alignment);
     frames_ctx->initial_pool_size = num_surfaces;
