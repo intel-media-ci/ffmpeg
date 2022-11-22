@@ -28,10 +28,60 @@
 #include "hevc_data.h"
 #include "hevcdec.h"
 
+/**
+ * Picture Parameters DXVA buffer struct for Rext is not specified in DXVA
+ * spec. The below structures come from Intel platform DDI definition, so they
+ * are currently Intel specific.
+ *
+ * For Nvidia and AMD platforms supporting HEVC Rext, it is expected
+ * the picture param information included in below structures is sufficient
+ * for underlying drivers supporting range extension.
+ */
+#pragma pack(push, 1)
+typedef struct
+{
+    DXVA_PicParams_HEVC main;
+
+    // HEVC Range Extension. Fields are named the same as in HEVC spec.
+    __C89_NAMELESS union {
+        __C89_NAMELESS struct {
+            UINT32 transform_skip_rotation_enabled_flag : 1;
+            UINT32 transform_skip_context_enabled_flag : 1;
+            UINT32 implicit_rdpcm_enabled_flag : 1;
+            UINT32 explicit_rdpcm_enabled_flag : 1;
+            UINT32 extended_precision_processing_flag : 1;
+            UINT32 intra_smoothing_disabled_flag : 1;
+            UINT32 high_precision_offsets_enabled_flag : 1;
+            UINT32 persistent_rice_adaptation_enabled_flag : 1;
+            UINT32 cabac_bypass_alignment_enabled_flag : 1;
+            UINT32 cross_component_prediction_enabled_flag : 1;
+            UINT32 chroma_qp_offset_list_enabled_flag : 1;
+            // Indicates if luma bit depth equals to 16. If its value is 1, the
+            // corresponding bit_depth_luma_minus8 must be set to 0.
+            UINT32 BitDepthLuma16 : 1;
+            // Indicates if chroma bit depth equals to 16. If its value is 1, the
+            // corresponding bit_depth_chroma_minus8 must be set to 0.
+            UINT32 BitDepthChroma16 : 1;
+            UINT32 ReservedBits8 : 19;
+        };
+        UINT32 dwRangeExtensionFlags;
+    };
+
+    UCHAR diff_cu_chroma_qp_offset_depth;    // [0..3]
+    UCHAR chroma_qp_offset_list_len_minus1;  // [0..5]
+    UCHAR log2_sao_offset_scale_luma;        // [0..6]
+    UCHAR log2_sao_offset_scale_chroma;      // [0..6]
+    UCHAR log2_max_transform_skip_block_size_minus2;
+    CHAR cb_qp_offset_list[6];  // [-12..12]
+    CHAR cr_qp_offset_list[6];  // [-12..12]
+
+} DXVA_PicParams_HEVC_Rext;
+#pragma pack(pop)
+
 #define MAX_SLICES 256
 
 struct hevc_dxva2_picture_context {
-    DXVA_PicParams_HEVC   pp;
+    DXVA_PicParams_HEVC_Rext pp;
     DXVA_Qmatrix_HEVC     qm;
     unsigned              slice_count;
     DXVA_Slice_HEVC_Short slice_short[MAX_SLICES];
@@ -57,17 +107,47 @@ static int get_refpic_index(const DXVA_PicParams_HEVC *pp, int surface_index)
 }
 
 static void fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *ctx, const HEVCContext *h,
-                                    DXVA_PicParams_HEVC *pp)
+                                    DXVA_PicParams_HEVC_Rext *ppext)
 {
     const HEVCFrame *current_picture = h->ref;
     const HEVCSPS *sps = h->ps.sps;
     const HEVCPPS *pps = h->ps.pps;
     int i, j;
+    DXVA_PicParams_HEVC *pp = &ppext->main;
 
-    memset(pp, 0, sizeof(*pp));
+    memset(ppext, 0, sizeof(*ppext));
 
     pp->PicWidthInMinCbsY  = sps->min_cb_width;
     pp->PicHeightInMinCbsY = sps->min_cb_height;
+
+    if (sps->sps_range_extension_flag) {
+        ppext->dwRangeExtensionFlags |= (sps->transform_skip_rotation_enabled_flag     <<  0) |
+                                        (sps->transform_skip_context_enabled_flag      <<  1) |
+                                        (sps->implicit_rdpcm_enabled_flag              <<  2) |
+                                        (sps->explicit_rdpcm_enabled_flag              <<  3) |
+                                        (sps->extended_precision_processing_flag       <<  4) |
+                                        (sps->intra_smoothing_disabled_flag            <<  5) |
+                                        (sps->high_precision_offsets_enabled_flag      <<  5) |
+                                        (sps->persistent_rice_adaptation_enabled_flag  <<  7) |
+                                        (sps->cabac_bypass_alignment_enabled_flag      <<  8);
+    }
+    if (pps->pps_range_extensions_flag) {
+        ppext->dwRangeExtensionFlags |= (pps->cross_component_prediction_enabled_flag  <<  9) |
+                                        (pps->chroma_qp_offset_list_enabled_flag       << 10);
+        if (pps->chroma_qp_offset_list_enabled_flag) {
+            ppext->diff_cu_chroma_qp_offset_depth   = pps->diff_cu_chroma_qp_offset_depth;
+            ppext->chroma_qp_offset_list_len_minus1 = pps->chroma_qp_offset_list_len_minus1;
+            for (i = 0; i <= pps->chroma_qp_offset_list_len_minus1; i++) {
+                ppext->cb_qp_offset_list[i] = pps->cb_qp_offset_list[i];
+                ppext->cr_qp_offset_list[i] = pps->cr_qp_offset_list[i];
+            }
+        }
+        ppext->log2_sao_offset_scale_luma   = pps->log2_sao_offset_scale_luma;
+        ppext->log2_sao_offset_scale_chroma = pps->log2_sao_offset_scale_chroma;
+        if (pps->transform_skip_enabled_flag) {
+            ppext->log2_max_transform_skip_block_size_minus2 = pps->log2_max_transform_skip_block_size - 2;
+        }
+    }
 
     pp->wFormatAndSequenceInfoFlags = (sps->chroma_format_idc             <<  0) |
                                       (sps->separate_colour_plane_flag    <<  2) |
@@ -406,14 +486,15 @@ static int dxva2_hevc_end_frame(AVCodecContext *avctx)
 {
     HEVCContext *h = avctx->priv_data;
     struct hevc_dxva2_picture_context *ctx_pic = h->ref->hwaccel_picture_private;
-    int scale = ctx_pic->pp.dwCodingParamToolFlags & 1;
+    int scale = ctx_pic->pp.main.dwCodingParamToolFlags & 1;
+    int rext = avctx->profile == FF_PROFILE_HEVC_REXT;
     int ret;
 
     if (ctx_pic->slice_count <= 0 || ctx_pic->bitstream_size <= 0)
         return -1;
 
     ret = ff_dxva2_common_end_frame(avctx, h->ref->frame,
-                                    &ctx_pic->pp, sizeof(ctx_pic->pp),
+                                    &ctx_pic->pp, rext ? sizeof(ctx_pic->pp) : sizeof(ctx_pic->pp.main),
                                     scale ? &ctx_pic->qm : NULL, scale ? sizeof(ctx_pic->qm) : 0,
                                     commit_bitstream_and_slice_buffer);
     return ret;
