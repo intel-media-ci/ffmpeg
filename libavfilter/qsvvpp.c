@@ -408,9 +408,15 @@ static QSVFrame *submit_frame(QSVVPPContext *s, AVFilterLink *inlink, AVFrame *p
     } else {
         /* make a copy if the input is not padded as libmfx requires */
         if (picref->height & 31 || picref->linesize[0] & 31) {
-            qsv_frame->frame = ff_get_video_buffer(inlink,
-                                                   FFALIGN(inlink->w, 32),
-                                                   FFALIGN(inlink->h, 32));
+            /* When process YUV420 frames, FFmpeg uses same alignment on Y/U/V
+             * planes. VPL and MSDK use Y plane's pitch / 2 as U/V planes's
+             * pitch, which makes U/V planes 16-bytes aligned. We need to set a
+             * separate alignment to meet runtime's behaviour.
+             */
+            qsv_frame->frame = ff_default_get_video_buffer2(inlink,
+                                                FFALIGN(inlink->w, 32),
+                                                FFALIGN(inlink->h, 32),
+                                                16);
             if (!qsv_frame->frame)
                 return NULL;
 
