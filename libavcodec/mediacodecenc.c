@@ -43,6 +43,7 @@ typedef struct MediaCodecEncContext {
     AVClass *avclass;
     FFAMediaCodec *codec;
     int use_ndk_codec;
+    const char *name;
     FFANativeWindow *window;
 
     int fps;
@@ -126,7 +127,10 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
         av_assert0(0);
     }
 
-    s->codec = ff_AMediaCodec_createEncoderByType(codec_mime, s->use_ndk_codec);
+    if (s->name)
+        s->codec = ff_AMediaCodec_createCodecByName(s->name, s->use_ndk_codec);
+    else
+        s->codec = ff_AMediaCodec_createEncoderByType(codec_mime, s->use_ndk_codec);
     if (!s->codec) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create encoder for type %s\n",
                codec_mime);
@@ -167,6 +171,16 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
             av_log(avctx, AV_LOG_ERROR, "Missing hw_device_ctx or hwaccel_context for AV_PIX_FMT_MEDIACODEC\n");
             goto bailout;
         }
+        /* Although there is a method ANativeWindow_toSurface() introduced in
+         * API level 26, it's easier and safe to always require a Surface for
+         * Java MediaCodec.
+         */
+        if (!s->use_ndk_codec && !s->window->surface) {
+            ret = AVERROR(EINVAL);
+            av_log(avctx, AV_LOG_ERROR, "Missing jobject Surface for AV_PIX_FMT_MEDIACODEC. "
+                    "Please note that Java MediaCodec doesn't work with ANativeWindow.\n");
+            goto bailout;
+        }
     }
 
     for (int i = 0; i < FF_ARRAY_ELEMS(color_formats); i++) {
@@ -199,6 +213,11 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
     ff_AMediaFormat_setInt32(format, "frame-rate", s->fps);
     ff_AMediaFormat_setInt32(format, "i-frame-interval", gop);
 
+    ret = ff_AMediaCodecProfile_getProfileFromAVCodecContext(avctx);
+    if (ret > 0) {
+        av_log(avctx, AV_LOG_DEBUG, "set profile to 0x%x\n", ret);
+        ff_AMediaFormat_setInt32(format, "profile", ret);
+    }
 
     ret = ff_AMediaCodec_getConfigureFlagEncode(s->codec);
     ret = ff_AMediaCodec_configure(s->codec, format, s->window, NULL, ret);
@@ -464,6 +483,8 @@ static const AVCodecHWConfigInternal *const mediacodec_hw_configs[] = {
 static const AVOption common_options[] = {
     { "ndk_codec", "Use MediaCodec from NDK",
                     OFFSET(use_ndk_codec), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, VE },
+    { "codec_name", "Select codec by name",
+                    OFFSET(name), AV_OPT_TYPE_STRING, {0}, 0, 0, VE },
     { NULL },
 };
 

@@ -134,6 +134,10 @@ static const AVOption options[] = {
     { "format", "Output pixel format", OFFSET(output_format_str), AV_OPT_TYPE_STRING, { .str = "same" }, .flags = FLAGS },
     { "async_depth", "Internal parallelization depth, the higher the value the higher the latency.", OFFSET(async_depth), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
     { "scale_mode", "scale & format conversion mode: 0=auto, 1=low power, 2=high quality", OFFSET(scale_mode), AV_OPT_TYPE_INT, { .i64 = MFX_SCALING_MODE_DEFAULT }, MFX_SCALING_MODE_DEFAULT, MFX_SCALING_MODE_QUALITY, .flags = FLAGS, "scale mode" },
+    { "auto",      "auto mode",             0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_DEFAULT},  INT_MIN, INT_MAX, FLAGS, "scale mode"},
+    { "low_power", "low power mode",        0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_LOWPOWER}, INT_MIN, INT_MAX, FLAGS, "scale mode"},
+    { "hq",        "high quality mode",     0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_QUALITY},  INT_MIN, INT_MAX, FLAGS, "scale mode"},
+
     { NULL }
 };
 
@@ -365,53 +369,44 @@ static int config_output(AVFilterLink *outlink)
         param.crop     = &crop;
     }
 
-    if (vpp->deinterlace) {
-        memset(&vpp->deinterlace_conf, 0, sizeof(mfxExtVPPDeinterlacing));
-        vpp->deinterlace_conf.Header.BufferId = MFX_EXTBUFF_VPP_DEINTERLACING;
-        vpp->deinterlace_conf.Header.BufferSz = sizeof(mfxExtVPPDeinterlacing);
-        vpp->deinterlace_conf.Mode = vpp->deinterlace == 1 ?
-                                     MFX_DEINTERLACING_BOB : MFX_DEINTERLACING_ADVANCED;
+#define INIT_MFX_EXTBUF(extbuf, id) do { \
+        memset(&vpp->extbuf, 0, sizeof(vpp->extbuf)); \
+        vpp->extbuf.Header.BufferId = id; \
+        vpp->extbuf.Header.BufferSz = sizeof(vpp->extbuf); \
+        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->extbuf; \
+    } while (0)
 
-        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->deinterlace_conf;
+#define SET_MFX_PARAM_FIELD(extbuf, field, value) do { \
+        vpp->extbuf.field = value; \
+    } while (0)
+
+    if (vpp->deinterlace) {
+        INIT_MFX_EXTBUF(deinterlace_conf, MFX_EXTBUFF_VPP_DEINTERLACING);
+        SET_MFX_PARAM_FIELD(deinterlace_conf, Mode, (vpp->deinterlace == 1 ?
+                            MFX_DEINTERLACING_BOB : MFX_DEINTERLACING_ADVANCED));
     }
 
     if (vpp->use_frc) {
-        memset(&vpp->frc_conf, 0, sizeof(mfxExtVPPFrameRateConversion));
-        vpp->frc_conf.Header.BufferId = MFX_EXTBUFF_VPP_FRAME_RATE_CONVERSION;
-        vpp->frc_conf.Header.BufferSz = sizeof(mfxExtVPPFrameRateConversion);
-        vpp->frc_conf.Algorithm = MFX_FRCALGM_DISTRIBUTED_TIMESTAMP;
-
-        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->frc_conf;
+        INIT_MFX_EXTBUF(frc_conf, MFX_EXTBUFF_VPP_FRAME_RATE_CONVERSION);
+        SET_MFX_PARAM_FIELD(frc_conf, Algorithm, MFX_FRCALGM_DISTRIBUTED_TIMESTAMP);
     }
 
     if (vpp->denoise) {
-        memset(&vpp->denoise_conf, 0, sizeof(mfxExtVPPDenoise));
-        vpp->denoise_conf.Header.BufferId = MFX_EXTBUFF_VPP_DENOISE;
-        vpp->denoise_conf.Header.BufferSz = sizeof(mfxExtVPPDenoise);
-        vpp->denoise_conf.DenoiseFactor   = vpp->denoise;
-
-        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->denoise_conf;
+        INIT_MFX_EXTBUF(denoise_conf, MFX_EXTBUFF_VPP_DENOISE);
+        SET_MFX_PARAM_FIELD(denoise_conf, DenoiseFactor, vpp->denoise);
     }
 
     if (vpp->detail) {
-        memset(&vpp->detail_conf, 0, sizeof(mfxExtVPPDetail));
-        vpp->detail_conf.Header.BufferId  = MFX_EXTBUFF_VPP_DETAIL;
-        vpp->detail_conf.Header.BufferSz  = sizeof(mfxExtVPPDetail);
-        vpp->detail_conf.DetailFactor = vpp->detail;
-
-        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->detail_conf;
+        INIT_MFX_EXTBUF(detail_conf, MFX_EXTBUFF_VPP_DETAIL);
+        SET_MFX_PARAM_FIELD(detail_conf, DetailFactor, vpp->detail);
     }
 
     if (vpp->procamp) {
-        memset(&vpp->procamp_conf, 0, sizeof(mfxExtVPPProcAmp));
-        vpp->procamp_conf.Header.BufferId  = MFX_EXTBUFF_VPP_PROCAMP;
-        vpp->procamp_conf.Header.BufferSz  = sizeof(mfxExtVPPProcAmp);
-        vpp->procamp_conf.Hue              = vpp->hue;
-        vpp->procamp_conf.Saturation       = vpp->saturation;
-        vpp->procamp_conf.Contrast         = vpp->contrast;
-        vpp->procamp_conf.Brightness       = vpp->brightness;
-
-        param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->procamp_conf;
+        INIT_MFX_EXTBUF(procamp_conf, MFX_EXTBUFF_VPP_PROCAMP);
+        SET_MFX_PARAM_FIELD(procamp_conf, Hue, vpp->hue);
+        SET_MFX_PARAM_FIELD(procamp_conf, Saturation, vpp->saturation);
+        SET_MFX_PARAM_FIELD(procamp_conf, Contrast, vpp->contrast);
+        SET_MFX_PARAM_FIELD(procamp_conf, Brightness, vpp->brightness);
     }
 
     if (vpp->transpose >= 0) {
@@ -458,18 +453,14 @@ static int config_output(AVFilterLink *outlink)
 
     if (vpp->rotate) {
         if (QSV_RUNTIME_VERSION_ATLEAST(mfx_version, 1, 17)) {
-            memset(&vpp->rotation_conf, 0, sizeof(mfxExtVPPRotation));
-            vpp->rotation_conf.Header.BufferId  = MFX_EXTBUFF_VPP_ROTATION;
-            vpp->rotation_conf.Header.BufferSz  = sizeof(mfxExtVPPRotation);
-            vpp->rotation_conf.Angle = vpp->rotate;
+            INIT_MFX_EXTBUF(rotation_conf, MFX_EXTBUFF_VPP_ROTATION);
+            SET_MFX_PARAM_FIELD(rotation_conf, Angle, vpp->rotate);
 
             if (MFX_ANGLE_90 == vpp->rotate || MFX_ANGLE_270 == vpp->rotate) {
                 FFSWAP(int, vpp->out_width, vpp->out_height);
                 FFSWAP(int, outlink->w, outlink->h);
                 av_log(ctx, AV_LOG_DEBUG, "Swap width and height for clock/cclock rotation.\n");
             }
-
-            param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->rotation_conf;
         } else {
             av_log(ctx, AV_LOG_WARNING, "The QSV VPP rotate option is "
                    "not supported with this MSDK version.\n");
@@ -479,12 +470,8 @@ static int config_output(AVFilterLink *outlink)
 
     if (vpp->hflip) {
         if (QSV_RUNTIME_VERSION_ATLEAST(mfx_version, 1, 19)) {
-            memset(&vpp->mirroring_conf, 0, sizeof(mfxExtVPPMirroring));
-            vpp->mirroring_conf.Header.BufferId = MFX_EXTBUFF_VPP_MIRRORING;
-            vpp->mirroring_conf.Header.BufferSz = sizeof(mfxExtVPPMirroring);
-            vpp->mirroring_conf.Type = vpp->hflip;
-
-            param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->mirroring_conf;
+            INIT_MFX_EXTBUF(mirroring_conf, MFX_EXTBUFF_VPP_MIRRORING);
+            SET_MFX_PARAM_FIELD(mirroring_conf, Type, vpp->hflip);
         } else {
             av_log(ctx, AV_LOG_WARNING, "The QSV VPP hflip option is "
                    "not supported with this MSDK version.\n");
@@ -494,16 +481,15 @@ static int config_output(AVFilterLink *outlink)
 
     if (inlink->w != outlink->w || inlink->h != outlink->h || in_format != vpp->out_format) {
         if (QSV_RUNTIME_VERSION_ATLEAST(mfx_version, 1, 19)) {
-            memset(&vpp->scale_conf, 0, sizeof(mfxExtVPPScaling));
-            vpp->scale_conf.Header.BufferId    = MFX_EXTBUFF_VPP_SCALING;
-            vpp->scale_conf.Header.BufferSz    = sizeof(mfxExtVPPScaling);
-            vpp->scale_conf.ScalingMode        = vpp->scale_mode;
-
-            param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->scale_conf;
+            INIT_MFX_EXTBUF(scale_conf, MFX_EXTBUFF_VPP_SCALING);
+            SET_MFX_PARAM_FIELD(scale_conf, ScalingMode, vpp->scale_mode);
         } else
             av_log(ctx, AV_LOG_WARNING, "The QSV VPP Scale & format conversion "
                    "option is not supported with this MSDK version.\n");
     }
+
+#undef INIT_MFX_EXTBUF
+#undef SET_MFX_PARAM_FIELD
 
     if (vpp->use_frc || vpp->use_crop || vpp->deinterlace || vpp->denoise ||
         vpp->detail || vpp->procamp || vpp->rotate || vpp->hflip ||
@@ -597,6 +583,7 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_NV12,
         AV_PIX_FMT_YUYV422,
         AV_PIX_FMT_RGB32,
+        AV_PIX_FMT_P010,
         AV_PIX_FMT_QSV,
         AV_PIX_FMT_NONE
     };
@@ -634,6 +621,7 @@ static const AVFilterPad vpp_inputs[] = {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
         .config_props  = config_input,
+        .get_buffer.video = ff_qsvvpp_get_video_buffer,
     },
 };
 

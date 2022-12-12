@@ -350,6 +350,19 @@ terminates. Default value is 0.
 If set to 1, force the filter to extend the last frame of secondary streams
 until the end of the primary stream. A value of 0 disables this behavior.
 Default value is 1.
+
+@item ts_sync_mode
+How strictly to sync streams based on secondary input timestamps; it accepts
+one of the following values:
+
+@table @option
+@item default
+Frame from secondary input with the nearest lower or equal timestamp to the
+primary input frame.
+@item nearest
+Frame from secondary input with the absolute nearest timestamp to the primary
+input frame.
+@end table
 @end table
 
 @c man end OPTIONS FOR FILTERS WITH SEVERAL INPUTS
@@ -1689,6 +1702,13 @@ Default value is auto.
 Apply reverb to stream using mono IR file as second input, complete command using ffmpeg:
 @example
 ffmpeg -i input.wav -i middle_tunnel_1way_mono.wav -lavfi afir output.wav
+@end example
+
+@item
+Apply true stereo processing given input stereo stream, and two stereo impulse responses for left and right channel,
+the impulse response files are files with names l_ir.wav and r_ir.wav:
+@example
+"pan=4C|c0=FL|c1=FL|c2=FR|c3=FR[a];amovie=l_ir.wav[LIR];amovie=r_ir.wav[RIR];[LIR][RIR]amerge[ir];[a][ir]afir=irfmt=input:gtype=gn:irgain=-5dB,pan=stereo|FL<c0+c2|FR<c1+c3"
 @end example
 @end itemize
 
@@ -10097,6 +10117,30 @@ ffmpeg -f lavfi -i nullsrc=s=100x100,coreimage=filter=CIQRCodeGenerator@@inputMe
 @end example
 @end itemize
 
+@section corr
+
+Obtain the correlation between two input videos.
+
+This filter takes two input videos.
+
+Both input videos must have the same resolution and pixel format for
+this filter to work correctly. Also it assumes that both inputs
+have the same number of frames, which are compared one by one.
+
+The obtained per component, average, min and max correlation is printed through
+the logging system.
+
+The filter stores the calculated correlation of each frame in frame metadata.
+
+This filter also supports the @ref{framesync} options.
+
+In the below example the input file @file{main.mpg} being processed is compared
+with the reference file @file{ref.mpg}.
+
+@example
+ffmpeg -i main.mpg -i ref.mpg -lavfi corr -f null -
+@end example
+
 @section cover_rect
 
 Cover a rectangular object
@@ -15070,6 +15114,8 @@ the logging system.
 
 The filter stores the calculated identity scores of each frame in frame metadata.
 
+This filter also supports the @ref{framesync} options.
+
 In the below example the input file @file{main.mpg} being processed is compared
 with the reference file @file{ref.mpg}.
 
@@ -17201,6 +17247,8 @@ The obtained per component, average, min and max MSAD is printed through
 the logging system.
 
 The filter stores the calculated MSAD of each frame in frame metadata.
+
+This filter also supports the @ref{framesync} options.
 
 In the below example the input file @file{main.mpg} being processed is compared
 with the reference file @file{ref.mpg}.
@@ -24047,6 +24095,8 @@ have the same number of frames, which are compared one by one.
 The obtained average VIF score is printed through the logging system.
 
 The filter stores the calculated VIF score of each frame.
+
+This filter also supports the @ref{framesync} options.
 
 In the below example the input file @file{main.mpg} being processed is compared
 with the reference file @file{ref.mpg}.
