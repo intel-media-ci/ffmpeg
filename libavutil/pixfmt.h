@@ -426,6 +426,15 @@ enum AVPixelFormat {
     AV_PIX_FMT_P412BE,      ///< interleaved chroma YUV 4:4:4, 36bpp, data in the high bits, big-endian
     AV_PIX_FMT_P412LE,      ///< interleaved chroma YUV 4:4:4, 36bpp, data in the high bits, little-endian
 
+    /**
+     * Hardware surfaces for Direct3D 12.
+     *
+     * data[0] contains a ID3D12Resource pointer.
+     * data[1] contains the resource array index of the frame as intptr_t.
+     * data[2] contains the sync context for current resource
+     */
+    AV_PIX_FMT_D3D12,
+
     AV_PIX_FMT_NB         ///< number of pixel formats, DO NOT USE THIS if you want to link with shared libav* because the number of formats might differ between versions
 };
 

@@ -2,6 +2,13 @@ The last version increases of all libraries were on 2023-02-09
 
 API changes, most recent first:
 
+2023-05-xx - xxxxxxxxxx - lavu 58.7.100 - pixfmt.h hwcontext.h hwcontext_d3d12va.h
+  Add AV_HWDEVICE_TYPE_D3D12VA and AV_PIX_FMT_D3D12.
+  Add AVD3D12VADeviceContext, AVD3D12VASyncContext, AVD3D12FrameDescriptor,
+  and AVD3D12VAFramesContext.
+  Add av_d3d12va_map_sw_to_hw_format, av_d3d12va_create_sync_context,
+  av_d3d12va_release_sync_context, av_d3d12va_wait_idle, and av_d3d12va_wait_queue_idle.
+
 2023-05-29 - xxxxxxxxxx - lavc 60.16.100 - avcodec.h codec_id.h
   Add AV_CODEC_ID_EVC, FF_PROFILE_EVC_BASELINE, and FF_PROFILE_EVC_MAIN.
 
