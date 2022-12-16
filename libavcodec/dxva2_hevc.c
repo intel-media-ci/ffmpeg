@@ -56,9 +56,10 @@ static int get_refpic_index(const DXVA_PicParams_HEVC *pp, int surface_index)
     return 0xff;
 }
 
-static void fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *ctx, const HEVCContext *h,
+void ff_dxva2_hevc_fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *ctx,
                                     DXVA_PicParams_HEVC *pp)
 {
+    const HEVCContext *h = avctx->priv_data;
     const HEVCFrame *current_picture = h->ref;
     const HEVCSPS *sps = h->ps.sps;
     const HEVCPPS *pps = h->ps.pps;
@@ -199,8 +200,9 @@ static void fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *
     pp->StatusReportFeedbackNumber = 1 + DXVA_CONTEXT_REPORT_ID(avctx, ctx)++;
 }
 
-static void fill_scaling_lists(AVDXVAContext *ctx, const HEVCContext *h, DXVA_Qmatrix_HEVC *qm)
+void ff_dxva2_hevc_fill_scaling_lists(const AVCodecContext *avctx, AVDXVAContext *ctx, DXVA_Qmatrix_HEVC *qm)
 {
+    const HEVCContext *h = avctx->priv_data;
     unsigned i, j, pos;
     const ScalingList *sl = h->ps.pps->scaling_list_data_present_flag ?
                             &h->ps.pps->scaling_list : &h->ps.sps->scaling_list;
@@ -368,10 +370,10 @@ static int dxva2_hevc_start_frame(AVCodecContext *avctx,
     av_assert0(ctx_pic);
 
     /* Fill up DXVA_PicParams_HEVC */
-    fill_picture_parameters(avctx, ctx, h, &ctx_pic->pp);
+    ff_dxva2_hevc_fill_picture_parameters(avctx, ctx, &ctx_pic->pp);
 
     /* Fill up DXVA_Qmatrix_HEVC */
-    fill_scaling_lists(ctx, h, &ctx_pic->qm);
+    ff_dxva2_hevc_fill_scaling_lists(avctx, ctx, &ctx_pic->qm);
 
     ctx_pic->slice_count    = 0;
     ctx_pic->bitstream_size = 0;
