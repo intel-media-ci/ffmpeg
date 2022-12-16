@@ -32,6 +32,7 @@ extern const AVHWAccel ff_h263_vaapi_hwaccel;
 extern const AVHWAccel ff_h263_videotoolbox_hwaccel;
 extern const AVHWAccel ff_h264_d3d11va_hwaccel;
 extern const AVHWAccel ff_h264_d3d11va2_hwaccel;
+extern const AVHWAccel ff_h264_d3d12va_hwaccel;
 extern const AVHWAccel ff_h264_dxva2_hwaccel;
 extern const AVHWAccel ff_h264_nvdec_hwaccel;
 extern const AVHWAccel ff_h264_vaapi_hwaccel;

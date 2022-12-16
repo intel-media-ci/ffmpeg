@@ -47,9 +47,10 @@ static void fill_picture_entry(DXVA_PicEntry_H264 *pic,
     pic->bPicEntry = index | (flag << 7);
 }
 
-static void fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *ctx, const H264Context *h,
+void ff_dxva2_h264_fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *ctx,
                                     DXVA_PicParams_H264 *pp)
 {
+    const H264Context *h               = avctx->priv_data;
     const H264Picture *current_picture = h->cur_pic_ptr;
     const SPS *sps = h->ps.sps;
     const PPS *pps = h->ps.pps;
@@ -163,9 +164,10 @@ static void fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *
     //pp->SliceGroupMap[810];               /* XXX not implemented by FFmpeg */
 }
 
-static void fill_scaling_lists(const AVCodecContext *avctx, AVDXVAContext *ctx, const H264Context *h, DXVA_Qmatrix_H264 *qm)
+void ff_dxva2_h264_fill_scaling_lists(const AVCodecContext *avctx, AVDXVAContext *ctx, DXVA_Qmatrix_H264 *qm)
 {
-    const PPS *pps = h->ps.pps;
+    const H264Context *h   = avctx->priv_data;
+    const PPS         *pps = h->ps.pps;
     unsigned i, j;
     memset(qm, 0, sizeof(*qm));
     if (DXVA_CONTEXT_WORKAROUND(avctx, ctx) & FF_DXVA2_WORKAROUND_SCALING_LIST_ZIGZAG) {
@@ -453,10 +455,10 @@ static int dxva2_h264_start_frame(AVCodecContext *avctx,
     assert(ctx_pic);
 
     /* Fill up DXVA_PicParams_H264 */
-    fill_picture_parameters(avctx, ctx, h, &ctx_pic->pp);
+    ff_dxva2_h264_fill_picture_parameters(avctx, ctx, &ctx_pic->pp);
 
     /* Fill up DXVA_Qmatrix_H264 */
-    fill_scaling_lists(avctx, ctx, h, &ctx_pic->qm);
+    ff_dxva2_h264_fill_scaling_lists(avctx, ctx, &ctx_pic->qm);
 
     ctx_pic->slice_count    = 0;
     ctx_pic->bitstream_size = 0;
