@@ -448,6 +448,7 @@ static int get_pixel_format(AVCodecContext *avctx)
     enum AVPixelFormat pix_fmt = AV_PIX_FMT_NONE;
 #define HWACCEL_MAX (CONFIG_AV1_DXVA2_HWACCEL + \
                      CONFIG_AV1_D3D11VA_HWACCEL * 2 + \
+                     CONFIG_AV1_D3D12VA_HWACCEL + \
                      CONFIG_AV1_NVDEC_HWACCEL + \
                      CONFIG_AV1_VAAPI_HWACCEL + \
                      CONFIG_AV1_VDPAU_HWACCEL + \
@@ -523,6 +524,9 @@ static int get_pixel_format(AVCodecContext *avctx)
         *fmtp++ = AV_PIX_FMT_D3D11VA_VLD;
         *fmtp++ = AV_PIX_FMT_D3D11;
 #endif
+#if CONFIG_AV1_D3D12VA_HWACCEL
+        *fmtp++ = AV_PIX_FMT_D3D12;
+#endif
 #if CONFIG_AV1_NVDEC_HWACCEL
         *fmtp++ = AV_PIX_FMT_CUDA;
 #endif
@@ -543,6 +547,9 @@ static int get_pixel_format(AVCodecContext *avctx)
 #if CONFIG_AV1_D3D11VA_HWACCEL
         *fmtp++ = AV_PIX_FMT_D3D11VA_VLD;
         *fmtp++ = AV_PIX_FMT_D3D11;
+#endif
+#if CONFIG_AV1_D3D12VA_HWACCEL
+        *fmtp++ = AV_PIX_FMT_D3D12;
 #endif
 #if CONFIG_AV1_NVDEC_HWACCEL
         *fmtp++ = AV_PIX_FMT_CUDA;
@@ -1540,6 +1547,9 @@ const FFCodec ff_av1_decoder = {
 #endif
 #if CONFIG_AV1_D3D11VA2_HWACCEL
         HWACCEL_D3D11VA2(av1),
+#endif
+#if CONFIG_AV1_D3D12VA_HWACCEL
+        HWACCEL_D3D12VA(av1),
 #endif
 #if CONFIG_AV1_NVDEC_HWACCEL
         HWACCEL_NVDEC(av1),

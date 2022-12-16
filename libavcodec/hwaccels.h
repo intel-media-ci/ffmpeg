@@ -23,6 +23,7 @@
 
 extern const AVHWAccel ff_av1_d3d11va_hwaccel;
 extern const AVHWAccel ff_av1_d3d11va2_hwaccel;
+extern const AVHWAccel ff_av1_d3d12va_hwaccel;
 extern const AVHWAccel ff_av1_dxva2_hwaccel;
 extern const AVHWAccel ff_av1_nvdec_hwaccel;
 extern const AVHWAccel ff_av1_vaapi_hwaccel;
