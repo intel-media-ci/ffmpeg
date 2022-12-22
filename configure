@@ -1835,6 +1835,7 @@ EXTERNAL_LIBRARY_LIST="
     libopenjpeg
     libopenmpt
     libopenvino
+    libopenvino2
     libopus
     libplacebo
     libpulse
@@ -2716,7 +2717,7 @@ dct_select="rdft"
 deflate_wrapper_deps="zlib"
 dirac_parse_select="golomb"
 dovi_rpu_select="golomb"
-dnn_suggest="libtensorflow libopenvino"
+dnn_suggest="libtensorflow libopenvino libopenvino2"
 dnn_deps="avformat swscale"
 error_resilience_select="me_cmp"
 faandct_deps="faan"
@@ -6658,6 +6659,7 @@ enabled libopenjpeg       && { check_pkg_config libopenjpeg "libopenjp2 >= 2.1.0
                                { require_pkg_config libopenjpeg "libopenjp2 >= 2.1.0" openjpeg.h opj_version -DOPJ_STATIC && add_cppflags -DOPJ_STATIC; } }
 enabled libopenmpt        && require_pkg_config libopenmpt "libopenmpt >= 0.2.6557" libopenmpt/libopenmpt.h openmpt_module_create -lstdc++ && append libopenmpt_extralibs "-lstdc++"
 enabled libopenvino       && require libopenvino c_api/ie_c_api.h ie_c_api_version -linference_engine_c_api
+enabled libopenvino2      && require_pkg_config libopenvino2 openvino openvino/c/openvino.h OK
 enabled libopus           && {
     enabled libopus_decoder && {
         require_pkg_config libopus opus opus_multistream.h opus_multistream_decoder_create

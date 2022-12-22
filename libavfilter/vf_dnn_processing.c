@@ -53,6 +53,9 @@ static const AVOption dnn_processing_options[] = {
 #if (CONFIG_LIBOPENVINO == 1)
     { "openvino",    "openvino backend flag",      0,                        AV_OPT_TYPE_CONST,     { .i64 = 2 },    0, 0, FLAGS, "backend" },
 #endif
+#if (CONFIG_LIBOPENVINO2 == 1)
+    { "openvino2",   "openvino2.0 backend flag",   0,                        AV_OPT_TYPE_CONST,     { .i64 = 3 },    0, 0, FLAGS, "backend" },
+#endif
     DNN_COMMON_OPTIONS
     { NULL }
 };

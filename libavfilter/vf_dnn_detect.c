@@ -50,6 +50,9 @@ static const AVOption dnn_detect_options[] = {
 #if (CONFIG_LIBOPENVINO == 1)
     { "openvino",    "openvino backend flag",      0,                        AV_OPT_TYPE_CONST,     { .i64 = 2 },    0, 0, FLAGS, "backend" },
 #endif
+#if (CONFIG_LIBOPENVINO2 == 1)
+    { "openvino2",   "openvino2.0 backend flag",   0,                        AV_OPT_TYPE_CONST,     { .i64 = 3 },    0, 0, FLAGS, "backend" },
+#endif
     DNN_COMMON_OPTIONS
     { "confidence",  "threshold of confidence",    OFFSET2(confidence),      AV_OPT_TYPE_FLOAT,     { .dbl = 0.5 },  0, 1, FLAGS},
     { "labels",      "path to labels file",        OFFSET2(labels_filename), AV_OPT_TYPE_STRING,    { .str = NULL }, 0, 0, FLAGS },
@@ -97,6 +100,7 @@ static int dnn_detect_post_proc_ov(AVFrame *frame, DNNData *output, AVFilterCont
 
     av_strlcpy(header->source, ctx->dnnctx.model_filename, sizeof(header->source));
 
+    //can this two loop merge to one?
     for (int i = 0; i < proposal_count; ++i) {
         int av_unused image_id = (int)detections[i * detect_size + 0];
         int label_id = (int)detections[i * detect_size + 1];
@@ -216,6 +220,7 @@ static int dnn_detect_post_proc(AVFrame *frame, DNNData *output, uint32_t nb, AV
     DnnContext *dnn_ctx = &ctx->dnnctx;
     switch (dnn_ctx->backend_type) {
     case DNN_OV:
+    case DNN_OV2:
         return dnn_detect_post_proc_ov(frame, output, filter_ctx);
     case DNN_TF:
         return dnn_detect_post_proc_tf(frame, output, filter_ctx);
@@ -303,8 +308,9 @@ static int check_output_nb(DnnDetectContext *ctx, DNNBackendType backend_type, i
         }
         return 0;
     case DNN_OV:
+    case DNN_OV2:
         if (output_nb != 1) {
-            av_log(ctx, AV_LOG_ERROR, "Dnn detect filter with openvino backend needs 1 output only, \
+            av_log(ctx, AV_LOG_ERROR, "Dnn detect filter with openvino/openvino2 backend needs 1 output only, \
                                        but get %d instead\n", output_nb);
             return AVERROR(EINVAL);
         }
