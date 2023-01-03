@@ -650,6 +650,73 @@ static int is_strict_gop(QSVEncContext *q) {
     return 0;
 }
 
+static int get_preset_bitrate(AVCodecContext *avctx, QSVEncContext *q) {
+    int low = 0, high = 0;
+    int nb_pair = 0;
+    float point, bitrate = 0;
+    float (*bit_pair)[2] = NULL;
+
+    // Number array for interpolation. The magic numbers are from
+    // MediaSDK sample_utils CalculateDefaultBitrate function
+    static float preset_bitrate[3][5][2] = {
+        {{0, 0}, {25344, 225}, {101376, 1000}, {414720, 4000}, {2058240, 5000}},
+        {{0, 0}, {25344, 225 / 1.3}, {101376, 1000 / 1.3}, {414720, 4000 / 1.3},
+            {2058240, 5000 / 1.3}},
+        {{0, 0}, {414720, 12000}}
+    };
+
+    point = q->param.mfx.FrameInfo.Width * q->param.mfx.FrameInfo.Height *
+        q->param.mfx.FrameInfo.FrameRateExtN / q->param.mfx.FrameInfo.FrameRateExtD / 30.0;
+    nb_pair = sizeof(preset_bitrate[0]) / sizeof(float) / 2;
+
+    if (!point) {
+        av_log(avctx, AV_LOG_ERROR, "Interpolation point invaild, preset bitrate failed.\n");
+        return AVERROR(EINVAL);
+    }
+
+    switch (q->param.mfx.CodecId) {
+        case MFX_CODEC_AVC:
+            bit_pair = &preset_bitrate[0][0];
+            break;
+
+        case MFX_CODEC_HEVC:
+            bit_pair = &preset_bitrate[1][0];
+            break;
+
+        default:
+            bit_pair = &preset_bitrate[2][0];
+            nb_pair = 2;
+            break;
+    }
+
+    for (int i = 0; i < nb_pair; ++i) {
+        if (bit_pair[i][0] >= point) {
+            high = i;
+            break;
+        }
+    }
+
+    high = (high == 0) ? nb_pair - 1 : high;
+    low = high - 1;
+    // Linear interpolation
+    bitrate = (point - bit_pair[low][0]) * (bit_pair[high][1] - bit_pair[low][1])
+                / (bit_pair[high][0] - bit_pair[low][0]) + bit_pair[low][1];
+
+    switch (q->param.mfx.TargetUsage) {
+        case MFX_TARGETUSAGE_BEST_QUALITY:
+            break;
+        case MFX_TARGETUSAGE_BEST_SPEED:
+            bitrate *= 0.5;
+            break;
+        case MFX_TARGETUSAGE_BALANCED:
+        default:
+            bitrate *= 0.75;
+            break;
+    }
+    avctx->bit_rate = (int64_t) bitrate * 1000;
+    return 0;
+}
+
 static int init_video_param_jpeg(AVCodecContext *avctx, QSVEncContext *q)
 {
     enum AVPixelFormat sw_format = avctx->pix_fmt == AV_PIX_FMT_QSV ?
@@ -825,6 +892,14 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
         q->param.mfx.FrameInfo.FrameRateExtD  = avctx->time_base.num;
     }
     q->old_framerate = avctx->framerate;
+
+    // preset bitrate when bitrate is zero and rc method is not CQP
+    if ((!avctx->bit_rate) && (!(avctx->flags & AV_CODEC_FLAG_QSCALE))) {
+        ret = get_preset_bitrate(avctx, q);
+        if (ret < 0) {
+            return ret;
+        }
+    }
 
     ret = select_rc_mode(avctx, q);
     if (ret < 0)
