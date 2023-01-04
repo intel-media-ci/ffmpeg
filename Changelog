@@ -44,6 +44,7 @@ version <next>:
 - RKA decoder and demuxer
 - filtergraph syntax in ffmpeg CLI now supports passing file contents
   as option values, by prefixing option name with '/'
+- Extend VAAPI support for libva-win32 on Windows
 
 
 version 5.1:
