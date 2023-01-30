@@ -28,10 +28,16 @@ version <next>:
 - showcwt multimedia filter
 - corr video filter
 - adrc audio filter
+- afdelaysrc audio filter
+- WADY DPCM decoder and demuxer
+- CBD2 DPCM decoder
+- ssim360 video filter
+- ffmpeg CLI new options: -enc_stats_pre[_fmt], -enc_stats_post[_fmt]
+- hstack_vaapi, vstack_vaapi and xstack_vaapi filters
 
 
 version 5.1:
-- add ipfs/ipns protocol support
+- add ipfs/ipns gateway support
 - dialogue enhance audio filter
 - dropped obsolete XvMC hwaccel
 - pcm-bluray encoder

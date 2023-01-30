@@ -79,7 +79,7 @@ static int write_packet(Muxer *mux, OutputStream *ost, AVPacket *pkt)
     if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
         if (ost->frame_rate.num && ost->is_cfr) {
             if (pkt->duration > 0)
-                av_log(NULL, AV_LOG_WARNING, "Overriding packet duration by frame rate, this should not happen\n");
+                av_log(ost, AV_LOG_WARNING, "Overriding packet duration by frame rate, this should not happen\n");
             pkt->duration = av_rescale_q(1, av_inv_q(ost->frame_rate),
                                          ost->mux_timebase);
         }
@@ -132,7 +132,7 @@ static int write_packet(Muxer *mux, OutputStream *ost, AVPacket *pkt)
     pkt->stream_index = ost->index;
 
     if (debug_ts) {
-        av_log(NULL, AV_LOG_INFO, "muxer <- type:%s "
+        av_log(ost, AV_LOG_INFO, "muxer <- type:%s "
                 "pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s duration:%s duration_time:%s size:%d\n",
                 av_get_media_type_string(st->codecpar->codec_type),
                 av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, &ost->st->time_base),
@@ -207,8 +207,7 @@ static void *muxer_thread(void *arg)
 
         ret = tq_receive(mux->tq, &stream_idx, pkt);
         if (stream_idx < 0) {
-            av_log(NULL, AV_LOG_VERBOSE,
-                   "All streams finished for output file #%d\n", of->index);
+            av_log(mux, AV_LOG_VERBOSE, "All streams finished\n");
             ret = 0;
             break;
         }
@@ -219,8 +218,7 @@ static void *muxer_thread(void *arg)
         if (ret == AVERROR_EOF)
             tq_receive_finish(mux->tq, stream_idx);
         else if (ret < 0) {
-            av_log(NULL, AV_LOG_ERROR,
-                   "Error muxing a packet for output file #%d\n", of->index);
+            av_log(mux, AV_LOG_ERROR, "Error muxing a packet\n");
             break;
         }
     }
@@ -231,7 +229,7 @@ finish:
     for (unsigned int i = 0; i < mux->fc->nb_streams; i++)
         tq_receive_finish(mux->tq, i);
 
-    av_log(NULL, AV_LOG_VERBOSE, "Terminating muxer thread %d\n", of->index);
+    av_log(mux, AV_LOG_VERBOSE, "Terminating muxer thread\n");
 
     return (void*)(intptr_t)ret;
 }
@@ -273,7 +271,7 @@ static int queue_packet(Muxer *mux, OutputStream *ost, AVPacket *pkt)
         size_t new_size = FFMIN(2 * cur_size, limit);
 
         if (new_size <= cur_size) {
-            av_log(NULL, AV_LOG_ERROR,
+            av_log(ost, AV_LOG_ERROR,
                    "Too many packets buffered for output stream %d:%d.\n",
                    ost->file_index, ost->st->index);
             return AVERROR(ENOSPC);
@@ -366,8 +364,7 @@ mux_fail:
     err_msg = "submitting a packet to the muxer";
 
 fail:
-    av_log(NULL, AV_LOG_ERROR, "Error %s for output stream #%d:%d.\n",
-           err_msg, ost->file_index, ost->index);
+    av_log(ost, AV_LOG_ERROR, "Error %s\n", err_msg);
     if (exit_on_error)
         exit_program(1);
 
@@ -511,10 +508,8 @@ int mux_check_init(Muxer *mux)
 
     ret = avformat_write_header(fc, &mux->opts);
     if (ret < 0) {
-        av_log(NULL, AV_LOG_ERROR,
-               "Could not write header for output file #%d "
-               "(incorrect codec parameters ?): %s\n",
-               of->index, av_err2str(ret));
+        av_log(mux, AV_LOG_ERROR, "Could not write header (incorrect codec "
+               "parameters ?): %s\n", av_err2str(ret));
         return ret;
     }
     //assert_avoptions(of->opts);
@@ -563,7 +558,7 @@ static int bsf_init(MuxStream *ms)
 
     ret = av_bsf_init(ctx);
     if (ret < 0) {
-        av_log(NULL, AV_LOG_ERROR, "Error initializing bitstream filter: %s\n",
+        av_log(ms, AV_LOG_ERROR, "Error initializing bitstream filter: %s\n",
                ctx->filter->name);
         return ret;
     }
@@ -604,10 +599,9 @@ int of_write_trailer(OutputFile *of)
     int ret;
 
     if (!mux->tq) {
-        av_log(NULL, AV_LOG_ERROR,
-               "Nothing was written into output file %d (%s), because "
-               "at least one of its streams received no packets.\n",
-               of->index, fc->url);
+        av_log(mux, AV_LOG_ERROR,
+               "Nothing was written into output file, because "
+               "at least one of its streams received no packets.\n");
         return AVERROR(EINVAL);
     }
 
@@ -617,7 +611,7 @@ int of_write_trailer(OutputFile *of)
 
     ret = av_write_trailer(fc);
     if (ret < 0) {
-        av_log(NULL, AV_LOG_ERROR, "Error writing trailer of %s: %s\n", fc->url, av_err2str(ret));
+        av_log(mux, AV_LOG_ERROR, "Error writing trailer: %s\n", av_err2str(ret));
         return ret;
     }
 
@@ -626,8 +620,7 @@ int of_write_trailer(OutputFile *of)
     if (!(of->format->flags & AVFMT_NOFILE)) {
         ret = avio_closep(&fc->pb);
         if (ret < 0) {
-            av_log(NULL, AV_LOG_ERROR, "Error closing file %s: %s\n",
-                   fc->url, av_err2str(ret));
+            av_log(mux, AV_LOG_ERROR, "Error closing file: %s\n", av_err2str(ret));
             return ret;
         }
     }
@@ -646,7 +639,7 @@ static void ost_free(OutputStream **post)
 
     if (ost->logfile) {
         if (fclose(ost->logfile))
-            av_log(NULL, AV_LOG_ERROR,
+            av_log(ms, AV_LOG_ERROR,
                    "Error closing logfile, loss of information possible: %s\n",
                    av_err2str(AVERROR(errno)));
         ost->logfile = NULL;
@@ -685,6 +678,14 @@ static void ost_free(OutputStream **post)
     if (ost->enc_ctx)
         av_freep(&ost->enc_ctx->stats_in);
     avcodec_free_context(&ost->enc_ctx);
+
+    for (int i = 0; i < ost->enc_stats_pre.nb_components; i++)
+        av_freep(&ost->enc_stats_pre.components[i].str);
+    av_freep(&ost->enc_stats_pre.components);
+
+    for (int i = 0; i < ost->enc_stats_post.nb_components; i++)
+        av_freep(&ost->enc_stats_post.components[i].str);
+    av_freep(&ost->enc_stats_post.components);
 
     av_freep(post);
 }

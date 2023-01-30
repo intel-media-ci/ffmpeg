@@ -620,6 +620,7 @@ extern const FFCodec ff_pcm_vidc_encoder;
 extern const FFCodec ff_pcm_vidc_decoder;
 
 /* DPCM codecs */
+extern const FFCodec ff_cbd2_dpcm_decoder;
 extern const FFCodec ff_derf_dpcm_decoder;
 extern const FFCodec ff_gremlin_dpcm_decoder;
 extern const FFCodec ff_interplay_dpcm_decoder;
@@ -628,6 +629,7 @@ extern const FFCodec ff_roq_dpcm_decoder;
 extern const FFCodec ff_sdx2_dpcm_decoder;
 extern const FFCodec ff_sol_dpcm_decoder;
 extern const FFCodec ff_xan_dpcm_decoder;
+extern const FFCodec ff_wady_dpcm_decoder;
 
 /* ADPCM codecs */
 extern const FFCodec ff_adpcm_4xm_decoder;
@@ -832,6 +834,7 @@ extern const FFCodec ff_av1_mediacodec_decoder;
 extern const FFCodec ff_av1_nvenc_encoder;
 extern const FFCodec ff_av1_qsv_decoder;
 extern const FFCodec ff_av1_qsv_encoder;
+extern const FFCodec ff_av1_amf_encoder;
 extern const FFCodec ff_libopenh264_encoder;
 extern const FFCodec ff_libopenh264_decoder;
 extern const FFCodec ff_h264_amf_encoder;

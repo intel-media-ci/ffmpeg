@@ -2619,6 +2619,20 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("DPCM Xilam DERF"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_WADY_DPCM,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "wady_dpcm",
+        .long_name = NULL_IF_CONFIG_SMALL("DPCM Marble WADY"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_CBD2_DPCM,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "cbd2_dpcm",
+        .long_name = NULL_IF_CONFIG_SMALL("DPCM Cuberoot-Delta-Exact"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* audio codecs */
     {

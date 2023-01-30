@@ -1034,11 +1034,27 @@ Default type is @samp{bell}.
 Set processing direction relative to threshold.
 @table @samp
 @item downward
-Boost or cut if threshhold is higher than detected volume.
+Boost/Cut if threshold is higher/lower than detected volume.
 @item upward
-Boost or cut if threshhold is lower than detected volume.
+Boost/Cut if threshold is lower/higher than detected volume.
 @end table
 Default direction is @samp{downward}.
+
+@item auto
+Automatically gather threshold from detection filter. By default
+is @samp{disabled}.
+This option is useful to detect threshold in certain time frame of
+input audio stream, in such case option value is changed at runtime.
+
+Available values are:
+@table @samp
+@item disabled
+Disable using automatically gathered threshold value.
+@item off
+Stop picking threshold value.
+@item on
+Start picking threshold value.
+@end table
 @end table
 
 @subsection Commands
@@ -7519,6 +7535,33 @@ aevalsrc="0.1*sin(2*PI*(360-2.5/2)*t) | 0.1*sin(2*PI*(360+2.5/2)*t)"
 
 @end itemize
 
+@section afdelaysrc
+
+Generate a fractional delay FIR coefficients.
+
+The resulting stream can be used with @ref{afir} filter for filtering the audio signal.
+
+The filter accepts the following options:
+
+@table @option
+@item delay, d
+Set the fractional delay. Default is 0.
+
+@item sample_rate, r
+Set the sample rate, default is 44100.
+
+@item nb_samples, n
+Set the number of samples per each frame. Default is 1024.
+
+@item taps, t
+Set the number of filter coefficents in output audio stream.
+Default value is 0.
+
+@item channel_layout, c
+Specifies the channel layout, and can be a string representing a channel layout.
+The default value of @var{channel_layout} is "stereo".
+@end table
+
 @section afirsrc
 
 Generate a FIR coefficients using frequency sampling method.
@@ -10559,6 +10602,16 @@ Find an embedded video area, use motion vectors from decoder:
 ffmpeg -flags2 +export_mvs -i file.mp4 -vf cropdetect=mode=mvedges,metadata=mode=print -f null -
 @end example
 @end itemize
+
+@subsection Commands
+
+This filter supports the following commands:
+
+@table @option
+@item limit
+The command accepts the same syntax of the corresponding option.
+If the specified expression is not valid, it is kept at its current value.
+@end table
 
 @anchor{cue}
 @section cue
@@ -14888,6 +14941,7 @@ Set the scaling dimension: @code{2} for @code{hq2x}, @code{3} for
 Default is @code{3}.
 @end table
 
+@anchor{hstack}
 @section hstack
 Stack input videos horizontally.
 
@@ -24339,6 +24393,7 @@ Example:
 ffmpeg -i ref.mpg -vf vmafmotion -f null -
 @end example
 
+@anchor{vstack}
 @section vstack
 Stack input videos vertically.
 
@@ -24820,6 +24875,7 @@ minimum values, and @code{1} maximum values.
 
 This filter supports all above options as @ref{commands}, excluding option @code{inputs}.
 
+@anchor{xstack}
 @section xstack
 Stack video inputs into custom layout.
 
@@ -26636,6 +26692,84 @@ tonemap_vaapi=format=p010:t=bt2020-10
 @end example
 @end itemize
 
+@section hstack_vaapi
+Stack input videos horizontally.
+
+This is the VA-API variant of the @ref{hstack} filter, each input stream may
+have different height, this filter will scale down/up each input stream while
+keeping the orignal aspect.
+
+It accepts the following options:
+
+@table @option
+@item inputs
+See @ref{hstack}.
+
+@item shortest
+See @ref{hstack}.
+
+@item height
+Set height of output. If set to 0, this filter will set height of output to
+height of the first input stream. Default value is 0.
+@end table
+
+@section vstack_vaapi
+Stack input videos vertically.
+
+This is the VA-API variant of the @ref{vstack} filter, each input stream may
+have different width, this filter will scale down/up each input stream while
+keeping the orignal aspect.
+
+It accepts the following options:
+
+@table @option
+@item inputs
+See @ref{vstack}.
+
+@item shortest
+See @ref{vstack}.
+
+@item width
+Set width of output. If set to 0, this filter will set width of output to
+width of the first input stream. Default value is 0.
+@end table
+
+@section xstack_vaapi
+Stack video inputs into custom layout.
+
+This is the VA-API variant of the @ref{xstack} filter,  each input stream may
+have different size, this filter will scale down/up each input stream to the
+given output size, or the size of the first input stream.
+
+It accepts the following options:
+
+@table @option
+@item inputs
+See @ref{xstack}.
+
+@item shortest
+See @ref{xstack}.
+
+@item layout
+See @ref{xstack}.
+Moreover, this permits the user to supply output size for each input stream.
+@example
+xstack_vaapi=inputs=4:layout=0_0_1920x1080|0_h0_1920x1080|w0_0_1920x1080|w0_h0_1920x1080
+@end example
+
+@item grid
+See @ref{xstack}.
+
+@item grid_tile_size
+Set output size for each input stream when @option{grid} is set. If this option
+is not set, this filter will set output size by default to the size of the
+first input stream. For the syntax of this option, check the
+@ref{video size syntax,,"Video size" section in the ffmpeg-utils manual,ffmpeg-utils}.
+
+@item fill
+See @ref{xstack}.
+@end table
+
 @c man end VAAPI VIDEO FILTERS
 
 @chapter Video Sources
@@ -27933,6 +28067,9 @@ Draw dot for each sample.
 
 @item line
 Draw line between previous and current sample.
+
+@item aaline
+Draw anti-aliased line between previous and current sample.
 @end table
 
 Default value is @samp{dot}.

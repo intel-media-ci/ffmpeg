@@ -159,6 +159,7 @@ extern const AVFilter ff_af_volume;
 extern const AVFilter ff_af_volumedetect;
 
 extern const AVFilter ff_asrc_aevalsrc;
+extern const AVFilter ff_asrc_afdelaysrc;
 extern const AVFilter ff_asrc_afirsrc;
 extern const AVFilter ff_asrc_anoisesrc;
 extern const AVFilter ff_asrc_anullsrc;
@@ -457,6 +458,7 @@ extern const AVFilter ff_vf_split;
 extern const AVFilter ff_vf_spp;
 extern const AVFilter ff_vf_sr;
 extern const AVFilter ff_vf_ssim;
+extern const AVFilter ff_vf_ssim360;
 extern const AVFilter ff_vf_stereo3d;
 extern const AVFilter ff_vf_streamselect;
 extern const AVFilter ff_vf_subtitles;
@@ -521,6 +523,9 @@ extern const AVFilter ff_vf_yaepblur;
 extern const AVFilter ff_vf_zmq;
 extern const AVFilter ff_vf_zoompan;
 extern const AVFilter ff_vf_zscale;
+extern const AVFilter ff_vf_hstack_vaapi;
+extern const AVFilter ff_vf_vstack_vaapi;
+extern const AVFilter ff_vf_xstack_vaapi;
 
 extern const AVFilter ff_vsrc_allrgb;
 extern const AVFilter ff_vsrc_allyuv;

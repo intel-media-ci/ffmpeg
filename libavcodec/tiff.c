@@ -326,7 +326,7 @@ static void av_always_inline dng_blit(TiffContext *s, uint8_t *dst, int dst_stri
             scale_factor[i] = s->premultiply[s->pattern[i]] * 65535.f / (s->white_level - s->black_level[i]);
     } else {
         for (int i = 0; i < 4; i++)
-            scale_factor[i] = 65535.f * s->premultiply[i] / (s->white_level - s->black_level[i]);
+            scale_factor[i] = s->premultiply[           i ] * 65535.f / (s->white_level - s->black_level[i]);
     }
 
     if (is_single_comp) {
@@ -2050,8 +2050,10 @@ again:
         }
 
         if (!s->use_color_matrix) {
-            for (i = 0; i < 3; i++)
-                s->premultiply[i] /= s->camera_calibration[i][i];
+            for (i = 0; i < 3; i++) {
+                if (s->camera_calibration[i][i])
+                    s->premultiply[i] /= s->camera_calibration[i][i];
+            }
         } else {
             for (int c = 0; c < 3; c++) {
                 for (i = 0; i < 3; i++) {
