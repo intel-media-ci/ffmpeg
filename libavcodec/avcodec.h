@@ -242,9 +242,15 @@ typedef struct RcOverride{
  */
 #define AV_CODEC_FLAG_RECON_FRAME     (1 <<  6)
 /**
+ * @par decoding
+ * Request the decoder to propagate each packets AVPacket.opaque and
+ * AVPacket.opaque_ref to its corresponding output AVFrame.
+ *
+ * @par encoding:
  * Request the encoder to propagate each frame's AVFrame.opaque and
  * AVFrame.opaque_ref values to its corresponding output AVPacket.
  *
+ * @par
  * May only be set on encoders that have the
  * @ref AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE capability flag.
  *
@@ -265,6 +271,9 @@ typedef struct RcOverride{
  * .
  * When an output packet contains multiple frames, the opaque values will be
  * taken from the first of those.
+ *
+ * @note
+ * The converse holds for decoders, with frames and packets switched.
  */
 #define AV_CODEC_FLAG_COPY_OPAQUE     (1 <<  7)
 /**
@@ -1383,6 +1392,7 @@ typedef struct AVCodecContext {
      */
     int err_recognition;
 
+#if FF_API_REORDERED_OPAQUE
     /**
      * opaque 64-bit number (generally a PTS) that will be reordered and
      * output in AVFrame.reordered_opaque
@@ -1391,8 +1401,12 @@ typedef struct AVCodecContext {
      *             supported by encoders with the
      *             AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE capability.
      * - decoding: Set by user.
+     *
+     * @deprecated Use AV_CODEC_FLAG_COPY_OPAQUE instead
      */
+    attribute_deprecated
     int64_t reordered_opaque;
+#endif
 
     /**
      * Hardware accelerator in use

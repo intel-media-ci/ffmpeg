@@ -224,6 +224,8 @@ typedef struct OptionsContext {
     int        nb_reinit_filters;
     SpecifierOpt *fix_sub_duration;
     int        nb_fix_sub_duration;
+    SpecifierOpt *fix_sub_duration_heartbeat;
+    int        nb_fix_sub_duration_heartbeat;
     SpecifierOpt *canvas_sizes;
     int        nb_canvas_sizes;
     SpecifierOpt *pass;
@@ -335,6 +337,8 @@ typedef struct InputStream {
 #define DECODING_FOR_OST    1
 #define DECODING_FOR_FILTER 2
     int processing_needed;   /* non zero if the packets must be processed */
+    // should attach FrameData as opaque_ref after decoding
+    int want_frame_data;
 
     /**
      * Codec parameters - to be used by the decoding/streamcopy code.
@@ -493,9 +497,13 @@ enum EncStatsType {
     ENC_STATS_FILE_IDX,
     ENC_STATS_STREAM_IDX,
     ENC_STATS_FRAME_NUM,
+    ENC_STATS_FRAME_NUM_IN,
     ENC_STATS_TIMEBASE,
+    ENC_STATS_TIMEBASE_IN,
     ENC_STATS_PTS,
     ENC_STATS_PTS_TIME,
+    ENC_STATS_PTS_IN,
+    ENC_STATS_PTS_TIME_IN,
     ENC_STATS_DTS,
     ENC_STATS_DTS_TIME,
     ENC_STATS_SAMPLE_NUM,
@@ -669,6 +677,12 @@ typedef struct OutputStream {
 
     EncStats enc_stats_pre;
     EncStats enc_stats_post;
+
+    /*
+     * bool on whether this stream should be utilized for splitting
+     * subtitles utilizing fix_sub_duration at random access points.
+     */
+    unsigned int fix_sub_duration_heartbeat;
 } OutputStream;
 
 typedef struct OutputFile {

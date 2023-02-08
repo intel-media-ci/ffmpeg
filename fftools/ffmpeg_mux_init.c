@@ -61,6 +61,7 @@ static const char *const opt_name_enc_stats_pre_fmt[]         = {"enc_stats_pre_
 static const char *const opt_name_enc_stats_post_fmt[]        = {"enc_stats_post_fmt", NULL};
 static const char *const opt_name_filters[]                   = {"filter", "af", "vf", NULL};
 static const char *const opt_name_filter_scripts[]            = {"filter_script", NULL};
+static const char *const opt_name_fix_sub_duration_heartbeat[] = {"fix_sub_duration_heartbeat", NULL};
 static const char *const opt_name_fps_mode[]                  = {"fps_mode", NULL};
 static const char *const opt_name_force_fps[]                 = {"force_fps", NULL};
 static const char *const opt_name_forced_key_frames[]         = {"forced_key_frames", NULL};
@@ -269,13 +270,18 @@ static int enc_stats_init(OutputStream *ost, int pre,
         const char        *str;
         int                pre_only:1;
         int                post_only:1;
+        int                need_input_data:1;
     } fmt_specs[] = {
         { ENC_STATS_FILE_IDX,       "fidx"                      },
         { ENC_STATS_STREAM_IDX,     "sidx"                      },
         { ENC_STATS_FRAME_NUM,      "n"                         },
+        { ENC_STATS_FRAME_NUM_IN,   "ni",       0, 0, 1         },
         { ENC_STATS_TIMEBASE,       "tb"                        },
+        { ENC_STATS_TIMEBASE_IN,    "tbi",      0, 0, 1         },
         { ENC_STATS_PTS,            "pts"                       },
         { ENC_STATS_PTS_TIME,       "t"                         },
+        { ENC_STATS_PTS_IN,         "ptsi",     0, 0, 1         },
+        { ENC_STATS_PTS_TIME_IN,    "ti",       0, 0, 1         },
         { ENC_STATS_DTS,            "dts",      0, 1            },
         { ENC_STATS_DTS_TIME,       "dt",       0, 1            },
         { ENC_STATS_SAMPLE_NUM,     "sn",       1               },
@@ -345,6 +351,18 @@ static int enc_stats_init(OutputStream *ost, int pre,
                 }
 
                 c->type = fmt_specs[i].type;
+
+                if (fmt_specs[i].need_input_data) {
+                    if (ost->ist)
+                        ost->ist->want_frame_data = 1;
+                    else {
+                        av_log(ost, AV_LOG_WARNING,
+                               "Format directive '%s' is unavailable, because "
+                               "this output stream has no associated input stream\n",
+                               val);
+                    }
+                }
+
                 break;
             }
         }
@@ -428,6 +446,7 @@ static OutputStream *new_output_stream(Muxer *mux, const OptionsContext *o,
     ms->last_mux_dts = AV_NOPTS_VALUE;
 
     ost->st         = st;
+    ost->ist        = ist;
     ost->kf.ref_pts = AV_NOPTS_VALUE;
     st->codecpar->codec_type = type;
 
@@ -596,6 +615,9 @@ static OutputStream *new_output_stream(Muxer *mux, const OptionsContext *o,
     MATCH_PER_STREAM_OPT(bits_per_raw_sample, i, ost->bits_per_raw_sample,
                          oc, st);
 
+    MATCH_PER_STREAM_OPT(fix_sub_duration_heartbeat, i, ost->fix_sub_duration_heartbeat,
+                         oc, st);
+
     if (oc->oformat->flags & AVFMT_GLOBALHEADER && ost->enc_ctx)
         ost->enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
@@ -605,8 +627,7 @@ static OutputStream *new_output_stream(Muxer *mux, const OptionsContext *o,
     if (ost->enc_ctx && av_get_exact_bits_per_sample(ost->enc_ctx->codec_id) == 24)
         av_dict_set(&ost->swr_opts, "output_sample_bits", "24", 0);
 
-    if (ist) {
-        ost->ist = ist;
+    if (ost->ist) {
         ost->ist->discard = 0;
         ost->ist->st->discard = ost->ist->user_set_discard;
     }
