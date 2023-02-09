@@ -64,6 +64,7 @@ static int write_packet(Muxer *mux, OutputStream *ost, AVPacket *pkt)
     AVFormatContext *s = mux->fc;
     AVStream *st = ost->st;
     int64_t fs;
+    uint64_t frame_num;
     int ret;
 
     fs = filesize(s->pb);
@@ -81,11 +82,12 @@ static int write_packet(Muxer *mux, OutputStream *ost, AVPacket *pkt)
             if (pkt->duration > 0)
                 av_log(ost, AV_LOG_WARNING, "Overriding packet duration by frame rate, this should not happen\n");
             pkt->duration = av_rescale_q(1, av_inv_q(ost->frame_rate),
-                                         ost->mux_timebase);
+                                         pkt->time_base);
         }
     }
 
-    av_packet_rescale_ts(pkt, ost->mux_timebase, ost->st->time_base);
+    av_packet_rescale_ts(pkt, pkt->time_base, ost->st->time_base);
+    pkt->time_base = ost->st->time_base;
 
     if (!(s->oformat->flags & AVFMT_NOTIMESTAMPS)) {
         if (pkt->dts != AV_NOPTS_VALUE &&
@@ -127,7 +129,7 @@ static int write_packet(Muxer *mux, OutputStream *ost, AVPacket *pkt)
     ms->last_mux_dts = pkt->dts;
 
     ost->data_size_mux += pkt->size;
-    atomic_fetch_add(&ost->packets_written, 1);
+    frame_num = atomic_fetch_add(&ost->packets_written, 1);
 
     pkt->stream_index = ost->index;
 
@@ -141,6 +143,9 @@ static int write_packet(Muxer *mux, OutputStream *ost, AVPacket *pkt)
                 pkt->size
               );
     }
+
+    if (ms->stats.io)
+        enc_stats_write(ost, &ms->stats, NULL, pkt, frame_num);
 
     ret = av_interleaved_write_frame(s, pkt);
     if (ret < 0) {
@@ -325,7 +330,7 @@ void of_output_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int eof)
     int ret = 0;
 
     if (!eof && pkt->dts != AV_NOPTS_VALUE)
-        ost->last_mux_dts = av_rescale_q(pkt->dts, ost->mux_timebase, AV_TIME_BASE_Q);
+        ost->last_mux_dts = av_rescale_q(pkt->dts, pkt->time_base, AV_TIME_BASE_Q);
 
     /* apply the output bitstream filters */
     if (ms->bsf_ctx) {
@@ -686,6 +691,10 @@ static void ost_free(OutputStream **post)
     for (int i = 0; i < ost->enc_stats_post.nb_components; i++)
         av_freep(&ost->enc_stats_post.components[i].str);
     av_freep(&ost->enc_stats_post.components);
+
+    for (int i = 0; i < ms->stats.nb_components; i++)
+        av_freep(&ms->stats.components[i].str);
+    av_freep(&ms->stats.components);
 
     av_freep(post);
 }

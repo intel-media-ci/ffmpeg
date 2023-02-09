@@ -303,15 +303,6 @@ typedef struct RcOverride{
  * error[?] variables will be set during encoding.
  */
 #define AV_CODEC_FLAG_PSNR            (1 << 15)
-#if FF_API_FLAG_TRUNCATED
-/**
- * Input bitstream might be truncated at a random location
- * instead of only at frame boundaries.
- *
- * @deprecated use codec parsers for packetizing input
- */
-#define AV_CODEC_FLAG_TRUNCATED       (1 << 16)
-#endif
 /**
  * Use interlaced DCT.
  */
@@ -351,11 +342,6 @@ typedef struct RcOverride{
  * Place global headers at every keyframe instead of in extradata.
  */
 #define AV_CODEC_FLAG2_LOCAL_HEADER   (1 <<  3)
-
-/**
- * timecode is in drop frame format. DEPRECATED!!!!
- */
-#define AV_CODEC_FLAG2_DROP_FRAME_TIMECODE (1 << 13)
 
 /**
  * Input bitstream might be truncated at a packet boundaries
@@ -557,8 +543,7 @@ typedef struct AVCodecContext {
      * (fixed_vop_rate == 0 implies that it is different from the framerate)
      *
      * - encoding: MUST be set by user.
-     * - decoding: the use of this field for decoding is deprecated.
-     *             Use framerate instead.
+     * - decoding: unused.
      */
     AVRational time_base;
 
@@ -1531,27 +1516,6 @@ typedef struct AVCodecContext {
      */
     int active_thread_type;
 
-#if FF_API_THREAD_SAFE_CALLBACKS
-    /**
-     * Set by the client if its custom get_buffer() callback can be called
-     * synchronously from another thread, which allows faster multithreaded decoding.
-     * draw_horiz_band() will be called from other threads regardless of this setting.
-     * Ignored if the default get_buffer() is used.
-     * - encoding: Set by user.
-     * - decoding: Set by user.
-     *
-     * @deprecated the custom get_buffer2() callback should always be
-     *   thread-safe. Thread-unsafe get_buffer2() implementations will be
-     *   invalid starting with LIBAVCODEC_VERSION_MAJOR=60; in other words,
-     *   libavcodec will behave as if this field was always set to 1.
-     *   Callers that want to be forward compatible with future libavcodec
-     *   versions should wrap access to this field in
-     *     `#if LIBAVCODEC_VERSION_MAJOR < 60`
-     */
-    attribute_deprecated
-    int thread_safe_callbacks;
-#endif
-
     /**
      * The codec may call this to execute several independent things.
      * It will return only after finishing all tasks.
@@ -1852,17 +1816,6 @@ typedef struct AVCodecContext {
      */
     int seek_preroll;
 
-#if FF_API_DEBUG_MV
-    /**
-     * @deprecated unused
-     */
-    attribute_deprecated
-    int debug_mv;
-#define FF_DEBUG_VIS_MV_P_FOR  0x00000001 //visualize forward predicted MVs of P frames
-#define FF_DEBUG_VIS_MV_B_FOR  0x00000002 //visualize forward predicted MVs of B frames
-#define FF_DEBUG_VIS_MV_B_BACK 0x00000004 //visualize backward predicted MVs of B frames
-#endif
-
     /**
      * custom intra quantization matrix
      * - encoding: Set by user, can be NULL.
@@ -1928,15 +1881,6 @@ typedef struct AVCodecContext {
      *             This field should be set before avcodec_open2() is called.
      */
     AVBufferRef *hw_frames_ctx;
-
-#if FF_API_SUB_TEXT_FORMAT
-    /**
-     * @deprecated unused
-     */
-    attribute_deprecated
-    int sub_text_format;
-#define FF_SUB_TEXT_FMT_ASS              0
-#endif
 
     /**
      * Audio only. The amount of padding (in samples) appended by the encoder to
@@ -2421,14 +2365,6 @@ void avcodec_free_context(AVCodecContext **avctx);
  */
 const AVClass *avcodec_get_class(void);
 
-#if FF_API_GET_FRAME_CLASS
-/**
- * @deprecated This function should not be used.
- */
-attribute_deprecated
-const AVClass *avcodec_get_frame_class(void);
-#endif
-
 /**
  * Get the AVClass for AVSubtitleRect. It can be used in combination with
  * AV_OPT_SEARCH_FAKE_OBJ for examining options.
@@ -2615,8 +2551,7 @@ enum AVChromaLocation avcodec_chroma_pos_to_enum(int xpos, int ypos);
  * @param[in] avpkt The input AVPacket containing the input buffer.
  */
 int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
-                            int *got_sub_ptr,
-                            AVPacket *avpkt);
+                             int *got_sub_ptr, const AVPacket *avpkt);
 
 /**
  * Supply raw packet data as input to a decoder.

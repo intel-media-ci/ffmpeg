@@ -328,10 +328,8 @@
 #endif
 
 struct AVFormatContext;
-struct AVStream;
 
 struct AVDeviceInfoList;
-struct AVDeviceCapabilitiesQuery;
 
 /**
  * @defgroup metadata_api Public Metadata API
@@ -536,114 +534,6 @@ typedef struct AVOutputFormat {
 
 
     const AVClass *priv_class; ///< AVClass for the private context
-
-    /*****************************************************************
-     * No fields below this line are part of the public API. They
-     * may not be used outside of libavformat and can be changed and
-     * removed at will.
-     * New public fields should be added right above.
-     *****************************************************************
-     */
-    /**
-     * size of private data so that it can be allocated in the wrapper
-     */
-    int priv_data_size;
-
-    /**
-     * Internal flags. See FF_FMT_FLAG_* in internal.h.
-     */
-    int flags_internal;
-
-    int (*write_header)(struct AVFormatContext *);
-    /**
-     * Write a packet. If AVFMT_ALLOW_FLUSH is set in flags,
-     * pkt can be NULL in order to flush data buffered in the muxer.
-     * When flushing, return 0 if there still is more data to flush,
-     * or 1 if everything was flushed and there is no more buffered
-     * data.
-     */
-    int (*write_packet)(struct AVFormatContext *, AVPacket *pkt);
-    int (*write_trailer)(struct AVFormatContext *);
-    /**
-     * A format-specific function for interleavement.
-     * If unset, packets will be interleaved by dts.
-     *
-     * @param s           An AVFormatContext for output. pkt will be added to
-     *                    resp. taken from its packet buffer.
-     * @param[in,out] pkt A packet to be interleaved if has_packet is set;
-     *                    also used to return packets. If no packet is returned
-     *                    (e.g. on error), pkt is blank on return.
-     * @param flush       1 if no further packets are available as input and
-     *                    all remaining packets should be output.
-     * @param has_packet  If set, pkt contains a packet to be interleaved
-     *                    on input; otherwise pkt is blank on input.
-     * @return 1 if a packet was output, 0 if no packet could be output,
-     *         < 0 if an error occurred
-     */
-    int (*interleave_packet)(struct AVFormatContext *s, AVPacket *pkt,
-                             int flush, int has_packet);
-    /**
-     * Test if the given codec can be stored in this container.
-     *
-     * @return 1 if the codec is supported, 0 if it is not.
-     *         A negative number if unknown.
-     *         MKTAG('A', 'P', 'I', 'C') if the codec is only supported as AV_DISPOSITION_ATTACHED_PIC
-     */
-    int (*query_codec)(enum AVCodecID id, int std_compliance);
-
-    void (*get_output_timestamp)(struct AVFormatContext *s, int stream,
-                                 int64_t *dts, int64_t *wall);
-    /**
-     * Allows sending messages from application to device.
-     */
-    int (*control_message)(struct AVFormatContext *s, int type,
-                           void *data, size_t data_size);
-
-    /**
-     * Write an uncoded AVFrame.
-     *
-     * See av_write_uncoded_frame() for details.
-     *
-     * The library will free *frame afterwards, but the muxer can prevent it
-     * by setting the pointer to NULL.
-     */
-    int (*write_uncoded_frame)(struct AVFormatContext *, int stream_index,
-                               AVFrame **frame, unsigned flags);
-    /**
-     * Returns device list with it properties.
-     * @see avdevice_list_devices() for more details.
-     */
-    int (*get_device_list)(struct AVFormatContext *s, struct AVDeviceInfoList *device_list);
-    enum AVCodecID data_codec; /**< default data codec */
-    /**
-     * Initialize format. May allocate data here, and set any AVFormatContext or
-     * AVStream parameters that need to be set before packets are sent.
-     * This method must not write output.
-     *
-     * Return 0 if streams were fully configured, 1 if not, negative AVERROR on failure
-     *
-     * Any allocations made here must be freed in deinit().
-     */
-    int (*init)(struct AVFormatContext *);
-    /**
-     * Deinitialize format. If present, this is called whenever the muxer is being
-     * destroyed, regardless of whether or not the header has been written.
-     *
-     * If a trailer is being written, this is called after write_trailer().
-     *
-     * This is called if init() fails as well.
-     */
-    void (*deinit)(struct AVFormatContext *);
-    /**
-     * Set up any necessary bitstream filtering and extract any extra data needed
-     * for the global header.
-     *
-     * @note pkt might have been directly forwarded by a meta-muxer; therefore
-     *       pkt->stream_index as well as the pkt's timebase might be invalid.
-     * Return 0 if more packets from this stream must be checked; 1 if not.
-     */
-    int (*check_bitstream)(struct AVFormatContext *s, struct AVStream *st,
-                           const AVPacket *pkt);
 } AVOutputFormat;
 /**
  * @}
@@ -948,12 +838,10 @@ const char *av_disposition_to_string(int disposition);
  * sizeof(AVStream) must not be used outside libav*.
  */
 typedef struct AVStream {
-#if FF_API_AVSTREAM_CLASS
     /**
      * A class for @ref avoptions. Set on stream creation.
      */
     const AVClass *av_class;
-#endif
 
     int index;    /**< stream index in AVFormatContext */
     /**
@@ -962,6 +850,17 @@ typedef struct AVStream {
      * encoding: set by the user, replaced by libavformat if left unset
      */
     int id;
+
+    /**
+     * Codec parameters associated with this stream. Allocated and freed by
+     * libavformat in avformat_new_stream() and avformat_free_context()
+     * respectively.
+     *
+     * - demuxing: filled by libavformat on stream creation or in
+     *             avformat_find_stream_info()
+     * - muxing: filled by the caller before avformat_write_header()
+     */
+    AVCodecParameters *codecpar;
 
     void *priv_data;
 
@@ -1097,17 +996,6 @@ typedef struct AVStream {
      * approximately 3600 or 1800 timer ticks, then r_frame_rate will be 50/1.
      */
     AVRational r_frame_rate;
-
-    /**
-     * Codec parameters associated with this stream. Allocated and freed by
-     * libavformat in avformat_new_stream() and avformat_free_context()
-     * respectively.
-     *
-     * - demuxing: filled by libavformat on stream creation or in
-     *             avformat_find_stream_info()
-     * - muxing: filled by the caller before avformat_write_header()
-     */
-    AVCodecParameters *codecpar;
 
     /**
      * Number of bits in timestamps. Used for wrapping control.
@@ -1352,9 +1240,6 @@ typedef struct AVFormatContext {
  */
 #define AVFMT_FLAG_BITEXACT         0x0400
 #define AVFMT_FLAG_SORT_DTS    0x10000 ///< try to interleave outputted packets by dts (using this flag can slow demuxing down)
-#if FF_API_LAVF_PRIV_OPT
-#define AVFMT_FLAG_PRIV_OPT    0x20000 ///< Enable use of private options by delaying codec open (deprecated, does nothing)
-#endif
 #define AVFMT_FLAG_FAST_SEEK   0x80000 ///< Enable fast, but inaccurate seeks for some formats
 #define AVFMT_FLAG_SHORTEST   0x100000 ///< Stop muxing when the shortest stream stops.
 #define AVFMT_FLAG_AUTO_BSF   0x200000 ///< Add bitstream filters as requested by the muxer

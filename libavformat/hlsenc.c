@@ -3116,9 +3116,6 @@ static const AVOption options[] = {
     {"hls_init_time", "set segment length at init list",         OFFSET(init_time),     AV_OPT_TYPE_DURATION, {.i64 = 0},       0, INT64_MAX, E},
     {"hls_list_size", "set maximum number of playlist entries",  OFFSET(max_nb_segments),    AV_OPT_TYPE_INT,    {.i64 = 5},     0, INT_MAX, E},
     {"hls_delete_threshold", "set number of unreferenced segments to keep before deleting",  OFFSET(hls_delete_threshold),    AV_OPT_TYPE_INT,    {.i64 = 1},     1, INT_MAX, E},
-#if FF_HLS_TS_OPTIONS
-    {"hls_ts_options","set hls mpegts list of options for the container format used for hls (deprecated, use hls_segment_options instead of it.)", OFFSET(format_options), AV_OPT_TYPE_DICT, {.str = NULL},  0, 0,    E | AV_OPT_FLAG_DEPRECATED},
-#endif
     {"hls_vtt_options","set hls vtt list of options for the container format used for hls", OFFSET(vtt_format_options_str), AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,    E},
     {"hls_allow_cache", "explicitly set whether the client MAY (1) or MUST NOT (0) cache media segments", OFFSET(allowcache), AV_OPT_TYPE_INT, {.i64 = -1}, INT_MIN, INT_MAX, E},
     {"hls_base_url",  "url to prepend to each playlist entry",   OFFSET(baseurl), AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E},
@@ -3183,19 +3180,19 @@ static const AVClass hls_class = {
 };
 
 
-const AVOutputFormat ff_hls_muxer = {
-    .name           = "hls",
-    .long_name      = NULL_IF_CONFIG_SMALL("Apple HTTP Live Streaming"),
-    .extensions     = "m3u8",
+const FFOutputFormat ff_hls_muxer = {
+    .p.name           = "hls",
+    .p.long_name      = NULL_IF_CONFIG_SMALL("Apple HTTP Live Streaming"),
+    .p.extensions     = "m3u8",
+    .p.audio_codec    = AV_CODEC_ID_AAC,
+    .p.video_codec    = AV_CODEC_ID_H264,
+    .p.subtitle_codec = AV_CODEC_ID_WEBVTT,
+    .p.flags          = AVFMT_NOFILE | AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH | AVFMT_NODIMENSIONS,
+    .p.priv_class     = &hls_class,
     .priv_data_size = sizeof(HLSContext),
-    .audio_codec    = AV_CODEC_ID_AAC,
-    .video_codec    = AV_CODEC_ID_H264,
-    .subtitle_codec = AV_CODEC_ID_WEBVTT,
-    .flags          = AVFMT_NOFILE | AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH | AVFMT_NODIMENSIONS,
     .init           = hls_init,
     .write_header   = hls_write_header,
     .write_packet   = hls_write_packet,
     .write_trailer  = hls_write_trailer,
     .deinit         = hls_deinit,
-    .priv_class     = &hls_class,
 };
