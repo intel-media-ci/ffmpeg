@@ -595,6 +595,9 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         if (err < 0)
             goto fail;
 
+#if CONFIG_VAAPI_1
+        frames->initial_pool_size = 0;
+#else
         frames->initial_pool_size = 1;
         // Add per-codec number of surfaces used for storing reference frames.
         switch (avctx->codec_id) {
@@ -612,6 +615,7 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         default:
             frames->initial_pool_size += 2;
         }
+#endif
     }
 
     av_hwframe_constraints_free(&constraints);
