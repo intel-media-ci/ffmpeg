@@ -199,7 +199,10 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
     output_frames->width     = ctx->output_width;
     output_frames->height    = ctx->output_height;
 
-    output_frames->initial_pool_size = 4;
+    if (CONFIG_VAAPI_1)
+        output_frames->initial_pool_size = 0;
+    else
+        output_frames->initial_pool_size = 4;
 
     err = ff_filter_init_hw_frames(avctx, outlink, 10);
     if (err < 0)
