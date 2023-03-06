@@ -3,6 +3,7 @@ releases are sorted from youngest to oldest.
 
 version <next>:
 - libaribcaption decoder
+- VAAPI HEVC SCC decoding and encoding
 
 version 6.0:
 - Radiance HDR image support
