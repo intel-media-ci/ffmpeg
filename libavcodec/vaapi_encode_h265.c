@@ -341,8 +341,11 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
     ptl->general_max_420chroma_constraint_flag  = chroma_format <= 1;
     ptl->general_max_monochrome_constraint_flag = chroma_format == 0;
 
-    ptl->general_intra_constraint_flag = ctx->gop_size == 1;
     ptl->general_one_picture_only_constraint_flag = 0;
+
+    // Table A.2 and A.5 in Spec.
+    ptl->general_intra_constraint_flag =
+        (avctx->profile == FF_PROFILE_HEVC_SCC) ? 0 : ctx->gop_size == 1;
 
     ptl->general_lower_bit_rate_constraint_flag = 1;
 
@@ -563,6 +566,14 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
     vui->log2_max_mv_length_horizontal = 15;
     vui->log2_max_mv_length_vertical   = 15;
 
+    if (avctx->profile == FF_PROFILE_HEVC_SCC) {
+        sps->sps_extension_present_flag = 1;
+        sps->sps_scc_extension_flag = 1;
+        sps->sps_curr_pic_ref_enabled_flag = 1;
+        sps->palette_mode_enabled_flag = 1;
+        sps->palette_max_size = 64;
+        sps->delta_palette_max_predictor_size = 32;
+    }
 
     // PPS
 
@@ -636,6 +647,12 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
     pps->pps_loop_filter_across_slices_enabled_flag = 1;
 
+    if (avctx->profile == FF_PROFILE_HEVC_SCC) {
+        pps->pps_extension_present_flag = 1;
+        pps->pps_scc_extension_flag = 1;
+        pps->pps_curr_pic_ref_enabled_flag = 1;
+    }
+
     // Fill VAAPI parameter buffers.
 
     *vseq = (VAEncSequenceParameterBufferHEVC) {
@@ -691,6 +708,13 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
             sps->log2_diff_max_min_pcm_luma_coding_block_size,
 
         .vui_parameters_present_flag = 0,
+
+#if VA_CHECK_VERSION(1, 9, 0)
+        .scc_fields.bits = {
+            .palette_mode_enabled_flag = sps->palette_mode_enabled_flag,
+        }
+#endif
+
     };
 
     *vpic = (VAEncPictureParameterBufferHEVC) {
@@ -743,6 +767,12 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
             .enable_gpu_weighted_prediction = 0,
             .no_output_of_prior_pics_flag   = 0,
         },
+
+#if VA_CHECK_VERSION(1, 9, 0)
+        .scc_fields.bits = {
+            .pps_curr_pic_ref_enabled_flag = pps->pps_curr_pic_ref_enabled_flag,
+        }
+#endif
     };
 
     if (pps->tiles_enabled_flag) {
@@ -1000,6 +1030,10 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
     if (sh->slice_type == HEVC_SLICE_P && ctx->p_to_gpb)
         sh->slice_type = HEVC_SLICE_B;
 
+    // SCC always reference current frame, I slice need to be changed to P.
+    if (sh->slice_type == HEVC_SLICE_I && pps->pps_curr_pic_ref_enabled_flag)
+        sh->slice_type = HEVC_SLICE_P;
+
     sh->slice_pic_order_cnt_lsb = hpic->pic_order_cnt &
         (1 << (sps->log2_max_pic_order_cnt_lsb_minus4 + 4)) - 1;
 
@@ -1089,11 +1123,21 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
                 sh->collocated_from_l0_flag = 1;
             sh->collocated_ref_idx      = 0;
         }
-
-        sh->num_ref_idx_active_override_flag = 0;
-        sh->num_ref_idx_l0_active_minus1 = pps->num_ref_idx_l0_default_active_minus1;
-        sh->num_ref_idx_l1_active_minus1 = pps->num_ref_idx_l1_default_active_minus1;
     }
+
+        if (avctx->profile == FF_PROFILE_HEVC_SCC) {
+            sh->num_ref_idx_active_override_flag = 1;
+            if (pic->type == PICTURE_TYPE_IDR || pic->type == PICTURE_TYPE_I)
+                sh->num_ref_idx_l0_active_minus1 = 0;
+            else {
+                sh->num_ref_idx_l0_active_minus1 = pps->num_ref_idx_l0_default_active_minus1 + 1;
+                sh->num_ref_idx_l1_active_minus1 = pps->num_ref_idx_l1_default_active_minus1;
+            }
+        } else {
+            sh->num_ref_idx_active_override_flag = 0;
+            sh->num_ref_idx_l0_active_minus1 = pps->num_ref_idx_l0_default_active_minus1;
+            sh->num_ref_idx_l1_active_minus1 = pps->num_ref_idx_l1_default_active_minus1;
+        }
 
     sh->slice_sao_luma_flag = sh->slice_sao_chroma_flag =
         sps->sample_adaptive_offset_enabled_flag;
@@ -1113,8 +1157,13 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         .slice_type                 = sh->slice_type,
         .slice_pic_parameter_set_id = sh->slice_pic_parameter_set_id,
 
-        .num_ref_idx_l0_active_minus1 = sh->num_ref_idx_l0_active_minus1,
-        .num_ref_idx_l1_active_minus1 = sh->num_ref_idx_l1_active_minus1,
+        // Number of reference in ref_pic_list0 and ref_pic_list1
+        .num_ref_idx_l0_active_minus1 = pic->type >= PICTURE_TYPE_P ?
+                                        pps->num_ref_idx_l0_default_active_minus1 :
+                                        0,
+        .num_ref_idx_l1_active_minus1 = pic->type == PICTURE_TYPE_B ?
+                                        pps->num_ref_idx_l1_default_active_minus1 :
+                                        0,
 
         .luma_log2_weight_denom         = sh->luma_log2_weight_denom,
         .delta_chroma_log2_weight_denom = sh->delta_chroma_log2_weight_denom,
@@ -1304,6 +1353,12 @@ static const VAAPIEncodeProfile vaapi_encode_h265_profiles[] = {
     { FF_PROFILE_HEVC_REXT,     8, 3, 0, 0, VAProfileHEVCMain444 },
     { FF_PROFILE_HEVC_REXT,    10, 3, 0, 0, VAProfileHEVCMain444_10 },
     { FF_PROFILE_HEVC_REXT,    12, 3, 0, 0, VAProfileHEVCMain444_12 },
+    { FF_PROFILE_HEVC_SCC,      8, 3, 1, 1, VAProfileHEVCSccMain    },
+    { FF_PROFILE_HEVC_SCC,     10, 3, 1, 1, VAProfileHEVCSccMain10  },
+    { FF_PROFILE_HEVC_SCC,      8, 3, 0, 0, VAProfileHEVCSccMain444 },
+#endif
+#if VA_CHECK_VERSION(1, 9, 0)
+    { FF_PROFILE_HEVC_SCC,     10, 3, 0, 0, VAProfileHEVCSccMain444_10 },
 #endif
     { FF_PROFILE_UNKNOWN }
 };
@@ -1402,6 +1457,7 @@ static const AVOption vaapi_encode_h265_options[] = {
     { PROFILE("main",               FF_PROFILE_HEVC_MAIN) },
     { PROFILE("main10",             FF_PROFILE_HEVC_MAIN_10) },
     { PROFILE("rext",               FF_PROFILE_HEVC_REXT) },
+    { PROFILE("scc",                FF_PROFILE_HEVC_SCC) },
 #undef PROFILE
 
     { "tier", "Set tier (general_tier_flag)",
