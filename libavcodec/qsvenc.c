@@ -285,7 +285,8 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
            info->FrameInfo.FrameRateExtD, info->FrameInfo.FrameRateExtN);
 
     if (co2) {
-        if ((info->RateControlMethod == MFX_RATECONTROL_VBR && q->extbrc && q->look_ahead_depth > 0) ||
+        if ((((info->RateControlMethod == MFX_RATECONTROL_VBR) ||
+            (info->RateControlMethod == MFX_RATECONTROL_CBR)) && q->look_ahead_depth > 0) ||
             (info->RateControlMethod == MFX_RATECONTROL_LA) ||
             (info->RateControlMethod == MFX_RATECONTROL_LA_HRD) ||
             (info->RateControlMethod == MFX_RATECONTROL_LA_ICQ))
@@ -874,7 +875,7 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     switch (q->param.mfx.RateControlMethod) {
     case MFX_RATECONTROL_CBR:
     case MFX_RATECONTROL_VBR:
-        if (q->extbrc) {
+        if (q->look_ahead_depth > 0) {
             q->extco2.LookAheadDepth = q->look_ahead_depth;
         }
 #if QSV_HAVE_VCM
@@ -1129,6 +1130,7 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
             if (q->low_delay_brc >= 0)
                 q->extco3.LowDelayBRC = q->low_delay_brc ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
             q->old_low_delay_brc = q->low_delay_brc;
+            q->extco3.ScenarioInfo = q->scenario;
         }
 
         if (avctx->codec_id == AV_CODEC_ID_HEVC) {

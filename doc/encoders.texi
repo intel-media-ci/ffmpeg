@@ -3672,7 +3672,7 @@ A :-separate list of hexadecimal plugin UIDs to load in
 an internal session.
 
 @item @var{look_ahead_depth}
-Depth of look ahead in number frames, available when extbrc option is enabled.
+Depth of look ahead in number frames, available when extbrc option is enabled for Linux or scenario is set to 7 for Windows.
 
 @item @var{profile}
 Set the encoding profile (scc requires libmfx >= 1.32).
@@ -3863,7 +3863,7 @@ This option controls usage of B frames as reference.
 Extended bitrate control.
 
 @item @var{look_ahead_depth}
-Depth of look ahead in number frames, available when extbrc option is enabled.
+Depth of look ahead in number frames, available when extbrc option is enabled for Linux or scenario is set to 7 for Windows.
 
 @item @var{low_delay_brc}
 Setting this flag turns on or off LowDelayBRC feautre in qsv plugin, which provides
