@@ -176,9 +176,6 @@ static int tf_start_inference(void *args)
     if (TF_GetCode(request->status) != TF_OK) {
         av_log(&tf_model->ctx, AV_LOG_ERROR, "%s", TF_Message(request->status));
         tf_free_request(infer_request);
-        if (ff_safe_queue_push_back(tf_model->request_queue, request) < 0) {
-            destroy_request_item(&request);
-        }
         return DNN_GENERIC_ERROR;
     }
     return 0;
@@ -439,7 +436,9 @@ static int load_tf_model(TFModel *tf_model, const char *model_filename)
     TF_DeleteBuffer(graph_def);
     if (TF_GetCode(tf_model->status) != TF_OK){
         TF_DeleteGraph(tf_model->graph);
+        tf_model->graph = NULL;
         TF_DeleteStatus(tf_model->status);
+        tf_model->status = NULL;
         av_log(ctx, AV_LOG_ERROR, "Failed to import serialized graph to model graph\n");
         av_freep(&sess_config);
         return DNN_GENERIC_ERROR;
@@ -453,7 +452,7 @@ static int load_tf_model(TFModel *tf_model, const char *model_filename)
         av_freep(&sess_config);
         if (TF_GetCode(tf_model->status) != TF_OK) {
             TF_DeleteGraph(tf_model->graph);
-            TF_DeleteStatus(tf_model->status);
+            tf_model->graph = NULL;
             TF_DeleteSessionOptions(sess_opts);
             av_log(ctx, AV_LOG_ERROR, "Failed to set config for sess options with %s\n",
                                       tf_model->ctx.options.sess_config);
@@ -466,7 +465,7 @@ static int load_tf_model(TFModel *tf_model, const char *model_filename)
     if (TF_GetCode(tf_model->status) != TF_OK)
     {
         TF_DeleteGraph(tf_model->graph);
-        TF_DeleteStatus(tf_model->status);
+        tf_model->graph = NULL;
         av_log(ctx, AV_LOG_ERROR, "Failed to create new session with model graph\n");
         return DNN_GENERIC_ERROR;
     }
@@ -480,8 +479,11 @@ static int load_tf_model(TFModel *tf_model, const char *model_filename)
         if (TF_GetCode(tf_model->status) != TF_OK)
         {
             TF_DeleteSession(tf_model->session, tf_model->status);
+            tf_model->session = NULL;
             TF_DeleteGraph(tf_model->graph);
+            tf_model->graph = NULL;
             TF_DeleteStatus(tf_model->status);
+            tf_model->status = NULL;
             av_log(ctx, AV_LOG_ERROR, "Failed to run session when initializing\n");
             return DNN_GENERIC_ERROR;
         }
@@ -940,6 +942,7 @@ DNNModel *ff_dnn_load_model_tf(const char *model_filename, DNNFunctionType func_
 
     return model;
 err:
+    model->model = tf_model;
     ff_dnn_free_model_tf(&model);
     return NULL;
 }
