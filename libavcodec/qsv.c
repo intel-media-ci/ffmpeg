@@ -987,9 +987,18 @@ static mfxStatus qsv_frame_unlock(mfxHDL pthis, mfxMemId mid, mfxFrameData *ptr)
 
 static mfxStatus qsv_frame_get_hdl(mfxHDL pthis, mfxMemId mid, mfxHDL *hdl)
 {
-    QSVMid *qsv_mid = (QSVMid*)mid;
+    QSVFramesContext *ctx = (QSVFramesContext *)pthis;
+    AVHWFramesContext *frames_ctx = (AVHWFramesContext*)ctx->hw_frames_ctx->data;
+    AVQSVFramesContext *frames_hwctx = frames_ctx->hwctx;
     mfxHDLPair *pair_dst = (mfxHDLPair*)hdl;
-    mfxHDLPair *pair_src = (mfxHDLPair*)qsv_mid->handle_pair;
+    mfxHDLPair *pair_src;
+
+    if (frames_hwctx->nb_surfaces) {
+        QSVMid *qsv_mid = (QSVMid*)mid;
+        pair_src = (mfxHDLPair*)qsv_mid->handle_pair;
+    } else {
+        pair_src = (mfxHDLPair*)mid;
+    }
 
     pair_dst->first = pair_src->first;
 
