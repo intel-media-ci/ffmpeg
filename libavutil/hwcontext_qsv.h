@@ -51,7 +51,27 @@ typedef struct AVQSVDeviceContext {
  * This struct is allocated as AVHWFramesContext.hwctx
  */
 typedef struct AVQSVFramesContext {
-    mfxFrameSurface1 *surfaces;
+    /**
+     * A pointer to mfxFrameSurface1 or mfxFrameInfo structure.
+     *
+     * When nb_surfaces is 0, it is a pointer to mfxFrameInfo structure,
+     * otherwise it is a pointer to mfxFrameSurface1.
+     */
+    union {
+        mfxFrameSurface1 *surfaces;
+        mfxFrameInfo     *info;
+    };
+
+    /**
+     * Number of frames
+     *
+     * A dynamic frame pool is required when nb_surfaces is 0, otherwise
+     * a fixed frame pool is required.
+     *
+     * User should make sure the configuration can support dynamic frame
+     * allocation when dynamic frame pool is required. For example, you cannt
+     * set nb_surfaces to 0 when the child_device_type is AV_HWDEVICE_TYPE_DXVA2.
+     */
     int            nb_surfaces;
 
     /**
