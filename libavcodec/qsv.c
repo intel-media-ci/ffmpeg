@@ -839,7 +839,7 @@ static mfxStatus qsv_frame_alloc(mfxHDL pthis, mfxFrameAllocRequest *req,
         AVHWFramesContext *frames_ctx = (AVHWFramesContext*)ctx->hw_frames_ctx->data;
         AVQSVFramesContext *frames_hwctx = frames_ctx->hwctx;
         mfxFrameInfo      *i  = &req->Info;
-        mfxFrameInfo      *i1 = &frames_hwctx->surfaces[0].Info;
+        mfxFrameInfo      *i1 = frames_hwctx->nb_surfaces ? &frames_hwctx->surfaces[0].Info : frames_hwctx->info;
 
         if (i->Width  > i1->Width  || i->Height > i1->Height ||
             i->FourCC != i1->FourCC || i->ChromaFormat != i1->ChromaFormat) {
@@ -954,7 +954,7 @@ static mfxStatus qsv_frame_lock(mfxHDL pthis, mfxMemId mid, mfxFrameData *ptr)
     if (!qsv_mid->hw_frame->hw_frames_ctx)
         goto fail;
 
-    qsv_mid->surf.Info = hw_frames_hwctx->surfaces[0].Info;
+    qsv_mid->surf.Info = hw_frames_hwctx->nb_surfaces ? hw_frames_hwctx->surfaces[0].Info : *hw_frames_hwctx->info;
     qsv_mid->surf.Data.MemId = qsv_mid->handle_pair;
 
     /* map the data to the system memory */
