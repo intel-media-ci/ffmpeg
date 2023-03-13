@@ -25,9 +25,10 @@
  * @file
  * API-specific header for AV_HWDEVICE_TYPE_VAAPI.
  *
- * Dynamic frame pools are supported, but note that any pool used as a render
+ * Dynamic frame pools are supported. Note that any pool used as a render
  * target is required to be of fixed size in order to be be usable as an
- * argument to vaCreateContext().
+ * argument to vaCreateContext() with libva. When libva2 (VAAPI 1) is used,
+ * a pool used as a render target can be dynamic.
  *
  * For user-allocated pools, AVHWFramesContext.pool must return AVBufferRefs
  * with the data pointer set to a VASurfaceID.

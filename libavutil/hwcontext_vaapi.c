@@ -618,7 +618,7 @@ static int vaapi_frames_init(AVHWFramesContext *hwfc)
             }
         } else {
             // This pool allows dynamic sizing, and will not be usable as a
-            // render target.
+            // render target with libva. It can be used with libva2
             avfc->nb_surfaces = 0;
             avfc->surface_ids = NULL;
         }
