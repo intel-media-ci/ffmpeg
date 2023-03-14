@@ -30,6 +30,7 @@ HEADERS = ac3_parser.h                                                  \
 OBJS = ac3_parser.o                                                     \
        adts_parser.o                                                    \
        allcodecs.o                                                      \
+       av1_profile_level.o                                              \
        avcodec.o                                                        \
        avdct.o                                                          \
        avpacket.o                                                       \
@@ -1308,7 +1309,8 @@ SKIPHEADERS-$(CONFIG_VULKAN)           += vulkan.h vulkan_video.h vulkan_decode.
 SKIPHEADERS-$(CONFIG_V4L2_M2M)         += v4l2_buffers.h v4l2_context.h v4l2_m2m.h
 SKIPHEADERS-$(CONFIG_ZLIB)             += zlib_wrapper.h
 
-TESTPROGS = avcodec                                                     \
+TESTPROGS = av1_levels                                                  \
+            avcodec                                                     \
             avpacket                                                    \
             bitstream_be                                                \
             bitstream_le                                                \
