@@ -229,6 +229,11 @@ int update_dimensions(VP8Context *s, int width, int height, int is_vp7)
             return ret;
 
         dim_reset = (s->macroblocks_base != NULL);
+
+#if CONFIG_VP8_VAAPI_HWACCEL
+        if (!dim_reset && s->pix_fmt == AV_PIX_FMT_VAAPI)
+            dim_reset = 1;
+#endif
     }
 
     if ((s->pix_fmt == AV_PIX_FMT_NONE || dim_reset) &&
