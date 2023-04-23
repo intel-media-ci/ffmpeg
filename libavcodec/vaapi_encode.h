@@ -133,6 +133,11 @@ typedef struct VAAPIEncodePicture {
 
     int          nb_slices;
     VAAPIEncodeSlice *slices;
+
+    /** Tail data of current pic, used only for repeat header of AV1. */
+    char tail_data[MAX_PARAM_BUFFER_SIZE];
+    /** Byte length of tail_data. */
+    size_t tail_size;
 } VAAPIEncodePicture;
 
 typedef struct VAAPIEncodeProfile {
@@ -367,6 +372,13 @@ typedef struct VAAPIEncodeContext {
     AVFifo          *encode_fifo;
     // Max number of frame buffered in encoder.
     int             async_depth;
+
+    /** Head data for current output pkt, used only for AV1. */
+    void  *header_data;
+    size_t header_data_size;
+
+    /** Store av1 repeat frame header pkt. */
+    AVPacket *tail_pkt;
 } VAAPIEncodeContext;
 
 enum {
