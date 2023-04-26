@@ -26736,6 +26736,17 @@ See @ref{framesync}.
 @item repeatlast
 See @ref{framesync}.
 
+@item blend_method
+Specify blend method if the second input has alpha channel. It accepts
+one of the following values:
+
+@table @option
+@item straight
+Straight alpha (the default).
+@item premultiplied
+Premultiplied alpha if supported, otherwise fallback to the default method.
+@end table
+
 @end table
 
 This filter also supports the @ref{framesync} options.

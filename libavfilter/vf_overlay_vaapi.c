@@ -57,6 +57,7 @@ typedef struct OverlayVAAPIContext {
     float            alpha;
     unsigned int     blend_flags;
     float            blend_alpha;
+    int              blend_method;
 } OverlayVAAPIContext;
 
 static const char *const var_names[] = {
@@ -127,12 +128,33 @@ release:
     return ret;
 }
 
+static int have_alpha_planar(AVFilterLink *link)
+{
+    enum AVPixelFormat pix_fmt = link->format;
+    const AVPixFmtDescriptor *desc;
+    AVHWFramesContext *fctx;
+
+    if (link->format == AV_PIX_FMT_VAAPI) {
+        fctx    = (AVHWFramesContext *)link->hw_frames_ctx->data;
+        pix_fmt = fctx->sw_format;
+    }
+
+    desc = av_pix_fmt_desc_get(pix_fmt);
+    if (!desc)
+        return 0;
+
+    return !!(desc->flags & AV_PIX_FMT_FLAG_ALPHA);
+}
+
+
 static int overlay_vaapi_build_filter_params(AVFilterContext *avctx)
 {
+    OverlayVAAPIContext *ctx = avctx->priv;
     VAAPIVPPContext *vpp_ctx   = avctx->priv;
     VAStatus vas;
     int support_flag;
     VAProcPipelineCaps pipeline_caps;
+    AVFilterLink *inlink1 = avctx->inputs[1];
 
     memset(&pipeline_caps, 0, sizeof(pipeline_caps));
     vas = vaQueryVideoProcPipelineCaps(vpp_ctx->hwctx->display,
@@ -154,6 +176,19 @@ static int overlay_vaapi_build_filter_params(AVFilterContext *avctx)
     if (!support_flag) {
         av_log(avctx, AV_LOG_ERROR, "VAAPI driver doesn't support global alpha blending\n");
         return AVERROR(EINVAL);
+    }
+
+    if (have_alpha_planar(inlink1)) {
+        support_flag = pipeline_caps.blend_flags & VA_BLEND_PREMULTIPLIED_ALPHA;
+        if (ctx->blend_method && !support_flag) {
+            av_log(ctx, AV_LOG_WARNING,
+                   "User is requiring premultiplied alpha, "
+                   "but VAAPI driver doesn't support this feature, use straight alpha instead.\n");
+            ctx->blend_method = 0;
+        }
+
+        if (ctx->blend_method == 1)
+            ctx->blend_flags |= VA_BLEND_PREMULTIPLIED_ALPHA;
     }
 
     return 0;
@@ -256,24 +291,6 @@ fail:
     return err;
 }
 
-static int have_alpha_planar(AVFilterLink *link)
-{
-    enum AVPixelFormat pix_fmt = link->format;
-    const AVPixFmtDescriptor *desc;
-    AVHWFramesContext *fctx;
-
-    if (link->format == AV_PIX_FMT_VAAPI) {
-        fctx    = (AVHWFramesContext *)link->hw_frames_ctx->data;
-        pix_fmt = fctx->sw_format;
-    }
-
-    desc = av_pix_fmt_desc_get(pix_fmt);
-    if (!desc)
-        return 0;
-
-    return !!(desc->flags & AV_PIX_FMT_FLAG_ALPHA);
-}
-
 static int overlay_vaapi_config_input_main(AVFilterLink *inlink)
 {
     AVFilterContext  *avctx  = inlink->dst;
@@ -312,9 +329,6 @@ static int overlay_vaapi_config_input_overlay(AVFilterLink *inlink)
         ctx->blend_flags |= VA_BLEND_GLOBAL_ALPHA;
         ctx->blend_alpha  = ctx->alpha;
     }
-
-    if (have_alpha_planar(inlink))
-        ctx->blend_flags |= VA_BLEND_PREMULTIPLIED_ALPHA;
 
     return 0;
 }
@@ -389,6 +403,9 @@ static const AVOption overlay_vaapi_options[] = {
         { "pass",   "Pass through the main input.", 0, AV_OPT_TYPE_CONST, { .i64 = EOF_ACTION_PASS },   .flags = FLAGS, "eof_action" },
     { "shortest", "force termination when the shortest input terminates", OFFSET(fs.opt_shortest),   AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS },
     { "repeatlast", "repeat overlay of the last overlay frame",           OFFSET(fs.opt_repeatlast), AV_OPT_TYPE_BOOL, { .i64 = 1 }, 0, 1, FLAGS },
+    { "blend_method", "Specify blend method if the second input has alpha channel",  OFFSET(blend_method), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, .flags = FLAGS, "blend_method" },
+        { "straight",           "Straight alpha",                                                           0, AV_OPT_TYPE_CONST, { .i64 = 0 }, .flags = FLAGS, "blend_method" },
+        { "premultiplied",      "Premultiplied alpha if supported, otherwise fallback to straight alpha",   0, AV_OPT_TYPE_CONST, { .i64 = 1 }, .flags = FLAGS, "blend_method" },
     { NULL },
 };
 
