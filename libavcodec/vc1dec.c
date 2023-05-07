@@ -1385,6 +1385,9 @@ static const enum AVPixelFormat vc1_hwaccel_pixfmt_list_420[] = {
     AV_PIX_FMT_D3D11VA_VLD,
     AV_PIX_FMT_D3D11,
 #endif
+#if CONFIG_VC1_D3D12VA_HWACCEL
+    AV_PIX_FMT_D3D12,
+#endif
 #if CONFIG_VC1_NVDEC_HWACCEL
     AV_PIX_FMT_CUDA,
 #endif
@@ -1419,6 +1422,9 @@ const FFCodec ff_vc1_decoder = {
 #endif
 #if CONFIG_VC1_D3D11VA2_HWACCEL
                         HWACCEL_D3D11VA2(vc1),
+#endif
+#if CONFIG_VC1_D3D12VA_HWACCEL
+                        HWACCEL_D3D12VA(vc1),
 #endif
 #if CONFIG_VC1_NVDEC_HWACCEL
                         HWACCEL_NVDEC(vc1),
@@ -1456,6 +1462,9 @@ const FFCodec ff_wmv3_decoder = {
 #endif
 #if CONFIG_WMV3_D3D11VA2_HWACCEL
                         HWACCEL_D3D11VA2(wmv3),
+#endif
+#if CONFIG_WMV3_D3D12VA_HWACCEL
+                        HWACCEL_D3D12VA(wmv3),
 #endif
 #if CONFIG_WMV3_NVDEC_HWACCEL
                         HWACCEL_NVDEC(wmv3),
