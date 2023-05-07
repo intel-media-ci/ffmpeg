@@ -182,4 +182,12 @@ int ff_dxva2_vp9_fill_picture_parameters(const AVCodecContext *avctx, AVDXVACont
 int ff_dxva2_av1_fill_picture_parameters(const AVCodecContext *avctx, AVDXVAContext *ctx, DXVA_PicParams_AV1 *pp);
 #endif
 
+#if CONFIG_MPEG2_D3D12VA_HWACCEL
+void ff_dxva2_mpeg2_fill_picture_parameters(AVCodecContext *avctx, AVDXVAContext *ctx, DXVA_PictureParameters *pp);
+
+void ff_dxva2_mpeg2_fill_quantization_matrices(AVCodecContext *avctx, AVDXVAContext *ctx, DXVA_QmatrixData *qm);
+
+void ff_dxva2_mpeg2_fill_slice(AVCodecContext *avctx, DXVA_SliceInfo *slice,  unsigned position, const uint8_t *buffer, unsigned size);
+#endif
+
 #endif /* AVCODEC_DXVA2_INTERNAL_H */

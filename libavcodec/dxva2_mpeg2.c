@@ -39,11 +39,11 @@ struct dxva2_picture_context {
     unsigned               bitstream_size;
 };
 
-static void fill_picture_parameters(AVCodecContext *avctx,
+void ff_dxva2_mpeg2_fill_picture_parameters(AVCodecContext *avctx,
                                     AVDXVAContext *ctx,
-                                    const struct MpegEncContext *s,
                                     DXVA_PictureParameters *pp)
 {
+    const struct MpegEncContext *s = avctx->priv_data;
     const Picture *current_picture = s->current_picture_ptr;
     int is_field = s->picture_structure != PICT_FRAME;
 
@@ -105,11 +105,11 @@ static void fill_picture_parameters(AVCodecContext *avctx,
     pp->bBitstreamConcealmentMethod  = 0;
 }
 
-static void fill_quantization_matrices(AVCodecContext *avctx,
+void ff_dxva2_mpeg2_fill_quantization_matrices(AVCodecContext *avctx,
                                        AVDXVAContext *ctx,
-                                       const struct MpegEncContext *s,
                                        DXVA_QmatrixData *qm)
 {
+    const struct MpegEncContext *s = avctx->priv_data;
     int i;
     for (i = 0; i < 4; i++)
         qm->bNewQmatrix[i] = 1;
@@ -122,12 +122,12 @@ static void fill_quantization_matrices(AVCodecContext *avctx,
     }
 }
 
-static void fill_slice(AVCodecContext *avctx,
-                       const struct MpegEncContext *s,
+void ff_dxva2_mpeg2_fill_slice(AVCodecContext *avctx,
                        DXVA_SliceInfo *slice,
                        unsigned position,
                        const uint8_t *buffer, unsigned size)
 {
+    const struct MpegEncContext *s = avctx->priv_data;
     int is_field = s->picture_structure != PICT_FRAME;
     GetBitContext gb;
 
@@ -265,8 +265,8 @@ static int dxva2_mpeg2_start_frame(AVCodecContext *avctx,
         return -1;
     assert(ctx_pic);
 
-    fill_picture_parameters(avctx, ctx, s, &ctx_pic->pp);
-    fill_quantization_matrices(avctx, ctx, s, &ctx_pic->qm);
+    ff_dxva2_mpeg2_fill_picture_parameters(avctx, ctx, &ctx_pic->pp);
+    ff_dxva2_mpeg2_fill_quantization_matrices(avctx, ctx, &ctx_pic->qm);
 
     ctx_pic->slice_count    = 0;
     ctx_pic->bitstream_size = 0;
@@ -292,7 +292,7 @@ static int dxva2_mpeg2_decode_slice(AVCodecContext *avctx,
     ctx_pic->bitstream_size += size;
 
     position = buffer - ctx_pic->bitstream;
-    fill_slice(avctx, s, &ctx_pic->slice[ctx_pic->slice_count++], position,
+    ff_dxva2_mpeg2_fill_slice(avctx, &ctx_pic->slice[ctx_pic->slice_count++], position,
                buffer, size);
     return 0;
 }
