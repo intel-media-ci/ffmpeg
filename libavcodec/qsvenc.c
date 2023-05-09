@@ -1918,7 +1918,7 @@ static int submit_frame(QSVEncContext *q, const AVFrame *frame,
             qf->frame->format = frame->format;
 
             if (!qf->frame->data[0]) {
-                ret = av_frame_get_buffer(qf->frame, q->width_align);
+                ret = av_frame_get_buffer2(qf->frame, q->width_align, 0);
                 if (ret < 0)
                     return ret;
             }
