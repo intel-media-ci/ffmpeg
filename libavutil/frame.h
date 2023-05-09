@@ -868,6 +868,37 @@ void av_frame_move_ref(AVFrame *dst, AVFrame *src);
 int av_frame_get_buffer(AVFrame *frame, int align);
 
 /**
+ * Allocate new buffer(s) for audio or video data.
+ *
+ * The following fields must be set on frame before calling this function:
+ * - format (pixel format for video, sample format for audio)
+ * - width and height for video
+ * - nb_samples and ch_layout for audio
+ *
+ * This function will fill AVFrame.data and AVFrame.buf arrays and, if
+ * necessary, allocate and fill AVFrame.extended_data and AVFrame.extended_buf.
+ * For planar formats, one buffer will be allocated for each plane.
+ *
+ * @warning: if frame already has been allocated, calling this function will
+ *           leak memory. In addition, undefined behavior can occur in certain
+ *           cases.
+ *
+ * @param frame frame in which to store the new buffers.
+ * @param align Required buffer size alignment. If equal to 0, alignment will be
+ *              chosen automatically for the current CPU. It is highly
+ *              recommended to pass 0 here unless you know what you are doing.
+ * @param plane_padding The length of padding bytes between two video planes. It is
+ *              ignored for audio data.
+ *
+ * @return 0 on success, a negative AVERROR on error.
+ *
+ * @note It is recommended that you use av_frame_get_buffer instead if you do not
+ *       care about the length of padding bytes.
+ * @see av_frame_get_buffer()
+ */
+int av_frame_get_buffer2(AVFrame *frame, int align, int plane_padding);
+
+/**
  * Check if the frame data is writable.
  *
  * @return A positive value if the frame data is writable (which is true if and

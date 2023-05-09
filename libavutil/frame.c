@@ -106,11 +106,10 @@ void av_frame_free(AVFrame **frame)
     av_freep(frame);
 }
 
-static int get_video_buffer(AVFrame *frame, int align)
+static int get_video_buffer(AVFrame *frame, int align, int plane_padding)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
     int ret, padded_height, total_size;
-    int plane_padding = FFMAX(16 + 16/*STRIDE_ALIGN*/, align);
     ptrdiff_t linesizes[4];
     size_t sizes[4];
 
@@ -240,14 +239,14 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
 }
 
-int av_frame_get_buffer(AVFrame *frame, int align)
+int av_frame_get_buffer2(AVFrame *frame, int align, int plane_padding)
 {
     if (frame->format < 0)
         return AVERROR(EINVAL);
 
 FF_DISABLE_DEPRECATION_WARNINGS
     if (frame->width > 0 && frame->height > 0)
-        return get_video_buffer(frame, align);
+        return get_video_buffer(frame, align, plane_padding);
     else if (frame->nb_samples > 0 &&
              (av_channel_layout_check(&frame->ch_layout)
 #if FF_API_OLD_CHANNEL_LAYOUT
@@ -258,6 +257,11 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 
     return AVERROR(EINVAL);
+}
+
+int av_frame_get_buffer(AVFrame *frame, int align)
+{
+    return av_frame_get_buffer2(frame, align, FFMAX(16 + 16/*STRIDE_ALIGN*/, align));
 }
 
 static int frame_copy_props(AVFrame *dst, const AVFrame *src, int force_copy)
