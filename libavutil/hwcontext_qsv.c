@@ -1631,7 +1631,7 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
             tmp_frame->format = dst->format;
             tmp_frame->width  = FFALIGN(dst->linesize[0], 16);
             tmp_frame->height = FFALIGN(dst->height, 16);
-            ret = av_frame_get_buffer(tmp_frame, 0);
+            ret = av_frame_get_buffer2(tmp_frame, 0, 0);
             if (ret < 0)
                 return ret;
         }
@@ -1715,7 +1715,7 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
             tmp_frame->format = src->format;
             tmp_frame->width  = FFALIGN(src->width, 16);
             tmp_frame->height = FFALIGN(src->height, 16);
-            ret = av_frame_get_buffer(tmp_frame, 0);
+            ret = av_frame_get_buffer2(tmp_frame, 0, 0);
             if (ret < 0)
                 return ret;
         }
