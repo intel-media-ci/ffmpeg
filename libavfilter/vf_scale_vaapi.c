@@ -85,6 +85,15 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
     ff_scale_adjust_dimensions(inlink, &vpp_ctx->output_width, &vpp_ctx->output_height,
                                ctx->force_original_aspect_ratio, ctx->force_divisible_by);
 
+    if (inlink->w == outlink->w && inlink->h == outlink->w &&
+        vpp_ctx->input_frames->sw_format == vpp_ctx->output_format &&
+        ctx->colour_primaries == AVCOL_PRI_UNSPECIFIED &&
+        ctx->colour_transfer == AVCOL_TRC_UNSPECIFIED &&
+        ctx->colour_matrix == AVCOL_SPC_UNSPECIFIED &&
+        ctx->colour_range == AVCOL_RANGE_UNSPECIFIED &&
+        ctx->chroma_location == AVCHROMA_LOC_UNSPECIFIED)
+        vpp_ctx->passthrough = 1;
+
     err = ff_vaapi_vpp_config_output(outlink);
     if (err < 0)
         return err;
