@@ -241,6 +241,7 @@ static int vaapi_av1_start_frame(AVCodecContext *avctx,
             .disable_frame_end_update_cdf = frame_header->disable_frame_end_update_cdf,
             .uniform_tile_spacing_flag    = frame_header->uniform_tile_spacing_flag,
             .allow_warped_motion          = frame_header->allow_warped_motion,
+            .large_scale_tile             = frame_header->large_scale_tile,
         },
         .loop_filter_info_fields.bits = {
             .sharpness_level        = frame_header->loop_filter_sharpness,

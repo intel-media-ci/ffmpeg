@@ -209,6 +209,7 @@ typedef struct AV1RawFrameHeader {
     uint8_t interpolation_filter;
     uint8_t is_motion_mode_switchable;
     uint8_t use_ref_frame_mvs;
+    uint8_t large_scale_tile;
 
     uint8_t disable_frame_end_update_cdf;
 
