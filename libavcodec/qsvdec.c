@@ -910,6 +910,7 @@ static int qsv_process_data(AVCodecContext *avctx, QSVContext *q,
     }
 
     if (q->reinit_flag || !q->session || !q->initialized) {
+        int reset_crop = !q->session;
         mfxFrameAllocRequest request;
         memset(&request, 0, sizeof(request));
 
@@ -928,6 +929,11 @@ static int qsv_process_data(AVCodecContext *avctx, QSVContext *q,
 
         avctx->coded_width  = param.mfx.FrameInfo.Width;
         avctx->coded_height = param.mfx.FrameInfo.Height;
+
+        if (reset_crop && avctx->width && avctx->height) {
+            param.mfx.FrameInfo.CropW = avctx->width;
+            param.mfx.FrameInfo.CropH = avctx->height;
+        }
 
         ret = MFXVideoDECODE_QueryIOSurf(q->session, &param, &request);
         if (ret < 0)
