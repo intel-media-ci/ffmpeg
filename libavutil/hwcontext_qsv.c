@@ -2094,6 +2094,9 @@ static int qsv_device_derive(AVHWDeviceContext *ctx,
                              AVDictionary *opts, int flags)
 {
     mfxIMPL impl;
+
+    ctx->free = qsv_device_free;
+    
     impl = choose_implementation("hw_any", child_device_ctx->type);
     return qsv_device_derive_from_child(ctx, impl,
                                         child_device_ctx, flags);
