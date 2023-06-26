@@ -803,6 +803,12 @@ int dec_packet(InputStream *ist, const AVPacket *pkt, int no_eof)
         av_frame_unref(d->frame);
         if (ret < 0)
             goto finish;
+
+        // During flushing, break out to reap filter once send a frame to filters to
+        // avoid drain out filter's output frame pool. Especially for HW filters which
+        // always have a limited frame pool size.
+        if (!pkt)
+            return 0;
     }
 
 finish:
