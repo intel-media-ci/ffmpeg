@@ -47,15 +47,11 @@ static AVOnce functions_loaded = AV_ONCE_INIT;
 
 static PFN_CREATE_DXGI_FACTORY mCreateDXGIFactory;
 static PFN_D3D11_CREATE_DEVICE mD3D11CreateDevice;
+static HANDLE d3dlib, dxgilib;
 
 static av_cold void load_functions(void)
 {
 #if !HAVE_UWP
-    // We let these "leak" - this is fine, as unloading has no great benefit, and
-    // Windows will mark a DLL as loaded forever if its internal refcount overflows
-    // from too many LoadLibrary calls.
-    HANDLE d3dlib, dxgilib;
-
     d3dlib  = dlopen("d3d11.dll", 0);
     dxgilib = dlopen("dxgi.dll", 0);
     if (!d3dlib || !dxgilib)
@@ -550,6 +546,12 @@ static void d3d11va_device_uninit(AVHWDeviceContext *hwdev)
         device_hwctx->lock_ctx = INVALID_HANDLE_VALUE;
         device_hwctx->lock = NULL;
     }
+
+    if (d3dlib)
+        dlclose(d3dlib);
+
+    if (dxgilib)
+        dlclose(dxgilib);
 }
 
 static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
