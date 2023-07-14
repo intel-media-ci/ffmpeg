@@ -126,11 +126,8 @@ typedef struct VAAPIEncodePicture {
     // The previous reference picture in encode order.  Must be in at least
     // one of the reference list and DPB list.
     struct VAAPIEncodePicture *prev;
-    // Reference count for other pictures referring to this one through
-    // the above pointers, directly from incomplete pictures and indirectly
-    // through completed pictures.
-    int             ref_count[2];
-    int             ref_removed[2];
+    // Reference count for other pictures referring to this one.
+    int             ref_count;
 
     int          nb_slices;
     VAAPIEncodeSlice *slices;
