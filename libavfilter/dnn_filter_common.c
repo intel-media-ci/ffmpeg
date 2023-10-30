@@ -57,13 +57,13 @@ int ff_dnn_init(DnnContext *ctx, DNNFunctionType func_type, AVFilterContext *fil
         av_log(filter_ctx, AV_LOG_ERROR, "model file for network is not specified\n");
         return AVERROR(EINVAL);
     }
-    if (!ctx->model_inputname) {
+    if (!ctx->model_inputname && ctx->backend_type == DNN_TF) {
         av_log(filter_ctx, AV_LOG_ERROR, "input name of the model network is not specified\n");
         return AVERROR(EINVAL);
     }
 
     ctx->model_outputnames = separate_output_names(ctx->model_outputnames_string, "&", &ctx->nb_outputs);
-    if (!ctx->model_outputnames) {
+    if (!ctx->model_outputnames && ctx->backend_type == DNN_TF) {
         av_log(filter_ctx, AV_LOG_ERROR, "could not parse model output names\n");
         return AVERROR(EINVAL);
     }
