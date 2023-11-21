@@ -4079,6 +4079,7 @@ Each encoder also has its own specific options:
 @table @option
 
 @item av1_vaapi
+@option{qp} sets the value of @emph{base_q_index}.
 @option{profile} sets the value of @emph{seq_profile}.
 @option{tier} sets the value of @emph{seq_tier}.
 @option{level} sets the value of @emph{seq_level_idx}.

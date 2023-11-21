@@ -79,6 +79,7 @@ typedef struct VAAPIEncodeAV1Context {
     int cdef_param_size;
 
     /** user options */
+    int qp;
     int profile;
     int level;
     int tier;
@@ -786,6 +787,9 @@ static av_cold int vaapi_encode_av1_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
+    if (priv->qp > 0)
+        ctx->explicit_qp = priv->qp;
+
     ret = ff_vaapi_encode_init(avctx);
     if (ret < 0)
         return ret;
@@ -864,6 +868,8 @@ static av_cold int vaapi_encode_av1_close(AVCodecContext *avctx)
 static const AVOption vaapi_encode_av1_options[] = {
     VAAPI_ENCODE_COMMON_OPTIONS,
     VAAPI_ENCODE_RC_OPTIONS,
+    { "qp", "Base q index (for P-frames; scaled by qfactor/qoffset for I/B)",
+      OFFSET(qp), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 255, FLAGS },
     { "profile", "Set profile (seq_profile)",
       OFFSET(profile), AV_OPT_TYPE_INT,
       { .i64 = AV_PROFILE_UNKNOWN }, AV_PROFILE_UNKNOWN, 0xff, FLAGS, "profile" },
