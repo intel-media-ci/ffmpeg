@@ -805,6 +805,7 @@ static const CodedBitstreamUnitType decompose_unit_types[] = {
     AV1_OBU_SEQUENCE_HEADER,
     AV1_OBU_TEMPORAL_DELIMITER,
     AV1_OBU_TILE_GROUP,
+    AV1_OBU_TILE_LIST,
 };
 
 static av_cold int av1_decode_init(AVCodecContext *avctx)
@@ -1327,6 +1328,10 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
             }
             break;
         case AV1_OBU_TILE_LIST:
+            av_log(avctx, AV_LOG_ERROR, "Large scale tile decoding is unsupported.\n");
+            ret = AVERROR_PATCHWELCOME;
+            goto end;
+            break;
         case AV1_OBU_TEMPORAL_DELIMITER:
         case AV1_OBU_PADDING:
             break;
