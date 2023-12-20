@@ -25,8 +25,8 @@
  * @file
  * An API-specific header for AV_HWDEVICE_TYPE_QSV.
  *
- * This API does not support dynamic frame pools. AVHWFramesContext.pool must
- * contain AVBufferRefs whose data pointer points to an mfxFrameSurface1 struct.
+ * AVHWFramesContext.pool must contain AVBufferRefs whose data pointer points
+ * to a mfxFrameSurface1 struct.
  */
 
 /**
@@ -51,11 +51,34 @@ typedef struct AVQSVDeviceContext {
  * This struct is allocated as AVHWFramesContext.hwctx
  */
 typedef struct AVQSVFramesContext {
-    mfxFrameSurface1 *surfaces;
+    /**
+     * A pointer to a mfxFrameSurface1 or mfxFrameInfo struct
+     *
+     * When nb_surfaces is non-zero, it is a pointer to a mfxFrameSurface1
+     * struct.
+     *
+     * When nb_surfaces is 0, it is a pointer to a mfxFrameInfo struct, all
+     * buffers allocated from the pool have the same mfxFrameInfo.
+     */
+    union {
+        mfxFrameSurface1 *surfaces;
+        mfxFrameInfo     *info;
+    };
+
+    /**
+     * Number of frames in the pool
+     *
+     * It is 0 for dynamic frame pools or AVHWFramesContext.initial_pool_size
+     * for fixed frame pools.
+     *
+     * Note only oneVPL GPU runtime 2.9+ can support dynamic frame pools
+     * on d3d11va or vaapi
+     */
     int            nb_surfaces;
 
     /**
-     * A combination of MFX_MEMTYPE_* describing the frame pool.
+     * Set by user. It is a combination of MFX_MEMTYPE_* describing the frame
+     * pool.
      */
     int frame_type;
 } AVQSVFramesContext;
