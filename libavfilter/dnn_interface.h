@@ -64,7 +64,7 @@ typedef enum {
 
 typedef struct DNNData{
     void *data;
-    int width, height, channels;
+    int dims[4];
     // dt and order together decide the color format
     DNNDataType dt;
     DNNColorOrder order;
@@ -133,5 +133,11 @@ typedef struct DNNModule{
 
 // Initializes DNNModule depending on chosen backend.
 const DNNModule *ff_get_dnn_module(DNNBackendType backend_type, void *log_ctx);
+
+#define DNN_WIDTH_IDX(layout) layout == DL_NHWC ? 2 : 3
+
+#define DNN_HEIGHT_IDX(layout) layout == DL_NHWC ? 1 : 2
+
+#define DNN_CHANNEL_IDX(layout) layout == DL_NHWC ? 3 : 1
 
 #endif
