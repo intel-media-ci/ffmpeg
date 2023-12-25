@@ -1202,6 +1202,12 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
         av_log(avctx, AV_LOG_DEBUG, "Obu idx:%d, obu type:%d.\n", i, unit->type);
 
+        if (unit->type == AV1_OBU_TILE_LIST) {
+            av_log(avctx, AV_LOG_ERROR, "Large scale tile decoding is unsupported.\n");
+            ret = AVERROR_PATCHWELCOME;
+            goto end;
+        }
+
         if (!obu)
             continue;
 
