@@ -224,6 +224,9 @@ typedef struct HWBaseEncodeContext {
     AVPacket        *tail_pkt;
 } HWBaseEncodeContext;
 
+int ff_hw_base_encode_set_output_property(AVCodecContext *avctx, HWBaseEncodePicture *pic,
+                                          AVPacket *pkt, int flag_no_delay);
+
 int ff_hw_base_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt);
 
 int ff_hw_base_encode_init(AVCodecContext *avctx);
