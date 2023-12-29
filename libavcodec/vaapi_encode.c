@@ -2022,9 +2022,8 @@ static av_cold int vaapi_encode_create_recon_frames(AVCodecContext *avctx)
     HWBaseEncodeContext *base_ctx = avctx->priv_data;
     VAAPIEncodeContext       *ctx = avctx->priv_data;
     AVVAAPIHWConfig *hwconfig = NULL;
-    AVHWFramesConstraints *constraints = NULL;
     enum AVPixelFormat recon_format;
-    int err, i;
+    int err;
 
     hwconfig = av_hwdevice_hwconfig_alloc(base_ctx->device_ref);
     if (!hwconfig) {
@@ -2033,52 +2032,9 @@ static av_cold int vaapi_encode_create_recon_frames(AVCodecContext *avctx)
     }
     hwconfig->config_id = ctx->va_config;
 
-    constraints = av_hwdevice_get_hwframe_constraints(base_ctx->device_ref,
-                                                      hwconfig);
-    if (!constraints) {
-        err = AVERROR(ENOMEM);
+    err = ff_hw_base_get_recon_format(avctx, (const void*)hwconfig, &recon_format);
+    if (err < 0)
         goto fail;
-    }
-
-    // Probably we can use the input surface format as the surface format
-    // of the reconstructed frames.  If not, we just pick the first (only?)
-    // format in the valid list and hope that it all works.
-    recon_format = AV_PIX_FMT_NONE;
-    if (constraints->valid_sw_formats) {
-        for (i = 0; constraints->valid_sw_formats[i] != AV_PIX_FMT_NONE; i++) {
-            if (base_ctx->input_frames->sw_format ==
-                constraints->valid_sw_formats[i]) {
-                recon_format = base_ctx->input_frames->sw_format;
-                break;
-            }
-        }
-        if (recon_format == AV_PIX_FMT_NONE) {
-            // No match.  Just use the first in the supported list and
-            // hope for the best.
-            recon_format = constraints->valid_sw_formats[0];
-        }
-    } else {
-        // No idea what to use; copy input format.
-        recon_format = base_ctx->input_frames->sw_format;
-    }
-    av_log(avctx, AV_LOG_DEBUG, "Using %s as format of "
-           "reconstructed frames.\n", av_get_pix_fmt_name(recon_format));
-
-    if (base_ctx->surface_width  < constraints->min_width  ||
-        base_ctx->surface_height < constraints->min_height ||
-        base_ctx->surface_width  > constraints->max_width ||
-        base_ctx->surface_height > constraints->max_height) {
-        av_log(avctx, AV_LOG_ERROR, "Hardware does not support encoding at "
-               "size %dx%d (constraints: width %d-%d height %d-%d).\n",
-               base_ctx->surface_width, base_ctx->surface_height,
-               constraints->min_width,  constraints->max_width,
-               constraints->min_height, constraints->max_height);
-        err = AVERROR(EINVAL);
-        goto fail;
-    }
-
-    av_freep(&hwconfig);
-    av_hwframe_constraints_free(&constraints);
 
     base_ctx->recon_frames_ref = av_hwframe_ctx_alloc(base_ctx->device_ref);
     if (!base_ctx->recon_frames_ref) {
@@ -2102,7 +2058,6 @@ static av_cold int vaapi_encode_create_recon_frames(AVCodecContext *avctx)
     err = 0;
   fail:
     av_freep(&hwconfig);
-    av_hwframe_constraints_free(&constraints);
     return err;
 }
 
