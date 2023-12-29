@@ -229,6 +229,9 @@ int ff_hw_base_encode_set_output_property(AVCodecContext *avctx, HWBaseEncodePic
 
 int ff_hw_base_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt);
 
+int ff_hw_base_init_gop_structure(AVCodecContext *avctx, uint32_t ref_l0, uint32_t ref_l1,
+                                  int flags, int prediction_pre_only);
+
 int ff_hw_base_encode_init(AVCodecContext *avctx);
 
 int ff_hw_base_encode_close(AVCodecContext *avctx);
