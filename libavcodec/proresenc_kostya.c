@@ -1,6 +1,7 @@
 /*
  * Apple ProRes encoder
  *
+ * Copyright (c) 2011 Anatoliy Wasserman
  * Copyright (c) 2012 Konstantin Shishkov
  *
  * This encoder appears to be based on Anatoliy Wassermans considering
@@ -134,32 +135,6 @@ static const uint8_t prores_quant_matrices[][64] = {
          4,  4,  4,  4,  4,  4,  4,  4,
     },
 };
-
-static const uint8_t prores_dc_codebook[4] = {
-    0x04, // rice_order = 0, exp_golomb_order = 1, switch_bits = 0
-    0x28, // rice_order = 1, exp_golomb_order = 2, switch_bits = 0
-    0x4D, // rice_order = 2, exp_golomb_order = 3, switch_bits = 1
-    0x70  // rice_order = 3, exp_golomb_order = 4, switch_bits = 0
-};
-
-static const uint8_t prores_ac_codebook[7] = {
-    0x04, // rice_order = 0, exp_golomb_order = 1, switch_bits = 0
-    0x28, // rice_order = 1, exp_golomb_order = 2, switch_bits = 0
-    0x4C, // rice_order = 2, exp_golomb_order = 3, switch_bits = 0
-    0x05, // rice_order = 0, exp_golomb_order = 1, switch_bits = 1
-    0x29, // rice_order = 1, exp_golomb_order = 2, switch_bits = 1
-    0x06, // rice_order = 0, exp_golomb_order = 1, switch_bits = 2
-    0x0A, // rice_order = 0, exp_golomb_order = 2, switch_bits = 2
-};
-
-/**
- * Lookup tables for adaptive switching between codebooks
- * according with previous run/level value.
- */
-static const uint8_t prores_run_to_cb_index[16] =
-    { 5, 5, 3, 3, 0, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 2 };
-
-static const uint8_t prores_lev_to_cb_index[10] = { 0, 6, 3, 5, 0, 1, 1, 1, 1, 2 };
 
 #define NUM_MB_LIMITS 4
 static const int prores_mb_limits[NUM_MB_LIMITS] = {
@@ -429,18 +404,17 @@ static inline void encode_vlc_codeword(PutBitContext *pb, unsigned codebook, int
 }
 
 #define GET_SIGN(x)  ((x) >> 31)
-#define MAKE_CODE(x) ((((x)) * 2) ^ GET_SIGN(x))
+#define MAKE_CODE(x) (((x) * 2) ^ GET_SIGN(x))
 
 static void encode_dcs(PutBitContext *pb, int16_t *blocks,
                        int blocks_per_slice, int scale)
 {
     int i;
-    int codebook = 3, code, dc, prev_dc, delta, sign, new_sign;
+    int codebook = 5, code, dc, prev_dc, delta, sign, new_sign;
 
     prev_dc = (blocks[0] - 0x4000) / scale;
     encode_vlc_codeword(pb, FIRST_DC_CB, MAKE_CODE(prev_dc));
     sign     = 0;
-    codebook = 3;
     blocks  += 64;
 
     for (i = 1; i < blocks_per_slice; i++, blocks += 64) {
@@ -449,9 +423,8 @@ static void encode_dcs(PutBitContext *pb, int16_t *blocks,
         new_sign = GET_SIGN(delta);
         delta    = (delta ^ sign) - sign;
         code     = MAKE_CODE(delta);
-        encode_vlc_codeword(pb, prores_dc_codebook[codebook], code);
-        codebook = (code + (code & 1)) >> 1;
-        codebook = FFMIN(codebook, 3);
+        encode_vlc_codeword(pb, ff_prores_dc_codebook[codebook], code);
+        codebook = FFMIN(code, 6);
         sign     = new_sign;
         prev_dc  = dc;
     }
@@ -459,31 +432,28 @@ static void encode_dcs(PutBitContext *pb, int16_t *blocks,
 
 static void encode_acs(PutBitContext *pb, int16_t *blocks,
                        int blocks_per_slice,
-                       int plane_size_factor,
                        const uint8_t *scan, const int16_t *qmat)
 {
     int idx, i;
-    int run, level, run_cb, lev_cb;
+    int prev_run = 4;
+    int prev_level = 2;
+    int run = 0, level;
     int max_coeffs, abs_level;
 
     max_coeffs = blocks_per_slice << 6;
-    run_cb     = prores_run_to_cb_index[4];
-    lev_cb     = prores_lev_to_cb_index[2];
-    run        = 0;
 
     for (i = 1; i < 64; i++) {
         for (idx = scan[i]; idx < max_coeffs; idx += 64) {
             level = blocks[idx] / qmat[scan[i]];
             if (level) {
                 abs_level = FFABS(level);
-                encode_vlc_codeword(pb, prores_ac_codebook[run_cb], run);
-                encode_vlc_codeword(pb, prores_ac_codebook[lev_cb],
-                                    abs_level - 1);
+                encode_vlc_codeword(pb, ff_prores_run_to_cb[prev_run], run);
+                encode_vlc_codeword(pb, ff_prores_level_to_cb[prev_level], abs_level - 1);
                 put_sbits(pb, 1, GET_SIGN(level));
 
-                run_cb = prores_run_to_cb_index[FFMIN(run, 15)];
-                lev_cb = prores_lev_to_cb_index[FFMIN(abs_level, 9)];
-                run    = 0;
+                prev_run   = FFMIN(run, 15);
+                prev_level = FFMIN(abs_level, 9);
+                run        = 0;
             } else {
                 run++;
             }
@@ -494,14 +464,13 @@ static void encode_acs(PutBitContext *pb, int16_t *blocks,
 static void encode_slice_plane(ProresContext *ctx, PutBitContext *pb,
                               const uint16_t *src, ptrdiff_t linesize,
                               int mbs_per_slice, int16_t *blocks,
-                              int blocks_per_mb, int plane_size_factor,
+                              int blocks_per_mb,
                               const int16_t *qmat)
 {
     int blocks_per_slice = mbs_per_slice * blocks_per_mb;
 
     encode_dcs(pb, blocks, blocks_per_slice, qmat[0]);
-    encode_acs(pb, blocks, blocks_per_slice, plane_size_factor,
-               ctx->scantable, qmat);
+    encode_acs(pb, blocks, blocks_per_slice, ctx->scantable, qmat);
 }
 
 static void put_alpha_diff(PutBitContext *pb, int cur, int prev, int abits)
@@ -574,10 +543,9 @@ static int encode_slice(AVCodecContext *avctx, const AVFrame *pic,
     int i, xp, yp;
     int total_size = 0;
     const uint16_t *src;
-    int slice_width_factor = av_log2(mbs_per_slice);
     int num_cblocks, pwidth, line_add;
     ptrdiff_t linesize;
-    int plane_factor, is_chroma;
+    int is_chroma;
     uint16_t *qmat;
     uint16_t *qmat_chroma;
 
@@ -603,9 +571,6 @@ static int encode_slice(AVCodecContext *avctx, const AVFrame *pic,
 
     for (i = 0; i < ctx->num_planes; i++) {
         is_chroma    = (i == 1 || i == 2);
-        plane_factor = slice_width_factor + 2;
-        if (is_chroma)
-            plane_factor += ctx->chroma_factor - 3;
         if (!is_chroma || ctx->chroma_factor == CFACTOR_Y444) {
             xp          = x << 4;
             yp          = y << 4;
@@ -630,11 +595,11 @@ static int encode_slice(AVCodecContext *avctx, const AVFrame *pic,
             if (!is_chroma) {/* luma quant */
                 encode_slice_plane(ctx, pb, src, linesize,
                                    mbs_per_slice, ctx->blocks[0],
-                                   num_cblocks, plane_factor, qmat);
+                                   num_cblocks, qmat);
             } else { /* chroma plane */
                 encode_slice_plane(ctx, pb, src, linesize,
                                    mbs_per_slice, ctx->blocks[0],
-                                   num_cblocks, plane_factor, qmat_chroma);
+                                   num_cblocks, qmat_chroma);
             }
         } else {
             get_alpha_data(ctx, src, linesize, xp, yp,
@@ -675,13 +640,12 @@ static int estimate_dcs(int *error, int16_t *blocks, int blocks_per_slice,
                         int scale)
 {
     int i;
-    int codebook = 3, code, dc, prev_dc, delta, sign, new_sign;
+    int codebook = 5, code, dc, prev_dc, delta, sign, new_sign;
     int bits;
 
     prev_dc  = (blocks[0] - 0x4000) / scale;
     bits     = estimate_vlc(FIRST_DC_CB, MAKE_CODE(prev_dc));
     sign     = 0;
-    codebook = 3;
     blocks  += 64;
     *error  += FFABS(blocks[0] - 0x4000) % scale;
 
@@ -692,9 +656,8 @@ static int estimate_dcs(int *error, int16_t *blocks, int blocks_per_slice,
         new_sign = GET_SIGN(delta);
         delta    = (delta ^ sign) - sign;
         code     = MAKE_CODE(delta);
-        bits    += estimate_vlc(prores_dc_codebook[codebook], code);
-        codebook = (code + (code & 1)) >> 1;
-        codebook = FFMIN(codebook, 3);
+        bits    += estimate_vlc(ff_prores_dc_codebook[codebook], code);
+        codebook = FFMIN(code, 6);
         sign     = new_sign;
         prev_dc  = dc;
     }
@@ -703,17 +666,16 @@ static int estimate_dcs(int *error, int16_t *blocks, int blocks_per_slice,
 }
 
 static int estimate_acs(int *error, int16_t *blocks, int blocks_per_slice,
-                        int plane_size_factor,
                         const uint8_t *scan, const int16_t *qmat)
 {
     int idx, i;
-    int run, level, run_cb, lev_cb;
+    int prev_run = 4;
+    int prev_level = 2;
+    int run, level;
     int max_coeffs, abs_level;
     int bits = 0;
 
     max_coeffs = blocks_per_slice << 6;
-    run_cb     = prores_run_to_cb_index[4];
-    lev_cb     = prores_lev_to_cb_index[2];
     run        = 0;
 
     for (i = 1; i < 64; i++) {
@@ -722,12 +684,12 @@ static int estimate_acs(int *error, int16_t *blocks, int blocks_per_slice,
             *error += FFABS(blocks[idx]) % qmat[scan[i]];
             if (level) {
                 abs_level = FFABS(level);
-                bits += estimate_vlc(prores_ac_codebook[run_cb], run);
-                bits += estimate_vlc(prores_ac_codebook[lev_cb],
+                bits += estimate_vlc(ff_prores_run_to_cb[prev_run], run);
+                bits += estimate_vlc(ff_prores_level_to_cb[prev_level],
                                      abs_level - 1) + 1;
 
-                run_cb = prores_run_to_cb_index[FFMIN(run, 15)];
-                lev_cb = prores_lev_to_cb_index[FFMIN(abs_level, 9)];
+                prev_run   = FFMIN(run, 15);
+                prev_level = FFMIN(abs_level, 9);
                 run    = 0;
             } else {
                 run++;
@@ -741,7 +703,7 @@ static int estimate_acs(int *error, int16_t *blocks, int blocks_per_slice,
 static int estimate_slice_plane(ProresContext *ctx, int *error, int plane,
                                 const uint16_t *src, ptrdiff_t linesize,
                                 int mbs_per_slice,
-                                int blocks_per_mb, int plane_size_factor,
+                                int blocks_per_mb,
                                 const int16_t *qmat, ProresThreadData *td)
 {
     int blocks_per_slice;
@@ -750,8 +712,7 @@ static int estimate_slice_plane(ProresContext *ctx, int *error, int plane,
     blocks_per_slice = mbs_per_slice * blocks_per_mb;
 
     bits  = estimate_dcs(error, td->blocks[plane], blocks_per_slice, qmat[0]);
-    bits += estimate_acs(error, td->blocks[plane], blocks_per_slice,
-                         plane_size_factor, ctx->scantable, qmat);
+    bits += estimate_acs(error, td->blocks[plane], blocks_per_slice, ctx->scantable, qmat);
 
     return FFALIGN(bits, 8);
 }
@@ -820,9 +781,8 @@ static int find_slice_quant(AVCodecContext *avctx,
     ProresContext *ctx = avctx->priv_data;
     int i, q, pq, xp, yp;
     const uint16_t *src;
-    int slice_width_factor = av_log2(mbs_per_slice);
     int num_cblocks[MAX_PLANES], pwidth;
-    int plane_factor[MAX_PLANES], is_chroma[MAX_PLANES];
+    int is_chroma[MAX_PLANES];
     const int min_quant = ctx->profile_info->min_quant;
     const int max_quant = ctx->profile_info->max_quant;
     int error, bits, bits_limit;
@@ -842,9 +802,6 @@ static int find_slice_quant(AVCodecContext *avctx,
 
     for (i = 0; i < ctx->num_planes; i++) {
         is_chroma[i]    = (i == 1 || i == 2);
-        plane_factor[i] = slice_width_factor + 2;
-        if (is_chroma[i])
-            plane_factor[i] += ctx->chroma_factor - 3;
         if (!is_chroma[i] || ctx->chroma_factor == CFACTOR_Y444) {
             xp             = x << 4;
             yp             = y << 4;
@@ -888,13 +845,13 @@ static int find_slice_quant(AVCodecContext *avctx,
         bits += estimate_slice_plane(ctx, &error, 0,
                                      src, linesize[0],
                                      mbs_per_slice,
-                                     num_cblocks[0], plane_factor[0],
+                                     num_cblocks[0],
                                      ctx->quants[q], td); /* estimate luma plane */
         for (i = 1; i < ctx->num_planes - !!ctx->alpha_bits; i++) { /* estimate chroma plane */
             bits += estimate_slice_plane(ctx, &error, i,
                                          src, linesize[i],
                                          mbs_per_slice,
-                                         num_cblocks[i], plane_factor[i],
+                                         num_cblocks[i],
                                          ctx->quants_chroma[q], td);
         }
         if (bits > 65000 * 8)
@@ -925,13 +882,13 @@ static int find_slice_quant(AVCodecContext *avctx,
             bits += estimate_slice_plane(ctx, &error, 0,
                                          src, linesize[0],
                                          mbs_per_slice,
-                                         num_cblocks[0], plane_factor[0],
+                                         num_cblocks[0],
                                          qmat, td);/* estimate luma plane */
             for (i = 1; i < ctx->num_planes - !!ctx->alpha_bits; i++) { /* estimate chroma plane */
                 bits += estimate_slice_plane(ctx, &error, i,
                                              src, linesize[i],
                                              mbs_per_slice,
-                                             num_cblocks[i], plane_factor[i],
+                                             num_cblocks[i],
                                              qmat_chroma, td);
             }
             if (bits <= ctx->bits_per_mb * mbs_per_slice)
@@ -1037,7 +994,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     // frame header
     tmp = buf;
     buf += 2;                                   // frame header size will be stored here
-    bytestream_put_be16  (&buf, 0);             // version 1
+    bytestream_put_be16  (&buf, ctx->chroma_factor != CFACTOR_Y422 || ctx->alpha_bits ? 1 : 0);
     bytestream_put_buffer(&buf, ctx->vendor, 4);
     bytestream_put_be16  (&buf, avctx->width);
     bytestream_put_be16  (&buf, avctx->height);
@@ -1051,16 +1008,12 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     bytestream_put_byte  (&buf, pic->color_primaries);
     bytestream_put_byte  (&buf, pic->color_trc);
     bytestream_put_byte  (&buf, pic->colorspace);
-    bytestream_put_byte  (&buf, 0x40 | (ctx->alpha_bits >> 3));
+    bytestream_put_byte  (&buf, ctx->alpha_bits >> 3);
     bytestream_put_byte  (&buf, 0);             // reserved
     if (ctx->quant_sel != QUANT_MAT_DEFAULT) {
         bytestream_put_byte  (&buf, 0x03);      // matrix flags - both matrices are present
-        // luma quantisation matrix
-        for (i = 0; i < 64; i++)
-            bytestream_put_byte(&buf, ctx->quant_mat[i]);
-        // chroma quantisation matrix
-        for (i = 0; i < 64; i++)
-            bytestream_put_byte(&buf, ctx->quant_mat[i]);
+        bytestream_put_buffer(&buf, ctx->quant_mat, 64);        // luma quantisation matrix
+        bytestream_put_buffer(&buf, ctx->quant_chroma_mat, 64); // chroma quantisation matrix
     } else {
         bytestream_put_byte  (&buf, 0x00);      // matrix flags - default matrices are used
     }
