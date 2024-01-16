@@ -1424,6 +1424,8 @@ Choose the GPU subdevice with type @samp{dxva2} and create QSV device with @samp
 The set of devices can also be filtered using the key-value pairs to find only
 devices matching particular platform or device strings.
 
+If more than one matching device found, choose the first one from the set of devices.
+
 The strings usable as filters are:
 @table @option
 @item platform_profile
@@ -1444,6 +1446,9 @@ The indices and filters must together uniquely select a device.
 
 Examples:
 @table @emph
+@item -init_hw_device opencl
+Choose the first device on the first platform.
+
 @item -init_hw_device opencl:0.1
 Choose the second device on the first platform.
 

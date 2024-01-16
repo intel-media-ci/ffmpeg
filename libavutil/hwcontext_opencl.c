@@ -515,7 +515,7 @@ static int opencl_device_create_internal(AVHWDeviceContext *hwdev,
         return err;
 
     found = 0;
-    for (p = 0; p < nb_platforms; p++) {
+    for (p = nb_platforms - 1; p >= 0; p--) {
         const char *platform_name;
 
         if (selector->platform_index >= 0 &&
@@ -546,7 +546,7 @@ static int opencl_device_create_internal(AVHWDeviceContext *hwdev,
         if (err < 0)
             continue;
 
-        for (d = 0; d < nb_devices; d++) {
+        for (d = nb_devices - 1; d >= 0; d--) {
             const char *device_name;
 
             if (selector->device_index >= 0 &&
@@ -588,9 +588,8 @@ static int opencl_device_create_internal(AVHWDeviceContext *hwdev,
         goto fail;
     }
     if (found > 1) {
-        av_log(hwdev, AV_LOG_ERROR, "More than one matching device found.\n");
-        err = AVERROR(ENODEV);
-        goto fail;
+        av_log(hwdev, AV_LOG_VERBOSE,
+               "More than one matching device found, choose the first device.\n");
     }
 
     if (!props) {
