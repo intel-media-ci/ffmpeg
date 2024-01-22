@@ -4080,6 +4080,9 @@ Quality-defined variable-bitrate.
 Average variable bitrate.
 @end table
 
+@item mbbrc
+Enable Macroblock based rate control. Invalid for CQP mode.
+
 @end table
 
 Each encoder also has its own specific options:
