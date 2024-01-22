@@ -205,6 +205,7 @@ static int fill_model_input_ov(OVModel *ov_model, OVRequestItem *request)
     ov_tensor_t* tensor = NULL;
     ov_shape_t input_shape = {0};
     ov_element_type_e precision;
+    char *port_name;
 #else
     dimensions_t dims;
     precision_e precision;
@@ -223,11 +224,23 @@ static int fill_model_input_ov(OVModel *ov_model, OVRequestItem *request)
         ov_output_const_port_free(ov_model->input_port);
         ov_model->input_port = NULL;
     }
-    status = ov_model_const_input_by_name(ov_model->ov_model, task->input_name, &ov_model->input_port);
+    if (task->input_name)
+        status = ov_model_const_input_by_name(ov_model->ov_model, task->input_name, &ov_model->input_port);
+    else
+        status = ov_model_const_input(ov_model->ov_model, &ov_model->input_port);
     if (status != OK) {
         av_log(ctx, AV_LOG_ERROR, "Failed to get input port shape.\n");
         return ov2_map_error(status, NULL);
     }
+    status = ov_port_get_any_name(ov_model->input_port, &port_name);
+    if (status != OK) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to get input port name.\n");
+        return ov2_map_error(status, NULL);
+    }
+    av_log(ctx, AV_LOG_VERBOSE, "OpenVINO model input: %s\n", port_name);
+    ov_free(port_name);
+    port_name = NULL;
+
     status = ov_const_port_get_shape(ov_model->input_port, &input_shape);
     if (status != OK) {
         av_log(ctx, AV_LOG_ERROR, "Failed to get input port shape.\n");
@@ -240,9 +253,9 @@ static int fill_model_input_ov(OVModel *ov_model, OVRequestItem *request)
         ov_shape_free(&input_shape);
         return ov2_map_error(status, NULL);
     }
-    input.height = dims[1];
-    input.width = dims[2];
-    input.channels = dims[3];
+    for (int i = 0; i < input_shape.rank; i++)
+        input.dims[i] = dims[i];
+    input.layout = DL_NHWC;
     input.dt = precision_to_datatype(precision);
 #else
     status = ie_infer_request_get_blob(request->infer_request, task->input_name, &input_blob);
@@ -265,9 +278,9 @@ static int fill_model_input_ov(OVModel *ov_model, OVRequestItem *request)
         av_log(ctx, AV_LOG_ERROR, "Failed to get input blob buffer\n");
         return DNN_GENERIC_ERROR;
     }
-    input.height = dims.dims[2];
-    input.width = dims.dims[3];
-    input.channels = dims.dims[1];
+    for (int i = 0; i < input_shape.rank; i++)
+        input.dims[i] = dims[i];
+    input.layout = DL_NCHW;
     input.data = blob_buffer.buffer;
     input.dt = precision_to_datatype(precision);
 #endif
@@ -326,8 +339,11 @@ static int fill_model_input_ov(OVModel *ov_model, OVRequestItem *request)
             av_assert0(!"should not reach here");
             break;
         }
-        input.data = (uint8_t *)input.data
-                     + input.width * input.height * input.channels * get_datatype_size(input.dt);
+        input.data = (uint8_t *)input.data +
+            input.dims[DNN_WIDTH_IDX(input.layout)] *
+            input.dims[DNN_HEIGHT_IDX(input.layout)] *
+            input.dims[DNN_CHANNEL_IDX(input.layout)] *
+            get_datatype_size(input.dt);
     }
 #if HAVE_OPENVINO2
     ov_tensor_free(tensor);
@@ -390,10 +406,11 @@ static void infer_completion_callback(void *args)
             goto end;
         }
         outputs[i].dt       = precision_to_datatype(precision);
-
-        outputs[i].channels = output_shape.rank > 2 ? dims[output_shape.rank - 3] : 1;
-        outputs[i].height   = output_shape.rank > 1 ? dims[output_shape.rank - 2] : 1;
-        outputs[i].width    = output_shape.rank > 0 ? dims[output_shape.rank - 1] : 1;
+        outputs[i].layout   = DL_NCHW;
+        outputs[i].dims[0]  = 1;
+        outputs[i].dims[1]  = output_shape.rank > 2 ? dims[output_shape.rank - 3] : 1;
+        outputs[i].dims[2]  = output_shape.rank > 1 ? dims[output_shape.rank - 2] : 1;
+        outputs[i].dims[3]  = output_shape.rank > 0 ? dims[output_shape.rank - 1] : 1;
         av_assert0(request->lltask_count <= dims[0]);
         outputs[i].layout   = ctx->options.layout;
         outputs[i].scale    = ctx->options.scale;
@@ -432,9 +449,9 @@ static void infer_completion_callback(void *args)
         return;
     }
     output.data     = blob_buffer.buffer;
-    output.channels = dims.dims[1];
-    output.height   = dims.dims[2];
-    output.width    = dims.dims[3];
+    output.layout   = DL_NCHW;
+    for (int i = 0; i < 4; i++)
+        output.dims[i] = dims.dims[i];
     av_assert0(request->lltask_count <= dims.dims[0]);
     output.dt       = precision_to_datatype(precision);
     output.layout   = ctx->options.layout;
@@ -456,8 +473,8 @@ static void infer_completion_callback(void *args)
                     ff_proc_from_dnn_to_frame(task->out_frame, outputs, ctx);
                 }
             } else {
-                task->out_frame->width = outputs[0].width;
-                task->out_frame->height = outputs[0].height;
+                task->out_frame->width = outputs[0].dims[DNN_WIDTH_IDX(outputs[0].layout)];
+                task->out_frame->height = outputs[0].dims[DNN_HEIGHT_IDX(outputs[0].layout)];
             }
             break;
         case DFT_ANALYTICS_DETECT:
@@ -488,7 +505,10 @@ static void infer_completion_callback(void *args)
         av_freep(&request->lltasks[i]);
         for (int i = 0; i < ov_model->nb_outputs; i++)
             outputs[i].data = (uint8_t *)outputs[i].data +
-                outputs[i].width * outputs[i].height * outputs[i].channels * get_datatype_size(outputs[i].dt);
+                outputs[i].dims[DNN_WIDTH_IDX(outputs[i].layout)] *
+                outputs[i].dims[DNN_HEIGHT_IDX(outputs[i].layout)] *
+                outputs[i].dims[DNN_CHANNEL_IDX(outputs[i].layout)] *
+                get_datatype_size(outputs[i].dt);
     }
 end:
 #if HAVE_OPENVINO2
@@ -620,7 +640,10 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
         goto err;
     }
 
-    status = ov_preprocess_prepostprocessor_get_input_info_by_name(ov_model->preprocess, input_name, &ov_model->input_info);
+    if (input_name)
+        status = ov_preprocess_prepostprocessor_get_input_info_by_name(ov_model->preprocess, input_name, &ov_model->input_info);
+    else
+        status = ov_preprocess_prepostprocessor_get_input_info(ov_model->preprocess, &ov_model->input_info);
     if (status != OK) {
         av_log(ctx, AV_LOG_ERROR, "Failed to get input info from preprocess.\n");
         ret = ov2_map_error(status, NULL);
@@ -673,10 +696,24 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
         goto err;
     }
 
+    if (!nb_outputs) {
+        size_t output_size;
+        status = ov_model_outputs_size(ov_model->ov_model, &output_size);
+        if (status != OK) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to get output size.\n");
+            ret = ov2_map_error(status, NULL);
+            goto err;
+        }
+        nb_outputs = output_size;
+    }
     ov_model->nb_outputs = nb_outputs;
     for (int i = 0; i < nb_outputs; i++) {
-        status = ov_preprocess_prepostprocessor_get_output_info_by_name(
-                ov_model->preprocess, output_names[i], &ov_model->output_info);
+        if (output_names)
+            status = ov_preprocess_prepostprocessor_get_output_info_by_name(
+                    ov_model->preprocess, output_names[i], &ov_model->output_info);
+        else
+            status = ov_preprocess_prepostprocessor_get_output_info_by_index(
+                    ov_model->preprocess, i, &ov_model->output_info);
         if (status != OK) {
             av_log(ctx, AV_LOG_ERROR, "Failed to get output info from preprocess.\n");
             ret = ov2_map_error(status, NULL);
@@ -758,12 +795,25 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
         }
 
     for (int i = 0; i < nb_outputs; i++) {
-        status = ov_model_const_output_by_name(ov_model->ov_model, output_names[i],
-                                               &ov_model->output_ports[i]);
+        char *port_name;
+        if (output_names)
+            status = ov_model_const_output_by_name(ov_model->ov_model, output_names[i],
+                                            &ov_model->output_ports[i]);
+        else
+            status = ov_model_const_output_by_index(ov_model->ov_model, i,
+                                            &ov_model->output_ports[i]);
         if (status != OK) {
             av_log(ctx, AV_LOG_ERROR, "Failed to get output port %s.\n", output_names[i]);
             goto err;
         }
+        status = ov_port_get_any_name(ov_model->output_ports[i], &port_name);
+        if (status != OK) {
+            av_log(ctx, AV_LOG_ERROR, "Failed to get output port name.\n");
+            goto err;
+        }
+        av_log(ctx, AV_LOG_VERBOSE, "OpenVINO model outputs: %s\n", port_name);
+        ov_free(port_name);
+        port_name = NULL;
     }
     //compile network
     status = ov_core_compile_model(ov_model->core, ov_model->ov_model, device, 0, &ov_model->compiled_model);
@@ -1042,9 +1092,11 @@ static int get_input_ov(void *model, DNNData *input, const char *input_name)
 #if HAVE_OPENVINO2
     ov_shape_t input_shape = {0};
     ov_element_type_e precision;
-    int64_t* dims;
     ov_status_e status;
-    status = ov_model_const_input_by_name(ov_model->ov_model, input_name, &ov_model->input_port);
+    if (input_name)
+        status = ov_model_const_input_by_name(ov_model->ov_model, input_name, &ov_model->input_port);
+    else
+        status = ov_model_const_input(ov_model->ov_model, &ov_model->input_port);
     if (status != OK) {
         av_log(ctx, AV_LOG_ERROR, "Failed to get input port shape.\n");
         return ov2_map_error(status, NULL);
@@ -1059,16 +1111,18 @@ static int get_input_ov(void *model, DNNData *input, const char *input_name)
         av_log(ctx, AV_LOG_ERROR, "Failed to get input port shape.\n");
         return ov2_map_error(status, NULL);
     }
-    dims = input_shape.dims;
-    if (dims[1] <= 3) { // NCHW
-        input->channels = dims[1];
-        input->height   = input_resizable ? -1 : dims[2];
-        input->width    = input_resizable ? -1 : dims[3];
-    } else { // NHWC
-        input->height   = input_resizable ? -1 : dims[1];
-        input->width    = input_resizable ? -1 : dims[2];
-        input->channels = dims[3];
+    for (int i = 0; i < 4; i++)
+        input->dims[i] = input_shape.dims[i];
+    if (input_resizable) {
+        input->dims[DNN_WIDTH_IDX(input->layout)] = -1;
+        input->dims[DNN_HEIGHT_IDX(input->layout)] = -1;
     }
+
+    if (input_shape.dims[1] <= 3) // NCHW
+        input->layout = DL_NCHW;
+    else // NHWC
+        input->layout = DL_NHWC;
+
     input->dt       = precision_to_datatype(precision);
     ov_shape_free(&input_shape);
     return 0;
@@ -1098,15 +1152,18 @@ static int get_input_ov(void *model, DNNData *input, const char *input_name)
                 return DNN_GENERIC_ERROR;
             }
 
-            if (dims[1] <= 3) { // NCHW
-                input->channels = dims[1];
-                input->height   = input_resizable ? -1 : dims[2];
-                input->width    = input_resizable ? -1 : dims[3];
-            } else { // NHWC
-                input->height   = input_resizable ? -1 : dims[1];
-                input->width    = input_resizable ? -1 : dims[2];
-                input->channels = dims[3];
+            for (int i = 0; i < 4; i++)
+                input->dims[i] = input_shape.dims[i];
+            if (input_resizable) {
+                input->dims[DNN_WIDTH_IDX(input->layout)] = -1;
+                input->dims[DNN_HEIGHT_IDX(input->layout)] = -1;
             }
+
+            if (input_shape.dims[1] <= 3) // NCHW
+                input->layout = DL_NCHW;
+            else // NHWC
+                input->layout = DL_NHWC;
+
             input->dt       = precision_to_datatype(precision);
             return 0;
         }

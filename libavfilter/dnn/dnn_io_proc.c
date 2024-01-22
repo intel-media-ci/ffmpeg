@@ -70,7 +70,7 @@ int ff_proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *log_ctx)
     dst_data = (void **)frame->data;
     linesize[0] = frame->linesize[0];
     if (output->layout == DL_NCHW) {
-        middle_data = av_malloc(plane_size * output->channels);
+        middle_data = av_malloc(plane_size * output->dims[1]);
         if (!middle_data) {
             ret = AVERROR(ENOMEM);
             goto err;
@@ -209,7 +209,7 @@ int ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, void *log_ctx)
     src_data = (void **)frame->data;
     linesize[0] = frame->linesize[0];
     if (input->layout == DL_NCHW) {
-        middle_data = av_malloc(plane_size * input->channels);
+        middle_data = av_malloc(plane_size * input->dims[1]);
         if (!middle_data) {
             ret = AVERROR(ENOMEM);
             goto err;
@@ -374,17 +374,20 @@ int ff_frame_to_dnn_classify(AVFrame *frame, DNNData *input, uint32_t bbox_index
 
     fmt = get_pixel_format(input);
     sws_ctx = sws_getContext(width, height, frame->format,
-                             input->width, input->height, fmt,
+                             input->dims[DNN_WIDTH_IDX(input->layout)],
+                             input->dims[DNN_HEIGHT_IDX(input->layout)], fmt,
                              SWS_FAST_BILINEAR, NULL, NULL, NULL);
     if (!sws_ctx) {
         av_log(log_ctx, AV_LOG_ERROR, "Failed to create scale context for the conversion "
                "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
                av_get_pix_fmt_name(frame->format), width, height,
-               av_get_pix_fmt_name(fmt), input->width, input->height);
+               av_get_pix_fmt_name(fmt),
+               input->dims[DNN_WIDTH_IDX(input->layout)],
+               input->dims[DNN_HEIGHT_IDX(input->layout)]);
         return AVERROR(EINVAL);
     }
 
-    ret = av_image_fill_linesizes(linesizes, fmt, input->width);
+    ret = av_image_fill_linesizes(linesizes, fmt, input->dims[DNN_WIDTH_IDX(input->layout)]);
     if (ret < 0) {
         av_log(log_ctx, AV_LOG_ERROR, "unable to get linesizes with av_image_fill_linesizes");
         sws_freeContext(sws_ctx);
@@ -431,17 +434,19 @@ int ff_frame_to_dnn_detect(AVFrame *frame, DNNData *input, void *log_ctx)
     }
 
     sws_ctx = sws_getContext(frame->width, frame->height, frame->format,
-                             input->width, input->height, fmt,
+                             input->dims[DNN_WIDTH_IDX(input->layout)],
+                             input->dims[DNN_HEIGHT_IDX(input->layout)], fmt,
                              SWS_FAST_BILINEAR, NULL, NULL, NULL);
     if (!sws_ctx) {
         av_log(log_ctx, AV_LOG_ERROR, "Impossible to create scale context for the conversion "
             "fmt:%s s:%dx%d -> fmt:%s s:%dx%d\n",
             av_get_pix_fmt_name(frame->format), frame->width, frame->height,
-            av_get_pix_fmt_name(fmt), input->width, input->height);
+            av_get_pix_fmt_name(fmt), input->dims[DNN_WIDTH_IDX(input->layout)],
+            input->dims[DNN_HEIGHT_IDX(input->layout)]);
         return AVERROR(EINVAL);
     }
 
-    ret = av_image_fill_linesizes(linesizes, fmt, input->width);
+    ret = av_image_fill_linesizes(linesizes, fmt, input->dims[DNN_WIDTH_IDX(input->layout)]);
     if (ret < 0) {
         av_log(log_ctx, AV_LOG_ERROR, "unable to get linesizes with av_image_fill_linesizes");
         sws_freeContext(sws_ctx);
