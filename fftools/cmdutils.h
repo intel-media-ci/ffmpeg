@@ -158,17 +158,22 @@ typedef struct OptionDef {
    Always use as OPT_SPEC in option definitions. */
 #define OPT_FLAG_SPEC   (1 << 9)
 #define OPT_SPEC        (OPT_FLAG_SPEC | OPT_OFFSET)
+
+/* Option applies per-stream (implies OPT_SPEC). */
+#define OPT_FLAG_PERSTREAM  (1 << 10)
+#define OPT_PERSTREAM   (OPT_FLAG_PERSTREAM | OPT_SPEC)
+
 /* ffmpeg-only - specifies whether an OPT_PERFILE option applies to input,
  * output, or both. */
-#define OPT_INPUT       (1 << 10)
-#define OPT_OUTPUT      (1 << 11)
+#define OPT_INPUT       (1 << 11)
+#define OPT_OUTPUT      (1 << 12)
 
 /* This option is a "canonical" form, to which one or more alternatives
  * exist. These alternatives are listed in u1.names_alt. */
-#define OPT_HAS_ALT     (1 << 12)
+#define OPT_HAS_ALT     (1 << 13)
 /* This option is an alternative form of some other option, whose
  * name is stored in u1.name_canon */
-#define OPT_HAS_CANON   (1 << 13)
+#define OPT_HAS_CANON   (1 << 14)
 
      union {
         void *dst_ptr;
@@ -195,10 +200,9 @@ typedef struct OptionDef {
  * @param msg title of this group. Only printed if at least one option matches.
  * @param req_flags print only options which have all those flags set.
  * @param rej_flags don't print options which have any of those flags set.
- * @param alt_flags print only options that have at least one of those flags set
  */
 void show_help_options(const OptionDef *options, const char *msg, int req_flags,
-                       int rej_flags, int alt_flags);
+                       int rej_flags);
 
 /**
  * Show help for all options with given flags in class and all its
@@ -469,5 +473,8 @@ void *allocate_array_elem(void *array, size_t elem_size, int *nb_elems);
     snprintf(name, sizeof(name), "%d", rate);
 
 double get_rotation(const int32_t *displaymatrix);
+
+/* read file contents into a string */
+char *file_read(const char *filename);
 
 #endif /* FFTOOLS_CMDUTILS_H */

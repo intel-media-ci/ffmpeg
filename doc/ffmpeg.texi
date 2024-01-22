@@ -977,12 +977,6 @@ syntax.
 See the @ref{filter_complex_option,,-filter_complex option} if you
 want to create filtergraphs with multiple inputs and/or outputs.
 
-@anchor{filter_script option}
-@item -filter_script[:@var{stream_specifier}] @var{filename} (@emph{output,per-stream})
-This option is similar to @option{-filter}, the only difference is that its
-argument is the name of the file from which a filtergraph description is to be
-read.
-
 @item -reinit_filter[:@var{stream_specifier}] @var{integer} (@emph{input,per-stream})
 This boolean option determines if the filtergraph(s) to which this stream is fed gets
 reinitialized when input frame parameters change mid-stream. This option is enabled by
@@ -1385,6 +1379,29 @@ If not specified, it will attempt to open the default X11 display (@emph{$DISPLA
 and then the first DRM render node (@emph{/dev/dri/renderD128}), or the default
 DirectX adapter on Windows.
 
+The following options are recognized:
+@table @option
+@item kernel_driver
+When @var{device} is not specified, use this option to specify the name of the kernel
+driver associated with the desired device. This option is available only when
+the hardware acceleration method @emph{drm} and @emph{vaapi} are enabled.
+@end table
+
+Examples:
+@table @emph
+@item -init_hw_device vaapi
+Create a vaapi device on the default device.
+
+@item -init_hw_device vaapi:/dev/dri/renderD129
+Create a vaapi device on DRM render node @file{/dev/dri/renderD129}.
+
+@item -init_hw_device vaapi:1
+Create a vaapi device on DirectX adapter 1.
+
+@item -init_hw_device vaapi:,kernel_driver=i915
+Create a vaapi device on a device associated with kernel driver @samp{i915}.
+@end table
+
 @item vdpau
 @var{device} is an X11 display name.
 If not specified, it will attempt to open the default X11 display (@emph{$DISPLAY}).
@@ -1406,16 +1423,38 @@ If not specified, @samp{auto_any} is used.
 platform-appropriate subdevice (@samp{dxva2} or @samp{d3d11va} or @samp{vaapi}) and then deriving a
 QSV device from that.)
 
-Alternatively, @samp{child_device_type} helps to choose platform-appropriate subdevice type.
-On Windows @samp{d3d11va} is used as default subdevice type.
+The following options are recognized:
+@table @option
+@item child_device
+Specify a DRM render node on Linux or DirectX adapter on Windows.
+@item child_device_type
+Choose platform-appropriate subdevice type. On Windows @samp{d3d11va} is used
+as default subdevice type when @code{--enable-libvpl} is specified at configuration time,
+@samp{dxva2} is used as default subdevice type when @code{--enable-libmfx} is specified at
+configuration time. On Linux user can use @samp{vaapi} only as subdevice type.
+@end table
 
 Examples:
 @table @emph
+@item -init_hw_device qsv:hw,child_device=/dev/dri/renderD129
+Create a QSV device with @samp{MFX_IMPL_HARDWARE} on DRM render node @file{/dev/dri/renderD129}.
+
+@item -init_hw_device qsv:hw,child_device=1
+Create a QSV device with @samp{MFX_IMPL_HARDWARE} on DirectX adapter 1.
+
 @item -init_hw_device qsv:hw,child_device_type=d3d11va
 Choose the GPU subdevice with type @samp{d3d11va} and create QSV device with @samp{MFX_IMPL_HARDWARE}.
 
 @item -init_hw_device qsv:hw,child_device_type=dxva2
 Choose the GPU subdevice with type @samp{dxva2} and create QSV device with @samp{MFX_IMPL_HARDWARE}.
+
+@item -init_hw_device qsv:hw,child_device=1,child_device_type=d3d11va
+Create a QSV device with @samp{MFX_IMPL_HARDWARE} on DirectX adapter 1 with subdevice type @samp{d3d11va}.
+
+@item -init_hw_device vaapi=va:/dev/dri/renderD129 -init_hw_device qsv=hw1@@@var{va}
+Create a VAAPI device called @samp{va} on @file{/dev/dri/renderD129}, then derive a QSV device called @samp{hw1}
+from device @samp{va}.
+
 @end table
 
 @item opencl
@@ -1643,8 +1682,6 @@ option to disable streams individually.
 As an output option, disables subtitle recording i.e. automatic selection or
 mapping of any subtitle stream. For full manual control see the @code{-map}
 option.
-@item -sbsf @var{bitstream_filter}
-Deprecated, see -bsf
 @end table
 
 @section Advanced Subtitle options
@@ -1677,8 +1714,7 @@ Set the size of the canvas used to render subtitles.
 Create one or more streams in the output file. This option has two forms for
 specifying the data source(s): the first selects one or more streams from some
 input file (specified with @code{-i}), the second takes an output from some
-complex filtergraph (specified with @code{-filter_complex} or
-@code{-filter_complex_script}).
+complex filtergraph (specified with @code{-filter_complex}).
 
 In the first form, an output stream is created for every stream from the input
 file with the index @var{input_file_id}. If @var{stream_specifier} is given,
@@ -2095,13 +2131,13 @@ an output mpegts file:
 ffmpeg -i inurl -streamid 0:33 -streamid 1:36 out.ts
 @end example
 
-@item -bsf[:@var{stream_specifier}] @var{bitstream_filters} (@emph{output,per-stream})
-Apply bitstream filters to matching streams.
+@item -bsf[:@var{stream_specifier}] @var{bitstream_filters} (@emph{input/output,per-stream})
+Apply bitstream filters to matching streams. The filters are applied to each
+packet as it is received from the demuxer (when used as an input option) or
+before it is sent to the muxer (when used as an output option).
 
 @var{bitstream_filters} is a comma-separated list of bitstream filter
-specifications. The specified bitstream filters are applied to coded packets in
-the order they are written in. Each bitstream filter specification is of the
-form
+specifications, each of the form
 @example
 @var{filter}[=@var{optname0}=@var{optval0}:@var{optname1}=@var{optval1}:...]
 @end example
@@ -2109,12 +2145,22 @@ Any of the ',=:' characters that are to be a part of an option value need to be
 escaped with a backslash.
 
 Use the @code{-bsfs} option to get the list of bitstream filters.
+
+E.g.
 @example
-ffmpeg -i h264.mp4 -c:v copy -bsf:v h264_mp4toannexb -an out.h264
+ffmpeg -bsf:v h264_mp4toannexb -i h264.mp4 -c:v copy -an out.h264
 @end example
+applies the @code{h264_mp4toannexb} bitstream filter (which converts
+MP4-encapsulated H.264 stream to Annex B) to the @emph{input} video stream.
+
+On the other hand,
 @example
 ffmpeg -i file.mov -an -vn -bsf:s mov2textsub -c:s copy -f rawvideo sub.txt
 @end example
+applies the @code{mov2textsub} bitstream filter (which extracts text from MOV
+subtitles) to the @emph{output} subtitle stream. Note, however, that since both
+examples use @code{-c copy}, it matters little whether the filters are applied
+on input or output - that would change if transcoding was happening.
 
 @item -tag[:@var{stream_specifier}] @var{codec_tag} (@emph{input/output,per-stream})
 Force a tag/fourcc for matching streams.
@@ -2198,12 +2244,6 @@ The default is the number of available CPUs.
 @item -lavfi @var{filtergraph} (@emph{global})
 Define a complex filtergraph, i.e. one with arbitrary number of inputs and/or
 outputs. Equivalent to @option{-filter_complex}.
-
-@anchor{filter_complex_script option}
-@item -filter_complex_script @var{filename} (@emph{global})
-This option is similar to @option{-filter_complex}, the only difference is that
-its argument is the name of the file from which a complex filtergraph
-description is to be read.
 
 @item -accurate_seek (@emph{input})
 This option enables or disables accurate seeking in input files with the

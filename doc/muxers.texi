@@ -49,10 +49,15 @@ aptX (Audio Processing Technology for Bluetooth)
 aptX HD (Audio Processing Technology for Bluetooth) audio
 
 @item avs2 @emph{video} (avs, avs2)
-AVS2-P2/IEEE1857.4 video.
+AVS2-P2 (Audio Video Standard - Second generation - Part 2) /
+IEEE 1857.4 video
+
+@item avs3 @emph{video} (avs3)
+AVS3-P2 (Audio Video Standard - Third generation - Part 2) /
+IEEE 1857.10 video
 
 @item cavsvideo @emph{video} (cavs)
-Chinese AVS (Audio Video Standard)
+Chinese AVS (Audio Video Standard - First generation)
 
 @item codec2raw @emph{audio}
 Codec 2 audio.
@@ -177,7 +182,7 @@ ffplay -video_size 1920x1080 -pixel_format rgb24 -f rawvideo testsrc.rgb
 @end example
 @end itemize
 
-@section RAW PCM muxers
+@section Raw PCM muxers
 This section covers raw PCM (Pulse-Code Modulation) audio muxers.
 
 They accept a single stream matching the designated codec. They do not
@@ -528,7 +533,7 @@ skip writing iods atom (default value is @code{true})
 @item use_editlist @var{bool}
 use edit list (default value is @code{auto})
 
-@item use_stream_ids_as_track_ids
+@item use_stream_ids_as_track_ids @var{bool}
 use stream ids as track ids (default value is @code{false})
 
 @item video_track_timescale @var{scale}
@@ -835,49 +840,98 @@ compatibility with software that only supports a single audio stream in AVI
 (see @ref{amerge,,the "amerge" section in the ffmpeg-filters manual,ffmpeg-filters}).
 @end table
 
-@anchor{chromaprint}
-@section chromaprint
+@section avif
+AV1 (Alliance for Open Media Video codec 1) image format muxer.
 
-Chromaprint fingerprinter.
+This muxers stores images encoded using the AV1 codec.
 
-This muxer feeds audio data to the Chromaprint library,
-which generates a fingerprint for the provided audio data. See @url{https://acoustid.org/chromaprint}
+It accepts one or two video streams. In case two video streams are
+provided, the second one shall contain a single plane storing the
+alpha mask.
 
-It takes a single signed native-endian 16-bit raw audio stream of at most 2 channels.
+In case more than one image is provided, the generated output is
+considered an animated AVIF and the number of loops can be specified
+with the @option{loop} option.
+
+This is based on the specification by Alliance for Open Media at url
+@url{https://aomediacodec.github.io/av1-avif}.
 
 @subsection Options
-
 @table @option
-@item silence_threshold
-Threshold for detecting silence. Range is from -1 to 32767, where -1 disables
-silence detection. Silence detection can only be used with version 3 of the
-algorithm.
-Silence detection must be disabled for use with the AcoustID service. Default is -1.
+@item loop @var{count}
+number of times to loop an animated AVIF, @code{0} specify an infinite
+loop, default is @code{0}
 
-@item algorithm
-Version of algorithm to fingerprint with. Range is 0 to 4.
-Version 3 enables silence detection. Default is 1.
+@item movie_timescale @var{timescale}
+Set the timescale written in the movie header box (@code{mvhd}).
+Range is 1 to INT_MAX. Default is @code{1000}.
+@end table
 
-@item fp_format
+@section avm2
+ShockWave Flash (SWF) / ActionScript Virtual Machine 2 (AVM2) format muxer.
+
+It accepts one audio stream, one video stream, or both.
+
+@section bit
+G.729 (.bit) file format muxer.
+
+It accepts a single G.729 audio stream.
+
+@section caf
+Apple CAF (Core Audio Format) muxer.
+
+It accepts a single audio stream.
+
+@section codec2
+Codec2 audio audio muxer.
+
+It accepts a single codec2 audio stream.
+
+@anchor{chromaprint}
+@section chromaprint
+Chromaprint fingerprinter muxers.
+
+To enable compilation of this filter you need to configure FFmpeg with
+@code{--enable-chromaprint}.
+
+This muxer feeds audio data to the Chromaprint library, which
+generates a fingerprint for the provided audio data. See:
+@url{https://acoustid.org/chromaprint}
+
+It takes a single signed native-endian 16-bit raw audio stream of at
+most 2 channels.
+
+@subsection Options
+@table @option
+@item algorithm @var{version}
+Select version of algorithm to fingerprint with. Range is @code{0} to
+@code{4}. Version @code{3} enables silence detection. Default is @code{1}.
+
+@item fp_format @var{format}
 Format to output the fingerprint as. Accepts the following options:
 @table @samp
-@item raw
-Binary raw fingerprint
+@item base64
+Base64 compressed fingerprint @emph{(default)}
 
 @item compressed
 Binary compressed fingerprint
 
-@item base64
-Base64 compressed fingerprint @emph{(default)}
-
+@item raw
+Binary raw fingerprint
 @end table
 
+@item silence_threshold @var{threshold}
+Threshold for detecting silence. Range is from @code{-1} to
+@code{32767}, where @code{-1} disables silence detection. Silence
+detection can only be used with version @code{3} of the algorithm.
+
+Silence detection must be disabled for use with the AcoustID
+service. Default is @code{-1}.
 @end table
 
 @anchor{crc}
 @section crc
-
-CRC (Cyclic Redundancy Check) testing format.
+CRC (Cyclic Redundancy Check) muxer.
 
 This muxer computes and prints the Adler-32 CRC of all the input audio
 and video frames. By default audio frames are converted to signed
@@ -891,25 +945,29 @@ CRC=0x@var{CRC}, where @var{CRC} is a hexadecimal number 0-padded to
 See also the @ref{framecrc} muxer.
 
 @subsection Examples
-
-For example to compute the CRC of the input, and store it in the file
-@file{out.crc}:
+@itemize
+@item
+Use @command{ffmpeg} to compute the CRC of the input, and store it in
+the file @file{out.crc}:
 @example
 ffmpeg -i INPUT -f crc out.crc
 @end example
 
-You can print the CRC to stdout with the command:
+@item
+Use @command{ffmpeg} to print the CRC to stdout with the command:
 @example
 ffmpeg -i INPUT -f crc -
 @end example
 
+@item
 You can select the output format of each frame with @command{ffmpeg} by
-specifying the audio and video codec and format. For example to
+specifying the audio and video codec and format. For example, to
 compute the CRC of the input audio converted to PCM unsigned 8-bit
 and the input video converted to MPEG-2 video, use the command:
 @example
 ffmpeg -i INPUT -c:a pcm_u8 -c:v mpeg2video -f crc -
 @end example
+@end itemize
 
 @anchor{dash}
 @section dash
@@ -2048,7 +2106,6 @@ If a PNG image is used, it must use the rgba pixel format
 
 @anchor{image2}
 @section image2
-
 Image file muxer.
 
 The image file muxer writes video frames to image files.

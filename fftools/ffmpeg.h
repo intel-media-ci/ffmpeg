@@ -62,6 +62,7 @@
 #define FFMPEG_OPT_FORCE_KF_SOURCE_NO_DROP 1
 #define FFMPEG_OPT_VSYNC_DROP 1
 #define FFMPEG_OPT_VSYNC 1
+#define FFMPEG_OPT_FILTER_SCRIPT 1
 
 #define FFMPEG_ERROR_RATE_EXCEEDED FFERRTAG('E', 'R', 'E', 'D')
 
@@ -220,7 +221,9 @@ typedef struct OptionsContext {
     SpecifierOptList copy_initial_nonkeyframes;
     SpecifierOptList copy_prior_start;
     SpecifierOptList filters;
+#if FFMPEG_OPT_FILTER_SCRIPT
     SpecifierOptList filter_scripts;
+#endif
     SpecifierOptList reinit_filters;
     SpecifierOptList fix_sub_duration;
     SpecifierOptList fix_sub_duration_heartbeat;
@@ -652,7 +655,6 @@ void remove_avoptions(AVDictionary **a, AVDictionary *b);
 int check_avoptions(AVDictionary *m);
 
 int assert_file_overwrite(const char *filename);
-char *file_read(const char *filename);
 AVDictionary *strip_specifiers(const AVDictionary *dict);
 int find_codec(void *logctx, const char *name,
                enum AVMediaType type, int encoder, const AVCodec **codec);
