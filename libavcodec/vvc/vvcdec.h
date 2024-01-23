@@ -78,6 +78,9 @@ typedef struct VVCFrame {
      * A combination of VVC_FRAME_FLAG_*
      */
     uint8_t flags;
+
+    AVBufferRef *hwaccel_priv_buf;
+    void *hwaccel_picture_private; ///< hardware accelerator private data
 } VVCFrame;
 
 typedef struct SliceContext {
@@ -224,6 +227,8 @@ typedef struct VVCContext {
 
     uint64_t nb_frames;     ///< processed frames
     int nb_delayed;         ///< delayed frames
+
+    enum AVPixelFormat pix_fmt; ///< pix format of current frame
 }  VVCContext ;
 
 #endif /* AVCODEC_VVC_VVCDEC_H */
