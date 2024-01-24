@@ -455,6 +455,9 @@ static const struct {
     MAP(AV1,         AV1_MAIN,        AV1Profile0),
     MAP(AV1,         AV1_HIGH,        AV1Profile1),
 #endif
+#if VA_CHECK_VERSION(1, 22, 0)
+    MAP(H266,        VVC_MAIN_10,     VVCMain10),
+#endif
 
 #undef MAP
 };
@@ -626,6 +629,10 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
             break;
         case AV_CODEC_ID_VP8:
             frames->initial_pool_size += 3;
+            break;
+        case AV_CODEC_ID_H266:
+            // Add additional 16 for maximum 16 frames delay in vvc native decode.
+            frames->initial_pool_size += 32;
             break;
         default:
             frames->initial_pool_size += 2;
