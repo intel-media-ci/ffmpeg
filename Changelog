@@ -23,6 +23,7 @@ version <next>:
   YUVJ pixel format
 - Vulkan H.264 encoder
 - Vulkan H.265 encoder
+- VVC VAAPI decoder
 
 
 version 7.0:
