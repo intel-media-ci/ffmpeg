@@ -24,6 +24,7 @@ version <next>:
 - ffmpeg CLI options may now be used as -/opt <path>, which is equivalent
   to -opt <contents of file <path>>
 - showinfo bitstream filter
+- Change the default bitrate control method from VBR to CQP for QSV encoders.
 
 version 6.1:
 - libaribcaption decoder
