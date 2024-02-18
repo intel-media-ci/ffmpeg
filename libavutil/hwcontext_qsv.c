@@ -1277,9 +1277,18 @@ static int qsv_frames_init(AVHWFramesContext *ctx)
 
 static int qsv_get_buffer(AVHWFramesContext *ctx, AVFrame *frame)
 {
+    int retry_count = 0;
+
+retry:
     frame->buf[0] = av_buffer_pool_get(ctx->pool);
-    if (!frame->buf[0])
+    if (!frame->buf[0]) {
+        if (ctx->initial_pool_size && retry_count++ < 2000) {
+            av_usleep(1000);
+            goto retry;
+        }
+
         return AVERROR(ENOMEM);
+    }
 
     frame->data[3] = frame->buf[0]->data;
     frame->format  = AV_PIX_FMT_QSV;

@@ -59,6 +59,7 @@ typedef HRESULT (WINAPI *PFN_CREATE_DXGI_FACTORY)(REFIID riid, void **ppFactory)
 #include "mem.h"
 #include "pixdesc.h"
 #include "pixfmt.h"
+#include "time.h"
 
 
 typedef struct VAAPIDevicePriv {
@@ -712,9 +713,18 @@ static void vaapi_frames_uninit(AVHWFramesContext *hwfc)
 
 static int vaapi_get_buffer(AVHWFramesContext *hwfc, AVFrame *frame)
 {
+    int retry_count = 0;
+
+retry:
     frame->buf[0] = av_buffer_pool_get(hwfc->pool);
-    if (!frame->buf[0])
+    if (!frame->buf[0]) {
+        if (hwfc->initial_pool_size && retry_count++ < 2000) {
+            av_usleep(1000);
+            goto retry;
+        }
+
         return AVERROR(ENOMEM);
+    }
 
     frame->data[3] = frame->buf[0]->data;
     frame->format  = AV_PIX_FMT_VAAPI;
