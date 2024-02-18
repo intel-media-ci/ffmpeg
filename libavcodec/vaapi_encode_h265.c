@@ -258,6 +258,129 @@ fail:
     return err;
 }
 
+static int vaapi_encode_h265_init_ptl(AVCodecContext *avctx)
+{
+    VAAPIEncodeContext      *ctx = avctx->priv_data;
+    VAAPIEncodeH265Context *priv = avctx->priv_data;
+    H265RawVPS              *vps = &priv->raw_vps;
+    H265RawProfileTierLevel *ptl = &vps->profile_tier_level;
+
+    ptl->general_profile_space = 0;
+    ptl->general_profile_idc   = avctx->profile;
+    ptl->general_tier_flag     = priv->tier;
+
+    ptl->general_profile_compatibility_flag[ptl->general_profile_idc] = 1;
+
+    if (ptl->general_profile_compatibility_flag[1])
+        ptl->general_profile_compatibility_flag[2] = 1;
+    if (ptl->general_profile_compatibility_flag[3]) {
+        ptl->general_profile_compatibility_flag[1] = 1;
+        ptl->general_profile_compatibility_flag[2] = 1;
+    }
+
+    ptl->general_progressive_source_flag    = 1;
+    ptl->general_interlaced_source_flag     = 0;
+    ptl->general_non_packed_constraint_flag = 1;
+    ptl->general_frame_only_constraint_flag = 1;
+
+    if (avctx->profile >= 4) {
+        ptl->general_intra_constraint_flag            = ctx->gop_size == 1;
+        ptl->general_one_picture_only_constraint_flag = 0;
+        ptl->general_lower_bit_rate_constraint_flag   = 1;
+
+        switch (ctx->va_profile) {
+#if VA_CHECK_VERSION(1, 2, 0)
+        case VAProfileHEVCMain12:
+            // Main 12
+            ptl->general_max_14bit_constraint_flag      = 0;
+            ptl->general_max_12bit_constraint_flag      = 1;
+            ptl->general_max_10bit_constraint_flag      = 0;
+            ptl->general_max_8bit_constraint_flag       = 0;
+            ptl->general_max_422chroma_constraint_flag  = 1;
+            ptl->general_max_420chroma_constraint_flag  = 1;
+            ptl->general_max_monochrome_constraint_flag = 0;
+            break;
+        case VAProfileHEVCMain422_10:
+            // Main 4:2:2 10
+            ptl->general_max_14bit_constraint_flag      = 0;
+            ptl->general_max_12bit_constraint_flag      = 1;
+            ptl->general_max_10bit_constraint_flag      = 1;
+            ptl->general_max_8bit_constraint_flag       = 0;
+            ptl->general_max_422chroma_constraint_flag  = 1;
+            ptl->general_max_420chroma_constraint_flag  = 0;
+            ptl->general_max_monochrome_constraint_flag = 0;
+            break;
+        case VAProfileHEVCMain422_12:
+            // Main 4:2:2 12
+            ptl->general_max_14bit_constraint_flag      = 0;
+            ptl->general_max_12bit_constraint_flag      = 1;
+            ptl->general_max_10bit_constraint_flag      = 0;
+            ptl->general_max_8bit_constraint_flag       = 0;
+            ptl->general_max_422chroma_constraint_flag  = 1;
+            ptl->general_max_420chroma_constraint_flag  = 0;
+            ptl->general_max_monochrome_constraint_flag = 0;
+            break;
+        case VAProfileHEVCMain444:
+            // Main 4:4:4
+            ptl->general_max_14bit_constraint_flag      = 0;
+            ptl->general_max_12bit_constraint_flag      = 1;
+            ptl->general_max_10bit_constraint_flag      = 1;
+            ptl->general_max_8bit_constraint_flag       = 1;
+            ptl->general_max_422chroma_constraint_flag  = 0;
+            ptl->general_max_420chroma_constraint_flag  = 0;
+            ptl->general_max_monochrome_constraint_flag = 0;
+            break;
+        case VAProfileHEVCMain444_10:
+            // Main 4:4:4 10
+            ptl->general_max_14bit_constraint_flag      = 0;
+            ptl->general_max_12bit_constraint_flag      = 1;
+            ptl->general_max_10bit_constraint_flag      = 1;
+            ptl->general_max_8bit_constraint_flag       = 0;
+            ptl->general_max_422chroma_constraint_flag  = 0;
+            ptl->general_max_420chroma_constraint_flag  = 0;
+            ptl->general_max_monochrome_constraint_flag = 0;
+            break;
+        case VAProfileHEVCMain444_12:
+            // Main 4:4:4 12
+            ptl->general_max_14bit_constraint_flag      = 0;
+            ptl->general_max_12bit_constraint_flag      = 1;
+            ptl->general_max_10bit_constraint_flag      = 0;
+            ptl->general_max_8bit_constraint_flag       = 0;
+            ptl->general_max_422chroma_constraint_flag  = 0;
+            ptl->general_max_420chroma_constraint_flag  = 0;
+            ptl->general_max_monochrome_constraint_flag = 0;
+            break;
+#endif
+        default:
+            av_log(avctx, AV_LOG_ERROR, "Unknown profile to init PTL.\n");
+            return AVERROR(EINVAL);
+        }
+    }
+
+    if (avctx->level != AV_LEVEL_UNKNOWN) {
+        ptl->general_level_idc = avctx->level;
+    } else {
+        const H265LevelDescriptor *level;
+
+        level = ff_h265_guess_level(ptl, avctx->bit_rate,
+                                    ctx->surface_width, ctx->surface_height,
+                                    ctx->nb_slices, ctx->tile_rows, ctx->tile_cols,
+                                    (ctx->b_per_p > 0) + 1);
+        if (level) {
+            av_log(avctx, AV_LOG_VERBOSE, "Using level %s.\n", level->name);
+            ptl->general_level_idc = level->level_idc;
+        } else {
+            av_log(avctx, AV_LOG_VERBOSE, "Stream will not conform to "
+                   "any normal level; using level 8.5.\n");
+            ptl->general_level_idc = 255;
+            // The tier flag must be set in level 8.5.
+            ptl->general_tier_flag = 1;
+        }
+    }
+
+    return 0;
+}
+
 static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 {
     VAAPIEncodeContext                *ctx = avctx->priv_data;
@@ -265,13 +388,12 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
     H265RawVPS                        *vps = &priv->raw_vps;
     H265RawSPS                        *sps = &priv->raw_sps;
     H265RawPPS                        *pps = &priv->raw_pps;
-    H265RawProfileTierLevel           *ptl = &vps->profile_tier_level;
     H265RawVUI                        *vui = &sps->vui;
     VAEncSequenceParameterBufferHEVC *vseq = ctx->codec_sequence_params;
     VAEncPictureParameterBufferHEVC  *vpic = ctx->codec_picture_params;
     const AVPixFmtDescriptor *desc;
     int chroma_format, bit_depth;
-    int i;
+    int i, err;
 
     memset(vps, 0, sizeof(*vps));
     memset(sps, 0, sizeof(*sps));
@@ -314,57 +436,10 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
     vps->vps_max_sub_layers_minus1     = 0;
     vps->vps_temporal_id_nesting_flag  = 1;
 
-    ptl->general_profile_space = 0;
-    ptl->general_profile_idc   = avctx->profile;
-    ptl->general_tier_flag     = priv->tier;
-
-    ptl->general_profile_compatibility_flag[ptl->general_profile_idc] = 1;
-
-    if (ptl->general_profile_compatibility_flag[1])
-        ptl->general_profile_compatibility_flag[2] = 1;
-    if (ptl->general_profile_compatibility_flag[3]) {
-        ptl->general_profile_compatibility_flag[1] = 1;
-        ptl->general_profile_compatibility_flag[2] = 1;
-    }
-
-    ptl->general_progressive_source_flag    = 1;
-    ptl->general_interlaced_source_flag     = 0;
-    ptl->general_non_packed_constraint_flag = 1;
-    ptl->general_frame_only_constraint_flag = 1;
-
-    ptl->general_max_14bit_constraint_flag = bit_depth <= 14;
-    ptl->general_max_12bit_constraint_flag = bit_depth <= 12;
-    ptl->general_max_10bit_constraint_flag = bit_depth <= 10;
-    ptl->general_max_8bit_constraint_flag  = bit_depth ==  8;
-
-    ptl->general_max_422chroma_constraint_flag  = chroma_format <= 2;
-    ptl->general_max_420chroma_constraint_flag  = chroma_format <= 1;
-    ptl->general_max_monochrome_constraint_flag = chroma_format == 0;
-
-    ptl->general_intra_constraint_flag = ctx->gop_size == 1;
-    ptl->general_one_picture_only_constraint_flag = 0;
-
-    ptl->general_lower_bit_rate_constraint_flag = 1;
-
-    if (avctx->level != AV_LEVEL_UNKNOWN) {
-        ptl->general_level_idc = avctx->level;
-    } else {
-        const H265LevelDescriptor *level;
-
-        level = ff_h265_guess_level(ptl, avctx->bit_rate,
-                                    ctx->surface_width, ctx->surface_height,
-                                    ctx->nb_slices, ctx->tile_rows, ctx->tile_cols,
-                                    (ctx->b_per_p > 0) + 1);
-        if (level) {
-            av_log(avctx, AV_LOG_VERBOSE, "Using level %s.\n", level->name);
-            ptl->general_level_idc = level->level_idc;
-        } else {
-            av_log(avctx, AV_LOG_VERBOSE, "Stream will not conform to "
-                   "any normal level; using level 8.5.\n");
-            ptl->general_level_idc = 255;
-            // The tier flag must be set in level 8.5.
-            ptl->general_tier_flag = 1;
-        }
+    err = vaapi_encode_h265_init_ptl(avctx);
+    if (err < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to init PTL.\n");
+        return err;
     }
 
     vps->vps_sub_layer_ordering_info_present_flag = 0;
