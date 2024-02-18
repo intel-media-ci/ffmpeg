@@ -1305,12 +1305,12 @@ static av_cold int vaapi_encode_h265_configure(AVCodecContext *avctx)
 
 static const VAAPIEncodeProfile vaapi_encode_h265_profiles[] = {
     { AV_PROFILE_HEVC_MAIN,     8, 3, 1, 1, VAProfileHEVCMain       },
-    { AV_PROFILE_HEVC_REXT,     8, 3, 1, 1, VAProfileHEVCMain       },
 #if VA_CHECK_VERSION(0, 37, 0)
     { AV_PROFILE_HEVC_MAIN_10, 10, 3, 1, 1, VAProfileHEVCMain10     },
-    { AV_PROFILE_HEVC_REXT,    10, 3, 1, 1, VAProfileHEVCMain10     },
 #endif
 #if VA_CHECK_VERSION(1, 2, 0)
+    { AV_PROFILE_HEVC_REXT,     8, 3, 1, 1, VAProfileHEVCMain12 },
+    { AV_PROFILE_HEVC_REXT,    10, 3, 1, 1, VAProfileHEVCMain12 },
     { AV_PROFILE_HEVC_REXT,    12, 3, 1, 1, VAProfileHEVCMain12 },
     { AV_PROFILE_HEVC_REXT,     8, 3, 1, 0, VAProfileHEVCMain422_10 },
     { AV_PROFILE_HEVC_REXT,    10, 3, 1, 0, VAProfileHEVCMain422_10 },
