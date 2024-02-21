@@ -55,6 +55,7 @@ typedef struct TFModel{
     SafeQueue *request_queue;
     Queue *lltask_queue;
     Queue *task_queue;
+    int request_queue_size;
 } TFModel;
 
 /**
@@ -497,7 +498,7 @@ static void dnn_free_model_tf(DNNModel **model)
 
     if (*model){
         tf_model = (*model)->model;
-        while (ff_safe_queue_size(tf_model->request_queue) != 0) {
+        for (int i = 0; tf_model->request_queue && i < tf_model->request_queue_size; i++) {
             TFRequestItem *item = ff_safe_queue_pop_front(tf_model->request_queue);
             destroy_request_item(&item);
         }
@@ -602,6 +603,7 @@ static DNNModel *dnn_load_model_tf(const char *model_filename, DNNFunctionType f
             destroy_request_item(&item);
             goto err;
         }
+        tf_model->request_queue_size += 1;
     }
 
     tf_model->lltask_queue = ff_queue_create();
