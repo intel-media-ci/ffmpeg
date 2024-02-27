@@ -43,27 +43,27 @@
 #include "libavcodec/mathops.h"
 
 typedef struct FilterGraphPriv {
-    FilterGraph fg;
+    FilterGraph      fg;
 
     // name used for logging
-    char log_name[32];
+    char             log_name[32];
 
-    int is_simple;
+    int              is_simple;
     // true when the filtergraph contains only meta filters
     // that do not modify the frame data
-    int is_meta;
+    int              is_meta;
     // source filters are present in the graph
-    int have_sources;
-    int disable_conversions;
+    int              have_sources;
+    int              disable_conversions;
 
-    unsigned nb_outputs_done;
+    unsigned         nb_outputs_done;
 
-    const char *graph_desc;
+    const char      *graph_desc;
 
     // frame for temporarily holding output from the filtergraph
-    AVFrame *frame;
+    AVFrame         *frame;
     // frame for sending output to the encoder
-    AVFrame *frame_enc;
+    AVFrame         *frame_enc;
 
     Scheduler       *sch;
     unsigned         sch_idx;
@@ -81,68 +81,70 @@ static const FilterGraphPriv *cfgp_from_cfg(const FilterGraph *fg)
 
 // data that is local to the filter thread and not visible outside of it
 typedef struct FilterGraphThread {
-    AVFilterGraph *graph;
+    AVFilterGraph   *graph;
 
-    AVFrame *frame;
+    AVFrame         *frame;
 
     // Temporary buffer for output frames, since on filtergraph reset
     // we cannot send them to encoders immediately.
     // The output index is stored in frame opaque.
-    AVFifo  *frame_queue_out;
+    AVFifo          *frame_queue_out;
 
     // index of the next input to request from the scheduler
-    unsigned next_in;
+    unsigned         next_in;
     // set to 1 after at least one frame passed through this output
-    int      got_frame;
+    int              got_frame;
 
     // EOF status of each input/output, as received by the thread
-    uint8_t *eof_in;
-    uint8_t *eof_out;
+    uint8_t         *eof_in;
+    uint8_t         *eof_out;
 } FilterGraphThread;
 
 typedef struct InputFilterPriv {
-    InputFilter ifilter;
+    InputFilter         ifilter;
 
-    int              index;
+    InputFilterOptions  opts;
 
-    AVFilterContext *filter;
+    int                 index;
 
-    InputStream *ist;
+    AVFilterContext    *filter;
+
+    InputStream        *ist;
 
     // used to hold submitted input
-    AVFrame *frame;
+    AVFrame            *frame;
 
     /* for filters that are not yet bound to an input stream,
      * this stores the input linklabel, if any */
-    uint8_t *linklabel;
+    uint8_t            *linklabel;
 
     // filter data type
-    enum AVMediaType type;
+    enum AVMediaType    type;
     // source data type: AVMEDIA_TYPE_SUBTITLE for sub2video,
     // same as type otherwise
-    enum AVMediaType type_src;
+    enum AVMediaType    type_src;
 
-    int eof;
+    int                 eof;
 
     // parameters configured for this input
-    int format;
+    int                 format;
 
-    int width, height;
-    AVRational sample_aspect_ratio;
-    enum AVColorSpace color_space;
-    enum AVColorRange color_range;
+    int                 width, height;
+    AVRational          sample_aspect_ratio;
+    enum AVColorSpace   color_space;
+    enum AVColorRange   color_range;
 
-    int sample_rate;
-    AVChannelLayout ch_layout;
+    int                 sample_rate;
+    AVChannelLayout     ch_layout;
 
-    AVRational time_base;
+    AVRational          time_base;
 
-    AVFifo *frame_queue;
+    AVFifo             *frame_queue;
 
-    AVBufferRef *hw_frames_ctx;
+    AVBufferRef        *hw_frames_ctx;
 
-    int     displaymatrix_present;
-    int32_t displaymatrix[9];
+    int                 displaymatrix_present;
+    int32_t             displaymatrix[9];
 
     // fallback parameters to use when no input is ever sent
     struct {
@@ -175,15 +177,15 @@ static InputFilterPriv *ifp_from_ifilter(InputFilter *ifilter)
 }
 
 typedef struct FPSConvContext {
-    AVFrame *last_frame;
+    AVFrame          *last_frame;
     /* number of frames emitted by the video-encoding sync code */
-    int64_t frame_number;
+    int64_t           frame_number;
     /* history of nb_frames_prev, i.e. the number of times the
      * previous frame was duplicated by vsync code in recent
      * do_video_out() calls */
-    int64_t frames_prev_hist[3];
+    int64_t           frames_prev_hist[3];
 
-    uint64_t dup_warning;
+    uint64_t          dup_warning;
 
     int               last_dropped;
     int               dropped_keyframe;
@@ -195,38 +197,38 @@ typedef struct FPSConvContext {
 } FPSConvContext;
 
 typedef struct OutputFilterPriv {
-    OutputFilter        ofilter;
+    OutputFilter            ofilter;
 
-    int                 index;
+    int                     index;
 
-    AVFilterContext    *filter;
+    AVFilterContext        *filter;
 
     /* desired output stream properties */
-    int format;
-    int width, height;
-    int sample_rate;
-    AVChannelLayout ch_layout;
+    int                     format;
+    int                     width, height;
+    int                     sample_rate;
+    AVChannelLayout         ch_layout;
 
     // time base in which the output is sent to our downstream
     // does not need to match the filtersink's timebase
-    AVRational tb_out;
+    AVRational              tb_out;
     // at least one frame with the above timebase was sent
     // to our downstream, so it cannot change anymore
-    int        tb_out_locked;
+    int                     tb_out_locked;
 
-    AVRational sample_aspect_ratio;
+    AVRational              sample_aspect_ratio;
 
     // those are only set if no format is specified and the encoder gives us multiple options
     // They point directly to the relevant lists of the encoder.
-    const int *formats;
-    const AVChannelLayout *ch_layouts;
-    const int *sample_rates;
+    const int              *formats;
+    const AVChannelLayout  *ch_layouts;
+    const int              *sample_rates;
 
-    AVRational enc_timebase;
+    AVRational              enc_timebase;
     // offset for output timestamps, in AV_TIME_BASE_Q
-    int64_t ts_offset;
-    int64_t next_pts;
-    FPSConvContext fps;
+    int64_t                 ts_offset;
+    int64_t                 next_pts;
+    FPSConvContext          fps;
 } OutputFilterPriv;
 
 static OutputFilterPriv *ofp_from_ofilter(OutputFilter *ofilter)
@@ -328,7 +330,7 @@ static void sub2video_update(InputFilterPriv *ifp, int64_t heartbeat_pts,
     AVFrame *frame = ifp->sub2video.frame;
     int8_t *dst;
     int     dst_linesize;
-    int num_rects, i;
+    int num_rects;
     int64_t pts, end_pts;
 
     if (sub) {
@@ -354,7 +356,7 @@ static void sub2video_update(InputFilterPriv *ifp, int64_t heartbeat_pts,
     }
     dst          = frame->data    [0];
     dst_linesize = frame->linesize[0];
-    for (i = 0; i < num_rects; i++)
+    for (int i = 0; i < num_rects; i++)
         sub2video_copy_rect(dst, dst_linesize, frame->width, frame->height, sub->rects[i]);
     sub2video_push_ref(ifp, pts);
     ifp->sub2video.end_pts = end_pts;
@@ -615,8 +617,7 @@ fail:
 // Filters can be configured only if the formats of all inputs are known.
 static int ifilter_has_all_input_formats(FilterGraph *fg)
 {
-    int i;
-    for (i = 0; i < fg->nb_inputs; i++) {
+    for (int i = 0; i < fg->nb_inputs; i++) {
         InputFilterPriv *ifp = ifp_from_ifilter(fg->inputs[i]);
         if (ifp->format < 0)
             return 0;
@@ -673,7 +674,8 @@ static int ifilter_bind_ist(InputFilter *ifilter, InputStream *ist)
     ifp->ist             = ist;
     ifp->type_src        = ist->st->codecpar->codec_type;
 
-    dec_idx = ist_filter_add(ist, ifilter, filtergraph_is_simple(ifilter->graph));
+    dec_idx = ist_filter_add(ist, ifilter, filtergraph_is_simple(ifilter->graph),
+                             &ifp->opts);
     if (dec_idx < 0)
         return dec_idx;
 
@@ -686,6 +688,16 @@ static int ifilter_bind_ist(InputFilter *ifilter, InputStream *ist)
         ifp->sub2video.frame = av_frame_alloc();
         if (!ifp->sub2video.frame)
             return AVERROR(ENOMEM);
+
+        ifp->width  = ifp->opts.sub2video_width;
+        ifp->height = ifp->opts.sub2video_height;
+
+        /* rectangles are AV_PIX_FMT_PAL8, but we have no guarantee that the
+           palettes for all rectangles are identical or compatible */
+        ifp->format = AV_PIX_FMT_RGB32;
+
+        av_log(fgp, AV_LOG_VERBOSE, "sub2video: using %dx%d canvas\n",
+               ifp->width, ifp->height);
     }
 
     return 0;
@@ -886,6 +898,7 @@ void fg_free(FilterGraph **pfg)
 
         av_buffer_unref(&ifp->hw_frames_ctx);
         av_freep(&ifp->linklabel);
+        av_freep(&ifp->opts.name);
         av_freep(&ifilter->name);
         av_freep(&fg->inputs[j]);
     }
@@ -1354,10 +1367,9 @@ static int configure_output_audio_filter(FilterGraph *fg, AVFilterGraph *graph,
 #if FFMPEG_OPT_MAP_CHANNEL
     if (ost->audio_channels_mapped) {
         AVChannelLayout mapped_layout = { 0 };
-        int i;
         av_channel_layout_default(&mapped_layout, ost->audio_channels_mapped);
         av_channel_layout_describe_bprint(&mapped_layout, &args);
-        for (i = 0; i < ost->audio_channels_mapped; i++)
+        for (int i = 0; i < ost->audio_channels_mapped; i++)
             if (ost->audio_channels_map[i] != -1)
                 av_bprintf(&args, "|c%d=c%d", i, ost->audio_channels_map[i]);
 
@@ -1436,8 +1448,7 @@ static int configure_output_filter(FilterGraph *fg, AVFilterGraph *graph,
 
 int check_filter_outputs(void)
 {
-    int i;
-    for (i = 0; i < nb_filtergraphs; i++) {
+    for (int i = 0; i < nb_filtergraphs; i++) {
         int n;
         for (n = 0; n < filtergraphs[i]->nb_outputs; n++) {
             OutputFilter *output = filtergraphs[i]->outputs[n];
@@ -1472,25 +1483,20 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
     const AVFilter *buffer_filt = avfilter_get_by_name("buffer");
     const AVPixFmtDescriptor *desc;
     InputStream *ist = ifp->ist;
-    InputFile     *f = ist->file;
-    AVRational fr = ist->framerate;
+    AVRational fr = ifp->opts.framerate;
     AVRational sar;
     AVBPrint args;
     char name[255];
     int ret, pad_idx = 0;
-    int64_t tsoffset = 0;
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
     if (!par)
         return AVERROR(ENOMEM);
 
-    if (!fr.num)
-        fr = ist->framerate_guessed;
-
     if (ifp->type_src == AVMEDIA_TYPE_SUBTITLE)
         sub2video_prepare(ifp);
 
-    ifp->time_base =  ist->framerate.num ? av_inv_q(ist->framerate) :
-                                           ist->st->time_base;
+    ifp->time_base = (ifp->opts.flags & IFILTER_FLAG_CFR) ?
+                     av_inv_q(ifp->opts.framerate) : ist->st->time_base;
 
     sar = ifp->sample_aspect_ratio;
     if(!sar.den)
@@ -1504,8 +1510,8 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
              ifp->color_space, ifp->color_range);
     if (fr.num && fr.den)
         av_bprintf(&args, ":frame_rate=%d/%d", fr.num, fr.den);
-    snprintf(name, sizeof(name), "graph %d input from stream %d:%d", fg->index,
-             f->index, ist->index);
+    snprintf(name, sizeof(name), "graph %d input from stream %s", fg->index,
+             ifp->opts.name);
 
 
     if ((ret = avfilter_graph_create_filter(&ifp->filter, buffer_filt, name,
@@ -1522,17 +1528,11 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
     av_assert0(desc);
 
     // TODO: insert hwaccel enabled filters like transpose_vaapi into the graph
-    if (ist->autorotate && !(desc->flags & AV_PIX_FMT_FLAG_HWACCEL)) {
-        const AVPacketSideData *sd = NULL;
+    if ((ifp->opts.flags & IFILTER_FLAG_AUTOROTATE) &&
+        !(desc->flags & AV_PIX_FMT_FLAG_HWACCEL)) {
         int32_t *displaymatrix = ifp->displaymatrix;
         double theta;
 
-        if (!ifp->displaymatrix_present)
-            sd = av_packet_side_data_get(ist->st->codecpar->coded_side_data,
-                                         ist->st->codecpar->nb_coded_side_data,
-                                         AV_PKT_DATA_DISPLAYMATRIX);
-        if (sd)
-            displaymatrix = (int32_t *)sd->data;
         theta = get_rotation(displaymatrix);
 
         if (fabs(theta - 90) < 1.0) {
@@ -1563,15 +1563,8 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
             return ret;
     }
 
-    snprintf(name, sizeof(name), "trim_in_%d_%d",
-             f->index, ist->index);
-    if (copy_ts) {
-        tsoffset = f->start_time == AV_NOPTS_VALUE ? 0 : f->start_time;
-        if (!start_at_zero && f->ctx->start_time != AV_NOPTS_VALUE)
-            tsoffset += f->ctx->start_time;
-    }
-    ret = insert_trim(((f->start_time == AV_NOPTS_VALUE) || !f->accurate_seek) ?
-                      AV_NOPTS_VALUE : tsoffset, f->recording_time,
+    snprintf(name, sizeof(name), "trim_in_%s", ifp->opts.name);
+    ret = insert_trim(ifp->opts.trim_start_us, ifp->opts.trim_end_us,
                       &last_filter, &pad_idx, name);
     if (ret < 0)
         return ret;
@@ -1591,12 +1584,9 @@ static int configure_input_audio_filter(FilterGraph *fg, AVFilterGraph *graph,
     InputFilterPriv *ifp = ifp_from_ifilter(ifilter);
     AVFilterContext *last_filter;
     const AVFilter *abuffer_filt = avfilter_get_by_name("abuffer");
-    InputStream *ist = ifp->ist;
-    InputFile     *f = ist->file;
     AVBPrint args;
     char name[255];
     int ret, pad_idx = 0;
-    int64_t tsoffset = 0;
 
     ifp->time_base = (AVRational){ 1, ifp->sample_rate };
 
@@ -1611,8 +1601,7 @@ static int configure_input_audio_filter(FilterGraph *fg, AVFilterGraph *graph,
         av_channel_layout_describe_bprint(&ifp->ch_layout, &args);
     } else
         av_bprintf(&args, ":channels=%d", ifp->ch_layout.nb_channels);
-    snprintf(name, sizeof(name), "graph_%d_in_%d_%d", fg->index,
-             f->index, ist->index);
+    snprintf(name, sizeof(name), "graph_%d_in_%s", fg->index, ifp->opts.name);
 
     if ((ret = avfilter_graph_create_filter(&ifp->filter, abuffer_filt,
                                             name, args.str, NULL,
@@ -1620,15 +1609,8 @@ static int configure_input_audio_filter(FilterGraph *fg, AVFilterGraph *graph,
         return ret;
     last_filter = ifp->filter;
 
-    snprintf(name, sizeof(name), "trim for input stream %d:%d",
-             f->index, ist->index);
-    if (copy_ts) {
-        tsoffset = f->start_time == AV_NOPTS_VALUE ? 0 : f->start_time;
-        if (!start_at_zero && f->ctx->start_time != AV_NOPTS_VALUE)
-            tsoffset += f->ctx->start_time;
-    }
-    ret = insert_trim(((f->start_time == AV_NOPTS_VALUE) || !f->accurate_seek) ?
-                      AV_NOPTS_VALUE : tsoffset, f->recording_time,
+    snprintf(name, sizeof(name), "trim for input stream %s", ifp->opts.name);
+    ret = insert_trim(ifp->opts.trim_start_us, ifp->opts.trim_end_us,
                       &last_filter, &pad_idx, name);
     if (ret < 0)
         return ret;
@@ -1651,10 +1633,9 @@ static int configure_input_filter(FilterGraph *fg, AVFilterGraph *graph,
 
 static void cleanup_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
 {
-    int i;
-    for (i = 0; i < fg->nb_outputs; i++)
+    for (int i = 0; i < fg->nb_outputs; i++)
         ofp_from_ofilter(fg->outputs[i])->filter = NULL;
-    for (i = 0; i < fg->nb_inputs; i++)
+    for (int i = 0; i < fg->nb_inputs; i++)
         ifp_from_ifilter(fg->inputs[i])->filter = NULL;
     avfilter_graph_free(&fgt->graph);
 }
@@ -1764,7 +1745,7 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
 
     /* limit the lists of allowed formats to the ones selected, to
      * make sure they stay the same if the filtergraph is reconfigured later */
-    for (i = 0; i < fg->nb_outputs; i++) {
+    for (int i = 0; i < fg->nb_outputs; i++) {
         OutputFilter *ofilter = fg->outputs[i];
         OutputFilterPriv *ofp = ofp_from_ofilter(ofilter);
         AVFilterContext *sink = ofp->filter;
@@ -1793,7 +1774,7 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
             goto fail;
     }
 
-    for (i = 0; i < fg->nb_inputs; i++) {
+    for (int i = 0; i < fg->nb_inputs; i++) {
         InputFilterPriv *ifp = ifp_from_ifilter(fg->inputs[i]);
         AVFrame *tmp;
         while (av_fifo_read(ifp->frame_queue, &tmp, 1) >= 0) {
@@ -1809,7 +1790,7 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
     }
 
     /* send the EOFs for the finished inputs */
-    for (i = 0; i < fg->nb_inputs; i++) {
+    for (int i = 0; i < fg->nb_inputs; i++) {
         InputFilterPriv *ifp = ifp_from_ifilter(fg->inputs[i]);
         if (fgt->eof_in[i]) {
             ret = av_buffersrc_add_frame(ifp->filter, NULL);
@@ -1852,17 +1833,6 @@ int ifilter_parameters_from_dec(InputFilter *ifilter, const AVCodecContext *dec)
         ret = av_channel_layout_copy(&ifp->fallback.ch_layout, &dec->ch_layout);
         if (ret < 0)
             return ret;
-    } else {
-        // for subtitles (i.e. sub2video) we set the actual parameters,
-        // rather than just fallback
-        ifp->width  = ifp->ist->sub2video.w;
-        ifp->height = ifp->ist->sub2video.h;
-
-        /* rectangles are AV_PIX_FMT_PAL8, but we have no guarantee that the
-           palettes for all rectangles are identical or compatible */
-        ifp->format = AV_PIX_FMT_RGB32;
-
-        av_log(NULL, AV_LOG_VERBOSE, "sub2video: using %dx%d canvas\n", ifp->width, ifp->height);
     }
 
     return 0;
@@ -2584,8 +2554,8 @@ static int send_eof(FilterGraphThread *fgt, InputFilter *ifilter,
 
         if (ifp->format < 0) {
             av_log(NULL, AV_LOG_ERROR,
-                   "Cannot determine format of input stream %d:%d after EOF\n",
-                   ifp->ist->file->index, ifp->ist->index);
+                   "Cannot determine format of input %s after EOF\n",
+                   ifp->opts.name);
             return AVERROR_INVALIDDATA;
         }
     }
@@ -2638,7 +2608,7 @@ static int send_frame(FilterGraph *fg, FilterGraphThread *fgt,
     } else if (ifp->displaymatrix_present)
         need_reinit |= MATRIX_CHANGED;
 
-    if (!ifp->ist->reinit_filters && fgt->graph)
+    if (!(ifp->opts.flags & IFILTER_FLAG_REINIT) && fgt->graph)
         need_reinit = 0;
 
     if (!!ifp->hw_frames_ctx != !!frame->hw_frames_ctx ||

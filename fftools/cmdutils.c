@@ -339,8 +339,6 @@ static int write_option(void *optctx, const OptionDef *po, const char *opt,
 
         *(double *)dst = num;
     } else {
-        int ret;
-
         av_assert0(po->type == OPT_TYPE_FUNC && po->u.func_arg);
 
         ret = po->u.func_arg(optctx, opt, arg);
@@ -1121,7 +1119,7 @@ double get_rotation(const int32_t *displaymatrix)
 {
     double theta = 0;
     if (displaymatrix)
-        theta = -round(av_display_rotation_get((int32_t*) displaymatrix));
+        theta = -round(av_display_rotation_get(displaymatrix));
 
     theta -= 360*floor(theta/360 + 0.9/360);
 

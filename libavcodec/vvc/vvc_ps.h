@@ -59,8 +59,6 @@ typedef struct VVCSPS {
     const H266RawSPS *r;                                            ///< RefStruct reference
 
     //derived values
-    uint16_t    width;
-    uint16_t    height;
     uint8_t     hshift[VVC_MAX_SAMPLE_ARRAYS];
     uint8_t     vshift[VVC_MAX_SAMPLE_ARRAYS];
     uint32_t    max_pic_order_cnt_lsb;                             ///< MaxPicOrderCntLsb
@@ -154,7 +152,7 @@ typedef struct VVCPH {
 
 #define ALF_NUM_FILTERS_LUMA    25
 #define ALF_NUM_FILTERS_CHROMA   8
-#define ALF_NUM_FILTERS_CC       5
+#define ALF_NUM_FILTERS_CC       4
 
 #define ALF_NUM_COEFF_LUMA      12
 #define ALF_NUM_COEFF_CHROMA     6
@@ -193,9 +191,10 @@ typedef struct VVCLMCS {
     uint8_t  min_bin_idx;
     uint8_t  max_bin_idx;
 
-    //*2 for high depth
-    uint8_t  fwd_lut[LMCS_MAX_LUT_SIZE * 2];
-    uint8_t  inv_lut[LMCS_MAX_LUT_SIZE * 2];
+    union {
+        uint8_t  u8[LMCS_MAX_LUT_SIZE];
+        uint16_t u16[LMCS_MAX_LUT_SIZE]; ///< for high bit-depth
+    } fwd_lut, inv_lut;
 
     uint16_t pivot[LMCS_MAX_BIN_SIZE + 1];
     uint16_t chroma_scale_coeff[LMCS_MAX_BIN_SIZE];

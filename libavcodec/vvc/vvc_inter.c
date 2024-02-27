@@ -571,7 +571,7 @@ static void pred_regular_luma(VVCLocalContext *lc, const int hf_idx, const int v
         const int intra_weight = ciip_derive_intra_weight(lc, x0, y0, sbw, sbh);
         fc->vvcdsp.intra.intra_pred(lc, x0, y0, sbw, sbh, 0);
         if (sc->sh.r->sh_lmcs_used_flag)
-            fc->vvcdsp.lmcs.filter(inter, inter_stride, sbw, sbh, fc->ps.lmcs.fwd_lut);
+            fc->vvcdsp.lmcs.filter(inter, inter_stride, sbw, sbh, &fc->ps.lmcs.fwd_lut);
         fc->vvcdsp.inter.put_ciip(dst, dst_stride, sbw, sbh, inter, inter_stride, intra_weight);
 
     }
@@ -887,13 +887,13 @@ static void predict_inter(VVCLocalContext *lc)
 
     if (lc->sc->sh.r->sh_lmcs_used_flag && !cu->ciip_flag) {
         uint8_t* dst0 = POS(0, cu->x0, cu->y0);
-        fc->vvcdsp.lmcs.filter(dst0, fc->frame->linesize[LUMA], cu->cb_width, cu->cb_height, fc->ps.lmcs.fwd_lut);
+        fc->vvcdsp.lmcs.filter(dst0, fc->frame->linesize[LUMA], cu->cb_width, cu->cb_height, &fc->ps.lmcs.fwd_lut);
     }
 }
 
 static int has_inter_luma(const CodingUnit *cu)
 {
-    return cu->pred_mode != MODE_INTRA && cu->pred_mode != MODE_PLT && cu->tree_type != DUAL_TREE_CHROMA;
+    return (cu->pred_mode == MODE_INTER || cu->pred_mode == MODE_SKIP) && cu->tree_type != DUAL_TREE_CHROMA;
 }
 
 int ff_vvc_predict_inter(VVCLocalContext *lc, const int rs)

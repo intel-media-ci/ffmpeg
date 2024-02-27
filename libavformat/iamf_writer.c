@@ -125,8 +125,8 @@ fail:
     return ret;
 }
 
-static IAMFParamDefinition *add_param_definition(IAMFContext *iamf, AVIAMFParamDefinition *param,
-                                                 const IAMFAudioElement *audio_element, void *log_ctx)
+static int add_param_definition(IAMFContext *iamf, AVIAMFParamDefinition *param,
+                                const IAMFAudioElement *audio_element, void *log_ctx)
 {
     IAMFParamDefinition **tmp, *param_definition;
     IAMFCodecConfig *codec_config = NULL;
@@ -134,13 +134,9 @@ static IAMFParamDefinition *add_param_definition(IAMFContext *iamf, AVIAMFParamD
     tmp = av_realloc_array(iamf->param_definitions, iamf->nb_param_definitions + 1,
                            sizeof(*iamf->param_definitions));
     if (!tmp)
-        return NULL;
+        return AVERROR(ENOMEM);
 
     iamf->param_definitions = tmp;
-
-    param_definition = av_mallocz(sizeof(*param_definition));
-    if (!param_definition)
-        return NULL;
 
     if (audio_element)
         codec_config = iamf->codec_configs[audio_element->codec_config_id];
@@ -149,7 +145,7 @@ static IAMFParamDefinition *add_param_definition(IAMFContext *iamf, AVIAMFParamD
         if (!codec_config) {
             av_log(log_ctx, AV_LOG_ERROR, "parameter_rate needed but not set for parameter_id %u\n",
                    param->parameter_id);
-            return NULL;
+            return AVERROR(EINVAL);
         }
         param->parameter_rate = codec_config->sample_rate;
     }
@@ -160,12 +156,16 @@ static IAMFParamDefinition *add_param_definition(IAMFContext *iamf, AVIAMFParamD
             param->constant_subblock_duration = codec_config->nb_samples;
     }
 
+    param_definition = av_mallocz(sizeof(*param_definition));
+    if (!param_definition)
+        return AVERROR(ENOMEM);
+
     param_definition->mode = !!param->duration;
     param_definition->param = param;
     param_definition->audio_element = audio_element;
     iamf->param_definitions[iamf->nb_param_definitions++] = param_definition;
 
-    return param_definition;
+    return 0;
 }
 
 int ff_iamf_add_audio_element(IAMFContext *iamf, const AVStreamGroup *stg, void *log_ctx)
@@ -234,26 +234,27 @@ int ff_iamf_add_audio_element(IAMFContext *iamf, const AVStreamGroup *stg, void 
     if (!audio_element)
         return AVERROR(ENOMEM);
 
-    audio_element->element = stg->params.iamf_audio_element;
+    audio_element->celement = stg->params.iamf_audio_element;
     audio_element->audio_element_id = stg->id;
     audio_element->codec_config_id = ret;
 
     audio_element->substreams = av_calloc(stg->nb_streams, sizeof(*audio_element->substreams));
-    if (!audio_element->substreams)
-        return AVERROR(ENOMEM);
+    if (!audio_element->substreams) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
     audio_element->nb_substreams = stg->nb_streams;
 
     audio_element->layers = av_calloc(iamf_audio_element->nb_layers, sizeof(*audio_element->layers));
-    if (!audio_element->layers)
-        return AVERROR(ENOMEM);
+    if (!audio_element->layers) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
 
     for (int i = 0, j = 0; i < iamf_audio_element->nb_layers; i++) {
         int nb_channels = iamf_audio_element->layers[i]->ch_layout.nb_channels;
 
         IAMFLayer *layer = &audio_element->layers[i];
-        if (!layer)
-            return AVERROR(ENOMEM);
-        memset(layer, 0, sizeof(*layer));
 
         if (i)
             nb_channels -= iamf_audio_element->layers[i - 1]->ch_layout.nb_channels;
@@ -269,7 +270,8 @@ int ff_iamf_add_audio_element(IAMFContext *iamf, const AVStreamGroup *stg, void 
         if (nb_channels) {
             av_log(log_ctx, AV_LOG_ERROR, "Invalid channel count across substreams in layer %u from stream group %u\n",
                    i, stg->index);
-            return AVERROR(EINVAL);
+            ret = AVERROR(EINVAL);
+            goto fail;
         }
     }
 
@@ -279,13 +281,14 @@ int ff_iamf_add_audio_element(IAMFContext *iamf, const AVStreamGroup *stg, void 
 
         if (param->nb_subblocks != 1) {
             av_log(log_ctx, AV_LOG_ERROR, "nb_subblocks in demixing_info for stream group %u is not 1\n", stg->index);
-            return AVERROR(EINVAL);
+            ret = AVERROR(EINVAL);
+            goto fail;
         }
 
         if (!param_definition) {
-            param_definition = add_param_definition(iamf, param, audio_element, log_ctx);
-            if (!param_definition)
-                return AVERROR(ENOMEM);
+            ret = add_param_definition(iamf, param, audio_element, log_ctx);
+            if (ret < 0)
+                goto fail;
         }
     }
     if (iamf_audio_element->recon_gain_info) {
@@ -294,29 +297,36 @@ int ff_iamf_add_audio_element(IAMFContext *iamf, const AVStreamGroup *stg, void 
 
         if (param->nb_subblocks != 1) {
             av_log(log_ctx, AV_LOG_ERROR, "nb_subblocks in recon_gain_info for stream group %u is not 1\n", stg->index);
-            return AVERROR(EINVAL);
+            ret = AVERROR(EINVAL);
+            goto fail;
         }
 
         if (!param_definition) {
-            param_definition = add_param_definition(iamf, param, audio_element, log_ctx);
-            if (!param_definition)
-                return AVERROR(ENOMEM);
+            ret = add_param_definition(iamf, param, audio_element, log_ctx);
+            if (ret < 0)
+                goto fail;
         }
     }
 
     tmp = av_realloc_array(iamf->audio_elements, iamf->nb_audio_elements + 1, sizeof(*iamf->audio_elements));
-    if (!tmp)
-        return AVERROR(ENOMEM);
+    if (!tmp) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
 
     iamf->audio_elements = tmp;
     iamf->audio_elements[iamf->nb_audio_elements++] = audio_element;
 
     return 0;
+fail:
+    ff_iamf_free_audio_element(&audio_element);
+    return ret;
 }
 
 int ff_iamf_add_mix_presentation(IAMFContext *iamf, const AVStreamGroup *stg, void *log_ctx)
 {
     IAMFMixPresentation **tmp, *mix_presentation;
+    int ret;
 
     if (stg->type != AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION)
         return AVERROR(EINVAL);
@@ -332,25 +342,26 @@ int ff_iamf_add_mix_presentation(IAMFContext *iamf, const AVStreamGroup *stg, vo
     if (!mix_presentation)
         return AVERROR(ENOMEM);
 
-    mix_presentation->mix = stg->params.iamf_mix_presentation;
+    mix_presentation->cmix = stg->params.iamf_mix_presentation;
     mix_presentation->mix_presentation_id = stg->id;
 
-    for (int i = 0; i < mix_presentation->mix->nb_submixes; i++) {
-        const AVIAMFSubmix *submix = mix_presentation->mix->submixes[i];
+    for (int i = 0; i < mix_presentation->cmix->nb_submixes; i++) {
+        const AVIAMFSubmix *submix = mix_presentation->cmix->submixes[i];
         AVIAMFParamDefinition *param = submix->output_mix_config;
         IAMFParamDefinition *param_definition;
 
         if (!param) {
             av_log(log_ctx, AV_LOG_ERROR, "output_mix_config is not present in submix %u from "
                                           "Mix Presentation ID %"PRId64"\n", i, stg->id);
-            return AVERROR(EINVAL);
+            ret = AVERROR(EINVAL);
+            goto fail;
         }
 
         param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
         if (!param_definition) {
-            param_definition = add_param_definition(iamf, param, NULL, log_ctx);
-            if (!param_definition)
-                return AVERROR(ENOMEM);
+            ret = add_param_definition(iamf, param, NULL, log_ctx);
+            if (ret < 0)
+                goto fail;
         }
 
         for (int j = 0; j < submix->nb_elements; j++) {
@@ -360,25 +371,31 @@ int ff_iamf_add_mix_presentation(IAMFContext *iamf, const AVStreamGroup *stg, vo
             if (!param) {
                 av_log(log_ctx, AV_LOG_ERROR, "element_mix_config is not present for element %u in submix %u from "
                                               "Mix Presentation ID %"PRId64"\n", j, i, stg->id);
-                return AVERROR(EINVAL);
+                ret = AVERROR(EINVAL);
+                goto fail;
             }
             param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
             if (!param_definition) {
-                param_definition = add_param_definition(iamf, param, NULL, log_ctx);
-                if (!param_definition)
-                    return AVERROR(ENOMEM);
+                ret = add_param_definition(iamf, param, NULL, log_ctx);
+                if (ret < 0)
+                    goto fail;
             }
         }
     }
 
     tmp = av_realloc_array(iamf->mix_presentations, iamf->nb_mix_presentations + 1, sizeof(*iamf->mix_presentations));
-    if (!tmp)
-        return AVERROR(ENOMEM);
+    if (!tmp) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
 
     iamf->mix_presentations = tmp;
     iamf->mix_presentations[iamf->nb_mix_presentations++] = mix_presentation;
 
     return 0;
+fail:
+    ff_iamf_free_mix_presentation(&mix_presentation);
+    return ret;
 }
 
 static int iamf_write_codec_config(const IAMFContext *iamf,
@@ -468,7 +485,7 @@ static inline int rescale_rational(AVRational q, int b)
 static int scalable_channel_layout_config(const IAMFAudioElement *audio_element,
                                           AVIOContext *dyn_bc)
 {
-    const AVIAMFAudioElement *element = audio_element->element;
+    const AVIAMFAudioElement *element = audio_element->celement;
     uint8_t header[MAX_IAMF_OBU_HEADER_SIZE];
     PutBitContext pb;
 
@@ -506,7 +523,7 @@ static int scalable_channel_layout_config(const IAMFAudioElement *audio_element,
 static int ambisonics_config(const IAMFAudioElement *audio_element,
                              AVIOContext *dyn_bc)
 {
-    const AVIAMFAudioElement *element = audio_element->element;
+    const AVIAMFAudioElement *element = audio_element->celement;
     AVIAMFLayer *layer = element->layers[0];
 
     ffio_write_leb(dyn_bc, 0); // ambisonics_mode
@@ -568,7 +585,7 @@ static int iamf_write_audio_element(const IAMFContext *iamf,
                                     const IAMFAudioElement *audio_element,
                                     AVIOContext *pb, void *log_ctx)
 {
-    const AVIAMFAudioElement *element = audio_element->element;
+    const AVIAMFAudioElement *element = audio_element->celement;
     const IAMFCodecConfig *codec_config = iamf->codec_configs[audio_element->codec_config_id];
     uint8_t header[MAX_IAMF_OBU_HEADER_SIZE];
     AVIOContext *dyn_bc;
@@ -672,7 +689,7 @@ static int iamf_write_mixing_presentation(const IAMFContext *iamf,
                                           AVIOContext *pb, void *log_ctx)
 {
     uint8_t header[MAX_IAMF_OBU_HEADER_SIZE];
-    const AVIAMFMixPresentation *mix = mix_presentation->mix;
+    const AVIAMFMixPresentation *mix = mix_presentation->cmix;
     const AVDictionaryEntry *tag = NULL;
     PutBitContext pbc;
     AVIOContext *dyn_bc;
@@ -832,6 +849,228 @@ int ff_iamf_write_descriptors(const IAMFContext *iamf, AVIOContext *pb, void *lo
         if (ret < 0)
             return ret;
     }
+
+    return 0;
+}
+
+static int write_parameter_block(const IAMFContext *iamf, AVIOContext *pb,
+                                 const AVIAMFParamDefinition *param, void *log_ctx)
+{
+    uint8_t header[MAX_IAMF_OBU_HEADER_SIZE];
+    IAMFParamDefinition *param_definition = ff_iamf_get_param_definition(iamf, param->parameter_id);
+    PutBitContext pbc;
+    AVIOContext *dyn_bc;
+    uint8_t *dyn_buf = NULL;
+    int dyn_size, ret;
+
+    if (param->type > AV_IAMF_PARAMETER_DEFINITION_RECON_GAIN) {
+        av_log(log_ctx, AV_LOG_DEBUG, "Ignoring side data with unknown type %u\n",
+               param->type);
+        return 0;
+    }
+
+    if (!param_definition) {
+        av_log(log_ctx, AV_LOG_ERROR, "Non-existent Parameter Definition with ID %u referenced by a packet\n",
+               param->parameter_id);
+        return AVERROR(EINVAL);
+    }
+
+    if (param->type != param_definition->param->type) {
+        av_log(log_ctx, AV_LOG_ERROR, "Inconsistent values for Parameter Definition "
+                                "with ID %u in a packet\n",
+               param->parameter_id);
+        return AVERROR(EINVAL);
+    }
+
+    ret = avio_open_dyn_buf(&dyn_bc);
+    if (ret < 0)
+        return ret;
+
+    // Sequence Header
+    init_put_bits(&pbc, header, sizeof(header));
+    put_bits(&pbc, 5, IAMF_OBU_IA_PARAMETER_BLOCK);
+    put_bits(&pbc, 3, 0);
+    flush_put_bits(&pbc);
+    avio_write(pb, header, put_bytes_count(&pbc, 1));
+
+    ffio_write_leb(dyn_bc, param->parameter_id);
+    if (!param_definition->mode) {
+        ffio_write_leb(dyn_bc, param->duration);
+        ffio_write_leb(dyn_bc, param->constant_subblock_duration);
+        if (param->constant_subblock_duration == 0)
+            ffio_write_leb(dyn_bc, param->nb_subblocks);
+    }
+
+    for (int i = 0; i < param->nb_subblocks; i++) {
+        const void *subblock = av_iamf_param_definition_get_subblock(param, i);
+
+        switch (param->type) {
+        case AV_IAMF_PARAMETER_DEFINITION_MIX_GAIN: {
+            const AVIAMFMixGain *mix = subblock;
+            if (!param_definition->mode && param->constant_subblock_duration == 0)
+                ffio_write_leb(dyn_bc, mix->subblock_duration);
+
+            ffio_write_leb(dyn_bc, mix->animation_type);
+
+            avio_wb16(dyn_bc, rescale_rational(mix->start_point_value, 1 << 8));
+            if (mix->animation_type >= AV_IAMF_ANIMATION_TYPE_LINEAR)
+                avio_wb16(dyn_bc, rescale_rational(mix->end_point_value, 1 << 8));
+            if (mix->animation_type == AV_IAMF_ANIMATION_TYPE_BEZIER) {
+                avio_wb16(dyn_bc, rescale_rational(mix->control_point_value, 1 << 8));
+                avio_w8(dyn_bc, av_clip_uint8(av_rescale(mix->control_point_relative_time.num, 1 << 8,
+                                                         mix->control_point_relative_time.den)));
+            }
+            break;
+        }
+        case AV_IAMF_PARAMETER_DEFINITION_DEMIXING: {
+            const AVIAMFDemixingInfo *demix = subblock;
+            if (!param_definition->mode && param->constant_subblock_duration == 0)
+                ffio_write_leb(dyn_bc, demix->subblock_duration);
+
+            avio_w8(dyn_bc, demix->dmixp_mode << 5);
+            break;
+        }
+        case AV_IAMF_PARAMETER_DEFINITION_RECON_GAIN: {
+            const AVIAMFReconGain *recon = subblock;
+            const AVIAMFAudioElement *audio_element = param_definition->audio_element->celement;
+
+            if (!param_definition->mode && param->constant_subblock_duration == 0)
+                ffio_write_leb(dyn_bc, recon->subblock_duration);
+
+            if (!audio_element) {
+                av_log(log_ctx, AV_LOG_ERROR, "Invalid Parameter Definition with ID %u referenced by a packet\n", param->parameter_id);
+                return AVERROR(EINVAL);
+            }
+
+            for (int j = 0; j < audio_element->nb_layers; j++) {
+                const AVIAMFLayer *layer = audio_element->layers[j];
+
+                if (layer->flags & AV_IAMF_LAYER_FLAG_RECON_GAIN) {
+                    unsigned int recon_gain_flags = 0;
+                    int k = 0;
+
+                    for (; k < 7; k++)
+                        recon_gain_flags |= (1 << k) * !!recon->recon_gain[j][k];
+                    for (; k < 12; k++)
+                        recon_gain_flags |= (2 << k) * !!recon->recon_gain[j][k];
+                    if (recon_gain_flags >> 8)
+                        recon_gain_flags |= (1 << k);
+
+                    ffio_write_leb(dyn_bc, recon_gain_flags);
+                    for (k = 0; k < 12; k++) {
+                        if (recon->recon_gain[j][k])
+                            avio_w8(dyn_bc, recon->recon_gain[j][k]);
+                    }
+                }
+            }
+            break;
+        }
+        default:
+            av_assert0(0);
+        }
+    }
+
+    dyn_size = avio_get_dyn_buf(dyn_bc, &dyn_buf);
+    ffio_write_leb(pb, dyn_size);
+    avio_write(pb, dyn_buf, dyn_size);
+    ffio_free_dyn_buf(&dyn_bc);
+
+    return 0;
+}
+
+int ff_iamf_write_parameter_blocks(const IAMFContext *iamf, AVIOContext *pb,
+                                   AVPacket *pkt, void *log_ctx)
+{
+    AVIAMFParamDefinition *mix =
+        (AVIAMFParamDefinition *)av_packet_get_side_data(pkt,
+                                                         AV_PKT_DATA_IAMF_MIX_GAIN_PARAM,
+                                                         NULL);
+    AVIAMFParamDefinition *demix =
+        (AVIAMFParamDefinition *)av_packet_get_side_data(pkt,
+                                                         AV_PKT_DATA_IAMF_DEMIXING_INFO_PARAM,
+                                                         NULL);
+    AVIAMFParamDefinition *recon =
+        (AVIAMFParamDefinition *)av_packet_get_side_data(pkt,
+                                                         AV_PKT_DATA_IAMF_RECON_GAIN_INFO_PARAM,
+                                                         NULL);
+
+    if (mix) {
+        int ret = write_parameter_block(iamf, pb, mix, log_ctx);
+        if (ret < 0)
+           return ret;
+    }
+    if (demix) {
+        int ret = write_parameter_block(iamf, pb, demix, log_ctx);
+        if (ret < 0)
+            return ret;
+    }
+    if (recon) {
+        int ret = write_parameter_block(iamf, pb, recon, log_ctx);
+        if (ret < 0)
+           return ret;
+    }
+
+    return 0;
+}
+
+int ff_iamf_write_audio_frame(const IAMFContext *iamf, AVIOContext *pb,
+                              unsigned audio_substream_id, AVPacket *pkt)
+{
+    uint8_t header[MAX_IAMF_OBU_HEADER_SIZE];
+    PutBitContext pbc;
+    AVIOContext *dyn_bc;
+    uint8_t *side_data, *dyn_buf = NULL;
+    unsigned int skip_samples = 0, discard_padding = 0;
+    size_t side_data_size;
+    int dyn_size, type = audio_substream_id <= 17 ?
+                         audio_substream_id + IAMF_OBU_IA_AUDIO_FRAME_ID0 : IAMF_OBU_IA_AUDIO_FRAME;
+    int ret;
+
+    if (!pkt->size) {
+        uint8_t *new_extradata = av_packet_get_side_data(pkt,
+                                                         AV_PKT_DATA_NEW_EXTRADATA,
+                                                         NULL);
+
+        if (!new_extradata)
+            return AVERROR_INVALIDDATA;
+
+        // TODO: update FLAC Streaminfo on seekable output
+        return 0;
+    }
+
+    side_data = av_packet_get_side_data(pkt, AV_PKT_DATA_SKIP_SAMPLES,
+                                        &side_data_size);
+
+    if (side_data && side_data_size >= 10) {
+        skip_samples = AV_RL32(side_data);
+        discard_padding = AV_RL32(side_data + 4);
+    }
+
+    ret = avio_open_dyn_buf(&dyn_bc);
+    if (ret < 0)
+        return ret;
+
+    init_put_bits(&pbc, header, sizeof(header));
+    put_bits(&pbc, 5, type);
+    put_bits(&pbc, 1, 0); // obu_redundant_copy
+    put_bits(&pbc, 1, skip_samples || discard_padding);
+    put_bits(&pbc, 1, 0); // obu_extension_flag
+    flush_put_bits(&pbc);
+    avio_write(pb, header, put_bytes_count(&pbc, 1));
+
+    if (skip_samples || discard_padding) {
+        ffio_write_leb(dyn_bc, discard_padding);
+        ffio_write_leb(dyn_bc, skip_samples);
+    }
+
+    if (audio_substream_id > 17)
+        ffio_write_leb(dyn_bc, audio_substream_id);
+
+    dyn_size = avio_get_dyn_buf(dyn_bc, &dyn_buf);
+    ffio_write_leb(pb, dyn_size + pkt->size);
+    avio_write(pb, dyn_buf, dyn_size);
+    ffio_free_dyn_buf(&dyn_bc);
+    avio_write(pb, pkt->data, pkt->size);
 
     return 0;
 }

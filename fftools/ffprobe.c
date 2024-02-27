@@ -228,16 +228,18 @@ struct section {
     const char *element_name; ///< name of the contained element, if provided
     const char *unique_name;  ///< unique section name, in case the name is ambiguous
     AVDictionary *entries_to_show;
-    const char *(* get_type)(void *data); ///< function returning a type if defined, must be defined when SECTION_FLAG_HAS_TYPE is defined
+    const char *(* get_type)(const void *data); ///< function returning a type if defined, must be defined when SECTION_FLAG_HAS_TYPE is defined
     int show_all_entries;
 };
 
-static const char *get_packet_side_data_type(void *data) {
+static const char *get_packet_side_data_type(const void *data)
+{
     const AVPacketSideData *sd = (const AVPacketSideData *)data;
     return av_x_if_null(av_packet_side_data_name(sd->type), "unknown");
 }
 
-static const char *get_frame_side_data_type(void *data) {
+static const char *get_frame_side_data_type(const void *data)
+{
     const AVFrameSideData *sd = (const AVFrameSideData *)data;
     return av_x_if_null(av_frame_side_data_name(sd->type), "unknown");
 }
@@ -395,14 +397,14 @@ static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
 }
 
 struct unit_value {
-    union { double d; long long int i; } val;
+    union { double d; int64_t i; } val;
     const char *unit;
 };
 
 static char *value_string(char *buf, int buf_size, struct unit_value uv)
 {
     double vald;
-    long long int vali;
+    int64_t vali;
     int show_float = 0;
 
     if (uv.unit == unit_second_str) {
@@ -425,15 +427,15 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
         const char *prefix_string = "";
 
         if (use_value_prefix && vald > 1) {
-            long long int index;
+            int64_t index;
 
             if (uv.unit == unit_byte_str && use_byte_value_binary_prefix) {
-                index = (long long int) (log2(vald)) / 10;
+                index = (int64_t) (log2(vald)) / 10;
                 index = av_clip(index, 0, FF_ARRAY_ELEMS(si_prefixes) - 1);
                 vald /= si_prefixes[index].bin_val;
                 prefix_string = si_prefixes[index].bin_str;
             } else {
-                index = (long long int) (log10(vald)) / 3;
+                index = (int64_t) (log10(vald)) / 3;
                 index = av_clip(index, 0, FF_ARRAY_ELEMS(si_prefixes) - 1);
                 vald /= si_prefixes[index].dec_val;
                 prefix_string = si_prefixes[index].dec_str;
@@ -441,10 +443,10 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
             vali = vald;
         }
 
-        if (show_float || (use_value_prefix && vald != (long long int)vald))
+        if (show_float || (use_value_prefix && vald != (int64_t)vald))
             snprintf(buf, buf_size, "%f", vald);
         else
-            snprintf(buf, buf_size, "%lld", vali);
+            snprintf(buf, buf_size, "%"PRId64, vali);
         av_strlcatf(buf, buf_size, "%s%s%s", *prefix_string || show_value_unit ? " " : "",
                  prefix_string, show_value_unit ? uv.unit : "");
     }
@@ -474,9 +476,9 @@ typedef struct Writer {
     int  (*init)  (WriterContext *wctx);
     void (*uninit)(WriterContext *wctx);
 
-    void (*print_section_header)(WriterContext *wctx, void *data);
+    void (*print_section_header)(WriterContext *wctx, const void *data);
     void (*print_section_footer)(WriterContext *wctx);
-    void (*print_integer)       (WriterContext *wctx, const char *, long long int);
+    void (*print_integer)       (WriterContext *wctx, const char *, int64_t);
     void (*print_rational)      (WriterContext *wctx, AVRational *q, char *sep);
     void (*print_string)        (WriterContext *wctx, const char *, const char *);
     int flags;                  ///< a combination or WRITER_FLAG_*
@@ -728,7 +730,7 @@ fail:
 }
 
 static inline void writer_print_section_header(WriterContext *wctx,
-                                               void *data,
+                                               const void *data,
                                                int section_id)
 {
     int parent_section_id;
@@ -770,7 +772,7 @@ static inline void writer_print_section_footer(WriterContext *wctx)
 }
 
 static inline void writer_print_integer(WriterContext *wctx,
-                                        const char *key, long long int val)
+                                        const char *key, int64_t val)
 {
     const struct section *section = wctx->section[wctx->level];
 
@@ -789,7 +791,7 @@ static inline int validate_string(WriterContext *wctx, char **dstp, const char *
     av_bprint_init(&dstbuf, 0, AV_BPRINT_SIZE_UNLIMITED);
 
     endp = src + strlen(src);
-    for (p = (uint8_t *)src; *p;) {
+    for (p = src; *p;) {
         uint32_t code;
         int invalid = 0;
         const uint8_t *p0 = p;
@@ -1056,7 +1058,7 @@ static inline char *upcase_string(char *dst, size_t dst_size, const char *src)
     return dst;
 }
 
-static void default_print_section_header(WriterContext *wctx, void *data)
+static void default_print_section_header(WriterContext *wctx, const void *data)
 {
     DefaultContext *def = wctx->priv;
     char buf[32];
@@ -1103,13 +1105,13 @@ static void default_print_str(WriterContext *wctx, const char *key, const char *
     writer_printf(wctx, "%s\n", value);
 }
 
-static void default_print_int(WriterContext *wctx, const char *key, long long int value)
+static void default_print_int(WriterContext *wctx, const char *key, int64_t value)
 {
     DefaultContext *def = wctx->priv;
 
     if (!def->nokey)
         writer_printf(wctx, "%s%s=", wctx->section_pbuf[wctx->level].str, key);
-    writer_printf(wctx, "%lld\n", value);
+    writer_printf(wctx, "%"PRId64"\n", value);
 }
 
 static const Writer default_writer = {
@@ -1226,7 +1228,7 @@ static av_cold int compact_init(WriterContext *wctx)
     return 0;
 }
 
-static void compact_print_section_header(WriterContext *wctx, void *data)
+static void compact_print_section_header(WriterContext *wctx, const void *data)
 {
     CompactContext *compact = wctx->priv;
     const struct section *section = wctx->section[wctx->level];
@@ -1301,14 +1303,14 @@ static void compact_print_str(WriterContext *wctx, const char *key, const char *
     av_bprint_finalize(&buf, NULL);
 }
 
-static void compact_print_int(WriterContext *wctx, const char *key, long long int value)
+static void compact_print_int(WriterContext *wctx, const char *key, int64_t value)
 {
     CompactContext *compact = wctx->priv;
 
     if (wctx->nb_item[wctx->level]) writer_w8(wctx, compact->item_sep);
     if (!compact->nokey)
         writer_printf(wctx, "%s%s=", wctx->section_pbuf[wctx->level].str, key);
-    writer_printf(wctx, "%lld", value);
+    writer_printf(wctx, "%"PRId64, value);
 }
 
 static const Writer compact_writer = {
@@ -1423,7 +1425,7 @@ static const char *flat_escape_value_str(AVBPrint *dst, const char *src)
     return dst->str;
 }
 
-static void flat_print_section_header(WriterContext *wctx, void *data)
+static void flat_print_section_header(WriterContext *wctx, const void *data)
 {
     FlatContext *flat = wctx->priv;
     AVBPrint *buf = &wctx->section_pbuf[wctx->level];
@@ -1449,9 +1451,9 @@ static void flat_print_section_header(WriterContext *wctx, void *data)
     }
 }
 
-static void flat_print_int(WriterContext *wctx, const char *key, long long int value)
+static void flat_print_int(WriterContext *wctx, const char *key, int64_t value)
 {
-    writer_printf(wctx, "%s%s=%lld\n", wctx->section_pbuf[wctx->level].str, key, value);
+    writer_printf(wctx, "%s%s=%"PRId64"\n", wctx->section_pbuf[wctx->level].str, key, value);
 }
 
 static void flat_print_str(WriterContext *wctx, const char *key, const char *value)
@@ -1523,7 +1525,7 @@ static char *ini_escape_str(AVBPrint *dst, const char *src)
     return dst->str;
 }
 
-static void ini_print_section_header(WriterContext *wctx, void *data)
+static void ini_print_section_header(WriterContext *wctx, const void *data)
 {
     INIContext *ini = wctx->priv;
     AVBPrint *buf = &wctx->section_pbuf[wctx->level];
@@ -1567,9 +1569,9 @@ static void ini_print_str(WriterContext *wctx, const char *key, const char *valu
     av_bprint_finalize(&buf, NULL);
 }
 
-static void ini_print_int(WriterContext *wctx, const char *key, long long int value)
+static void ini_print_int(WriterContext *wctx, const char *key, int64_t value)
 {
-    writer_printf(wctx, "%s=%lld\n", key, value);
+    writer_printf(wctx, "%s=%"PRId64"\n", key, value);
 }
 
 static const Writer ini_writer = {
@@ -1634,7 +1636,7 @@ static const char *json_escape_str(AVBPrint *dst, const char *src, void *log_ctx
 
 #define JSON_INDENT() writer_printf(wctx, "%*c", json->indent_level * 4, ' ')
 
-static void json_print_section_header(WriterContext *wctx, void *data)
+static void json_print_section_header(WriterContext *wctx, const void *data)
 {
     JSONContext *json = wctx->priv;
     AVBPrint buf;
@@ -1720,7 +1722,7 @@ static void json_print_str(WriterContext *wctx, const char *key, const char *val
     json_print_item_str(wctx, key, value);
 }
 
-static void json_print_int(WriterContext *wctx, const char *key, long long int value)
+static void json_print_int(WriterContext *wctx, const char *key, int64_t value)
 {
     JSONContext *json = wctx->priv;
     const struct section *parent_section = wctx->level ?
@@ -1733,7 +1735,7 @@ static void json_print_int(WriterContext *wctx, const char *key, long long int v
         JSON_INDENT();
 
     av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
-    writer_printf(wctx, "\"%s\": %lld", json_escape_str(&buf, key, wctx), value);
+    writer_printf(wctx, "\"%s\": %"PRId64, json_escape_str(&buf, key, wctx), value);
     av_bprint_finalize(&buf, NULL);
 }
 
@@ -1795,7 +1797,7 @@ static av_cold int xml_init(WriterContext *wctx)
 
 #define XML_INDENT() writer_printf(wctx, "%*c", xml->indent_level * 4, ' ')
 
-static void xml_print_section_header(WriterContext *wctx, void *data)
+static void xml_print_section_header(WriterContext *wctx, const void *data)
 {
     XMLContext *xml = wctx->priv;
     const struct section *section = wctx->section[wctx->level];
@@ -1858,7 +1860,8 @@ static void xml_print_section_footer(WriterContext *wctx)
     }
 }
 
-static void xml_print_value(WriterContext *wctx, const char *key, const void *value, const int is_int)
+static void xml_print_value(WriterContext *wctx, const char *key,
+                            const char *str, int64_t num, const int is_int)
 {
     AVBPrint buf;
     XMLContext *xml = wctx->priv;
@@ -1876,9 +1879,9 @@ static void xml_print_value(WriterContext *wctx, const char *key, const void *va
         av_bprint_clear(&buf);
 
         if (is_int) {
-            writer_printf(wctx, " value=\"%lld\"/>\n", *(long long int *)value);
+            writer_printf(wctx, " value=\"%"PRId64"\"/>\n", num);
         } else {
-            av_bprint_escape(&buf, (const char *)value, NULL,
+            av_bprint_escape(&buf, str, NULL,
                              AV_ESCAPE_MODE_XML, AV_ESCAPE_FLAG_XML_DOUBLE_QUOTES);
             writer_printf(wctx, " value=\"%s\"/>\n", buf.str);
         }
@@ -1888,9 +1891,9 @@ static void xml_print_value(WriterContext *wctx, const char *key, const void *va
             writer_w8(wctx, ' ');
 
         if (is_int) {
-            writer_printf(wctx, "%s=\"%lld\"", key, *(long long int *)value);
+            writer_printf(wctx, "%s=\"%"PRId64"\"", key, num);
         } else {
-            av_bprint_escape(&buf, (const char *)value, NULL,
+            av_bprint_escape(&buf, str, NULL,
                              AV_ESCAPE_MODE_XML, AV_ESCAPE_FLAG_XML_DOUBLE_QUOTES);
             writer_printf(wctx, "%s=\"%s\"", key, buf.str);
         }
@@ -1900,11 +1903,12 @@ static void xml_print_value(WriterContext *wctx, const char *key, const void *va
 }
 
 static inline void xml_print_str(WriterContext *wctx, const char *key, const char *value) {
-    xml_print_value(wctx, key, (const void *)value, 0);
+    xml_print_value(wctx, key, value, 0, 0);
 }
 
-static inline void xml_print_int(WriterContext *wctx, const char *key, long long int value) {
-    xml_print_value(wctx, key, (const void *)&value, 1);
+static void xml_print_int(WriterContext *wctx, const char *key, int64_t value)
+{
+    xml_print_value(wctx, key, NULL, value, 1);
 }
 
 static Writer xml_writer = {
@@ -2334,7 +2338,7 @@ static void print_pkt_side_data(WriterContext *w,
 {
         const char *name = av_packet_side_data_name(sd->type);
 
-        writer_print_section_header(w, (void *)sd, id_data);
+        writer_print_section_header(w, sd, id_data);
         print_str("side_data_type", name ? name : "unknown");
         if (sd->type == AV_PKT_DATA_DISPLAYMATRIX && sd->size >= 9*4) {
             double rotation = av_display_rotation_get((int32_t *)sd->data);
@@ -2635,7 +2639,7 @@ static void print_frame_side_data(WriterContext *w,
         const AVFrameSideData *sd = frame->side_data[i];
         const char *name;
 
-        writer_print_section_header(w, (void *)sd, SECTION_ID_FRAME_SIDE_DATA);
+        writer_print_section_header(w, sd, SECTION_ID_FRAME_SIDE_DATA);
         name = av_frame_side_data_name(sd->type);
         print_str("side_data_type", name ? name : "unknown");
         if (sd->type == AV_FRAME_DATA_DISPLAYMATRIX && sd->size >= 9*4) {

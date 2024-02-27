@@ -86,6 +86,11 @@ typedef struct IAMFSubStream {
 } IAMFSubStream;
 
 typedef struct IAMFAudioElement {
+    const AVIAMFAudioElement *celement;
+    /**
+     * element backs celement iff the AVIAMFAudioElement
+     * is owned by this structure.
+     */
     AVIAMFAudioElement *element;
     unsigned int audio_element_id;
 
@@ -94,12 +99,16 @@ typedef struct IAMFAudioElement {
 
     unsigned int codec_config_id;
 
-    // mux
     IAMFLayer *layers;
     unsigned int nb_layers;
 } IAMFAudioElement;
 
 typedef struct IAMFMixPresentation {
+    const AVIAMFMixPresentation *cmix;
+    /**
+     * mix backs cmix iff the AVIAMFMixPresentation
+     * is owned by this structure.
+     */
     AVIAMFMixPresentation *mix;
     unsigned int mix_presentation_id;
 

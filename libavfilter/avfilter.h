@@ -611,13 +611,6 @@ struct AVFilterLink {
      */
     AVFilterFormatsConfig outcfg;
 
-    /** stage of the initialization of the link properties (dimensions, etc) */
-    enum {
-        AVLINK_UNINIT = 0,      ///< not started
-        AVLINK_STARTINIT,       ///< started, but incomplete
-        AVLINK_INIT             ///< complete
-    } init_state;
-
     /**
      * Graph the filter belongs to.
      */
@@ -634,11 +627,6 @@ struct AVFilterLink {
      * frame(s), in AV_TIME_BASE units.
      */
     int64_t current_pts_us;
-
-    /**
-     * Index in the age array.
-     */
-    int age_index;
 
     /**
      * Frame rate of the stream on the link, or 1/0 if unknown or variable;
@@ -679,11 +667,6 @@ struct AVFilterLink {
     int64_t sample_count_in, sample_count_out;
 
     /**
-     * A pointer to a FFFramePool struct.
-     */
-    void *frame_pool;
-
-    /**
      * True if a frame is currently wanted on the output of this filter.
      * Set when ff_request_frame() is called by the output,
      * cleared when a frame is filtered.
@@ -695,51 +678,6 @@ struct AVFilterLink {
      * AVHWFramesContext describing the frames.
      */
     AVBufferRef *hw_frames_ctx;
-
-#ifndef FF_INTERNAL_FIELDS
-
-    /**
-     * Internal structure members.
-     * The fields below this limit are internal for libavfilter's use
-     * and must in no way be accessed by applications.
-     */
-    char reserved[0xF000];
-
-#else /* FF_INTERNAL_FIELDS */
-
-    /**
-     * Queue of frames waiting to be filtered.
-     */
-    FFFrameQueue fifo;
-
-    /**
-     * If set, the source filter can not generate a frame as is.
-     * The goal is to avoid repeatedly calling the request_frame() method on
-     * the same link.
-     */
-    int frame_blocked_in;
-
-    /**
-     * Link input status.
-     * If not zero, all attempts of filter_frame will fail with the
-     * corresponding code.
-     */
-    int status_in;
-
-    /**
-     * Timestamp of the input status change.
-     */
-    int64_t status_in_pts;
-
-    /**
-     * Link output status.
-     * If not zero, all attempts of request_frame will fail with the
-     * corresponding code.
-     */
-    int status_out;
-
-#endif /* FF_INTERNAL_FIELDS */
-
 };
 
 /**
@@ -944,18 +882,6 @@ typedef struct AVFilterGraph {
     avfilter_execute_func *execute;
 
     char *aresample_swr_opts; ///< swr options to use for the auto-inserted aresample filters, Access ONLY through AVOptions
-
-    /**
-     * Private fields
-     *
-     * The following fields are for internal use only.
-     * Their type, offset, number and semantic can change without notice.
-     */
-
-    AVFilterLink **sink_links;
-    int sink_links_count;
-
-    unsigned disable_auto_convert;
 } AVFilterGraph;
 
 /**

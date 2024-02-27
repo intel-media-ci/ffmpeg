@@ -250,6 +250,32 @@ typedef struct OptionsContext {
     SpecifierOptList mux_stats_fmt;
 } OptionsContext;
 
+enum IFilterFlags {
+    IFILTER_FLAG_AUTOROTATE     = (1 << 0),
+    IFILTER_FLAG_REINIT         = (1 << 1),
+    IFILTER_FLAG_CFR            = (1 << 2),
+};
+
+typedef struct InputFilterOptions {
+    int64_t             trim_start_us;
+    int64_t             trim_end_us;
+
+    uint8_t            *name;
+
+    /* When IFILTER_FLAG_CFR is set, the stream is guaranteed to be CFR with
+     * this framerate.
+     *
+     * Otherwise, this is an estimate that should not be relied upon to be
+     * accurate */
+    AVRational          framerate;
+
+    int                 sub2video_width;
+    int                 sub2video_height;
+
+    // a combination of IFILTER_FLAG_*
+    unsigned            flags;
+} InputFilterOptions;
+
 typedef struct InputFilter {
     struct FilterGraph *graph;
     uint8_t            *name;
@@ -347,8 +373,6 @@ typedef struct InputStream {
     Decoder              *decoder;
     const AVCodec        *dec;
 
-    AVRational            framerate_guessed;
-
     /* framerate forced with -r */
     AVRational            framerate;
 #if FFMPEG_OPT_TOP
@@ -358,10 +382,6 @@ typedef struct InputStream {
     int                   autorotate;
 
     int                   fix_sub_duration;
-
-    struct sub2video {
-        int w, h;
-    } sub2video;
 
     /* decoded data from this stream goes into all those filters
      * currently video and audio only */
@@ -375,8 +395,6 @@ typedef struct InputStream {
      */
     struct OutputStream **outputs;
     int                nb_outputs;
-
-    int reinit_filters;
 } InputStream;
 
 typedef struct InputFile {
@@ -394,15 +412,12 @@ typedef struct InputFile {
     int64_t          ts_offset;
     /* user-specified start time in AV_TIME_BASE or AV_NOPTS_VALUE */
     int64_t          start_time;
-    int64_t          recording_time;
 
     /* streams that ffmpeg is aware of;
      * there may be extra streams in ctx that are not mapped to an InputStream
      * if new streams appear dynamically during demuxing */
     InputStream    **streams;
     int           nb_streams;
-
-    int              accurate_seek;
 } InputFile;
 
 enum forced_keyframes_const {
@@ -555,7 +570,7 @@ typedef struct OutputStream {
     AVDictionary *swr_opts;
     char *apad;
 
-    const char *attachment_filename;
+    char *attachment_filename;
 
     int keep_pix_fmt;
 
@@ -694,9 +709,6 @@ int init_simple_filtergraph(InputStream *ist, OutputStream *ost,
                             Scheduler *sch, unsigned sch_idx_enc);
 int init_complex_filtergraph(FilterGraph *fg);
 
-int copy_av_subtitle(AVSubtitle *dst, const AVSubtitle *src);
-int subtitle_wrap_frame(AVFrame *frame, AVSubtitle *subtitle, int copy);
-
 /**
  * Get our axiliary frame data attached to the frame, allocating it
  * if needed.
@@ -790,7 +802,8 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch);
 void ifile_close(InputFile **f);
 
 int ist_output_add(InputStream *ist, OutputStream *ost);
-int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple);
+int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
+                   InputFilterOptions *opts);
 
 /**
  * Find an unused input stream of given type.

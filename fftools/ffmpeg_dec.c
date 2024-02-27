@@ -35,20 +35,20 @@
 #include "thread_queue.h"
 
 typedef struct DecoderPriv {
-    Decoder          dec;
+    Decoder             dec;
 
-    AVCodecContext  *dec_ctx;
+    AVCodecContext     *dec_ctx;
 
-    AVFrame         *frame;
-    AVPacket        *pkt;
+    AVFrame            *frame;
+    AVPacket           *pkt;
 
     // override output video sample aspect ratio with this value
-    AVRational       sar_override;
+    AVRational          sar_override;
 
-    AVRational       framerate_in;
+    AVRational          framerate_in;
 
     // a combination of DECODER_FLAG_*, provided to dec_open()
-    int              flags;
+    int                 flags;
 
     enum AVPixelFormat  hwaccel_pix_fmt;
     enum HWAccelID      hwaccel_id;
@@ -58,22 +58,22 @@ typedef struct DecoderPriv {
     // pts/estimated duration of the last decoded frame
     // * in decoder timebase for video,
     // * in last_frame_tb (may change during decoding) for audio
-    int64_t         last_frame_pts;
-    int64_t         last_frame_duration_est;
-    AVRational      last_frame_tb;
-    int64_t         last_filter_in_rescale_delta;
-    int             last_frame_sample_rate;
+    int64_t             last_frame_pts;
+    int64_t             last_frame_duration_est;
+    AVRational          last_frame_tb;
+    int64_t             last_filter_in_rescale_delta;
+    int                 last_frame_sample_rate;
 
     /* previous decoded subtitles */
-    AVFrame *sub_prev[2];
-    AVFrame *sub_heartbeat;
+    AVFrame            *sub_prev[2];
+    AVFrame            *sub_heartbeat;
 
-    Scheduler      *sch;
-    unsigned        sch_idx;
+    Scheduler          *sch;
+    unsigned            sch_idx;
 
-    void           *log_parent;
-    char            log_name[32];
-    char           *parent_name;
+    void               *log_parent;
+    char                log_name[32];
+    char               *parent_name;
 } DecoderPriv;
 
 static DecoderPriv *dp_from_dec(Decoder *d)
@@ -367,6 +367,126 @@ static int video_frame_process(DecoderPriv *dp, AVFrame *frame)
 
     if (dp->sar_override.num)
         frame->sample_aspect_ratio = dp->sar_override;
+
+    return 0;
+}
+
+static int copy_av_subtitle(AVSubtitle *dst, const AVSubtitle *src)
+{
+    int ret = AVERROR_BUG;
+    AVSubtitle tmp = {
+        .format = src->format,
+        .start_display_time = src->start_display_time,
+        .end_display_time = src->end_display_time,
+        .num_rects = 0,
+        .rects = NULL,
+        .pts = src->pts
+    };
+
+    if (!src->num_rects)
+        goto success;
+
+    if (!(tmp.rects = av_calloc(src->num_rects, sizeof(*tmp.rects))))
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i < src->num_rects; i++) {
+        AVSubtitleRect *src_rect = src->rects[i];
+        AVSubtitleRect *dst_rect;
+
+        if (!(dst_rect = tmp.rects[i] = av_mallocz(sizeof(*tmp.rects[0])))) {
+            ret = AVERROR(ENOMEM);
+            goto cleanup;
+        }
+
+        tmp.num_rects++;
+
+        dst_rect->type      = src_rect->type;
+        dst_rect->flags     = src_rect->flags;
+
+        dst_rect->x         = src_rect->x;
+        dst_rect->y         = src_rect->y;
+        dst_rect->w         = src_rect->w;
+        dst_rect->h         = src_rect->h;
+        dst_rect->nb_colors = src_rect->nb_colors;
+
+        if (src_rect->text)
+            if (!(dst_rect->text = av_strdup(src_rect->text))) {
+                ret = AVERROR(ENOMEM);
+                goto cleanup;
+            }
+
+        if (src_rect->ass)
+            if (!(dst_rect->ass = av_strdup(src_rect->ass))) {
+                ret = AVERROR(ENOMEM);
+                goto cleanup;
+            }
+
+        for (int j = 0; j < 4; j++) {
+            // SUBTITLE_BITMAP images are special in the sense that they
+            // are like PAL8 images. first pointer to data, second to
+            // palette. This makes the size calculation match this.
+            size_t buf_size = src_rect->type == SUBTITLE_BITMAP && j == 1 ?
+                              AVPALETTE_SIZE :
+                              src_rect->h * src_rect->linesize[j];
+
+            if (!src_rect->data[j])
+                continue;
+
+            if (!(dst_rect->data[j] = av_memdup(src_rect->data[j], buf_size))) {
+                ret = AVERROR(ENOMEM);
+                goto cleanup;
+            }
+            dst_rect->linesize[j] = src_rect->linesize[j];
+        }
+    }
+
+success:
+    *dst = tmp;
+
+    return 0;
+
+cleanup:
+    avsubtitle_free(&tmp);
+
+    return ret;
+}
+
+static void subtitle_free(void *opaque, uint8_t *data)
+{
+    AVSubtitle *sub = (AVSubtitle*)data;
+    avsubtitle_free(sub);
+    av_free(sub);
+}
+
+static int subtitle_wrap_frame(AVFrame *frame, AVSubtitle *subtitle, int copy)
+{
+    AVBufferRef *buf;
+    AVSubtitle *sub;
+    int ret;
+
+    if (copy) {
+        sub = av_mallocz(sizeof(*sub));
+        ret = sub ? copy_av_subtitle(sub, subtitle) : AVERROR(ENOMEM);
+        if (ret < 0) {
+            av_freep(&sub);
+            return ret;
+        }
+    } else {
+        sub = av_memdup(subtitle, sizeof(*subtitle));
+        if (!sub)
+            return AVERROR(ENOMEM);
+        memset(subtitle, 0, sizeof(*subtitle));
+    }
+
+    buf = av_buffer_create((uint8_t*)sub, sizeof(*sub),
+                           subtitle_free, NULL, 0);
+    if (!buf) {
+        avsubtitle_free(sub);
+        av_freep(&sub);
+        return AVERROR(ENOMEM);
+    }
+
+    frame->buf[0] = buf;
 
     return 0;
 }
@@ -751,14 +871,13 @@ static enum AVPixelFormat get_format(AVCodecContext *s, const enum AVPixelFormat
     for (p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(*p);
         const AVCodecHWConfig  *config = NULL;
-        int i;
 
         if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL))
             break;
 
         if (dp->hwaccel_id == HWACCEL_GENERIC ||
             dp->hwaccel_id == HWACCEL_AUTO) {
-            for (i = 0;; i++) {
+            for (int i = 0;; i++) {
                 config = avcodec_get_hw_config(s->codec, i);
                 if (!config)
                     break;
@@ -782,8 +901,7 @@ static HWDevice *hw_device_match_by_codec(const AVCodec *codec)
 {
     const AVCodecHWConfig *config;
     HWDevice *dev;
-    int i;
-    for (i = 0;; i++) {
+    for (int i = 0;; i++) {
         config = avcodec_get_hw_config(codec, i);
         if (!config)
             return NULL;
@@ -861,12 +979,11 @@ static int hw_device_setup_for_decode(DecoderPriv *dp,
     }
 
     if (auto_device) {
-        int i;
         if (!avcodec_get_hw_config(codec, 0)) {
             // Decoder does not support any hardware devices.
             return 0;
         }
-        for (i = 0; !dev; i++) {
+        for (int i = 0; !dev; i++) {
             config = avcodec_get_hw_config(codec, i);
             if (!config)
                 break;
@@ -878,7 +995,7 @@ static int hw_device_setup_for_decode(DecoderPriv *dp,
                        av_hwdevice_get_type_name(type), dev->name);
             }
         }
-        for (i = 0; !dev; i++) {
+        for (int i = 0; !dev; i++) {
             config = avcodec_get_hw_config(codec, i);
             if (!config)
                 break;

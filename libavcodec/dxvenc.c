@@ -27,6 +27,7 @@
 
 #include "bytestream.h"
 #include "codec_internal.h"
+#include "dxv.h"
 #include "encode.h"
 #include "texturedsp.h"
 
@@ -39,10 +40,6 @@
  */
 #define LOOKBACK_HT_ELEMS 0x40000
 #define LOOKBACK_WORDS    0x20202
-
-enum DXVTextureFormat {
-    DXV_FMT_DXT1 = MKBETAG('D', 'X', 'T', '1'),
-};
 
 typedef struct HTEntry {
     uint32_t key;
@@ -120,7 +117,7 @@ typedef struct DXVEncContext {
 
     TextureDSPThreadContext enc;
 
-    enum DXVTextureFormat tex_fmt;
+    DXVTextureFormat tex_fmt;
     int (*compress_tex)(AVCodecContext *avctx);
 
     const AVCRC *crc_ctx;
@@ -236,6 +233,8 @@ static int dxv_encode(AVCodecContext *avctx, AVPacket *pkt,
         ctx->enc.tex_data.out = ctx->tex_data;
         ctx->enc.frame_data.in = frame->data[0];
         ctx->enc.stride = frame->linesize[0];
+        ctx->enc.width  = avctx->width;
+        ctx->enc.height = avctx->height;
         ff_texturedsp_exec_compress_threads(avctx, &ctx->enc);
     } else {
         /* unimplemented: YCoCg formats */
@@ -275,6 +274,14 @@ static av_cold int dxv_init(AVCodecContext *avctx)
         return ret;
     }
 
+    if (avctx->width % TEXTURE_BLOCK_W || avctx->height % TEXTURE_BLOCK_H) {
+        av_log(avctx,
+               AV_LOG_ERROR,
+               "Video size %dx%d is not multiple of "AV_STRINGIFY(TEXTURE_BLOCK_W)"x"AV_STRINGIFY(TEXTURE_BLOCK_H)".\n",
+               avctx->width, avctx->height);
+        return AVERROR_INVALIDDATA;
+    }
+
     ff_texturedspenc_init(&texdsp);
 
     switch (ctx->tex_fmt) {
@@ -288,10 +295,10 @@ static av_cold int dxv_init(AVCodecContext *avctx)
         return AVERROR_INVALIDDATA;
     }
     ctx->enc.raw_ratio = 16;
-    ctx->tex_size = FFALIGN(avctx->width, 16) / TEXTURE_BLOCK_W *
-                    FFALIGN(avctx->height, 16) / TEXTURE_BLOCK_H *
+    ctx->tex_size = avctx->width  / TEXTURE_BLOCK_W *
+                    avctx->height / TEXTURE_BLOCK_H *
                     ctx->enc.tex_ratio;
-    ctx->enc.slice_count = av_clip(avctx->thread_count, 1, FFALIGN(avctx->height, 16) / TEXTURE_BLOCK_H);
+    ctx->enc.slice_count = av_clip(avctx->thread_count, 1, avctx->height / TEXTURE_BLOCK_H);
 
     ctx->tex_data = av_malloc(ctx->tex_size);
     if (!ctx->tex_data) {
@@ -319,8 +326,8 @@ static av_cold int dxv_close(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(DXVEncContext, x)
 #define FLAGS     AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
-    { "format", NULL, OFFSET(tex_fmt), AV_OPT_TYPE_INT, { .i64 = DXV_FMT_DXT1 }, DXV_FMT_DXT1, DXV_FMT_DXT1, FLAGS, "format" },
-        { "dxt1", "DXT1 (Normal Quality, No Alpha)", 0, AV_OPT_TYPE_CONST, { .i64 = DXV_FMT_DXT1   }, 0, 0, FLAGS, "format" },
+    { "format", NULL, OFFSET(tex_fmt), AV_OPT_TYPE_INT, { .i64 = DXV_FMT_DXT1 }, DXV_FMT_DXT1, DXV_FMT_DXT1, FLAGS, .unit = "format" },
+        { "dxt1", "DXT1 (Normal Quality, No Alpha)", 0, AV_OPT_TYPE_CONST, { .i64 = DXV_FMT_DXT1   }, 0, 0, FLAGS, .unit = "format" },
     { NULL },
 };
 

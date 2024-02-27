@@ -85,7 +85,7 @@
 /**
  * Value of the luma sample at position (x, y) in the 2D array tab.
  */
-#define SAMPLE(tab, x, y) ((tab)[(y) * s->sps->width + (x)])
+#define SAMPLE(tab, x, y) ((tab)[(y) * s->pps->width + (x)])
 #define SAMPLE_CTB(tab, x, y) ((tab)[(y) * min_cb_width + (x)])
 #define CTB(tab, x, y) ((tab)[(y) * fc->ps.pps->ctb_width + (x)])
 
@@ -217,6 +217,7 @@ typedef enum PredFlag {
     PF_L0    = 0x1,
     PF_L1    = 0x2,
     PF_BI    = 0x3,
+    PF_IBC   = PF_L0 | 0x4,
 } PredFlag;
 
 typedef enum IntraPredMode {
@@ -357,8 +358,11 @@ typedef struct EntryPoint {
     int ctu_end;
 
     uint8_t is_first_qg;                            // first quantization group
+
     MvField hmvp[MAX_NUM_HMVP_CANDS];               ///< HmvpCandList
     int     num_hmvp;                               ///< NumHmvpCand
+    MvField hmvp_ibc[MAX_NUM_HMVP_CANDS];           ///< HmvpIbcCandList
+    int     num_hmvp_ibc;                           ///< NumHmvpIbcCand
 } EntryPoint;
 
 typedef struct VVCLocalContext {

@@ -177,9 +177,6 @@ static int sps_derive(VVCSPS *sps, void *log_ctx)
     int ret;
     const H266RawSPS *r = sps->r;
 
-    sps->width  = r->sps_pic_width_max_in_luma_samples;
-    sps->height = r->sps_pic_height_max_in_luma_samples;
-
     ret = sps_bit_depth(sps, log_ctx);
     if (ret < 0)
         return ret;
@@ -645,9 +642,9 @@ static int lmcs_derive_lut(VVCLMCS *lmcs, const H266RawAPS *rlmcs, const H266Raw
         const uint16_t fwd_sample = lmcs_derive_lut_sample(sample, lmcs->pivot,
             input_pivot, scale_coeff, idx_y, max);
         if (bit_depth > 8)
-            ((uint16_t *)lmcs->fwd_lut)[sample] = fwd_sample;
+            lmcs->fwd_lut.u16[sample] = fwd_sample;
         else
-            lmcs->fwd_lut[sample] = fwd_sample;
+            lmcs->fwd_lut.u8 [sample] = fwd_sample;
 
     }
 
@@ -655,16 +652,16 @@ static int lmcs_derive_lut(VVCLMCS *lmcs, const H266RawAPS *rlmcs, const H266Raw
     i = lmcs->min_bin_idx;
     for (uint16_t sample = 0; sample < max; sample++) {
         uint16_t inv_sample;
-        while (sample >= lmcs->pivot[i + 1] && i <= lmcs->max_bin_idx)
+        while (i <= lmcs->max_bin_idx && sample >= lmcs->pivot[i + 1])
             i++;
 
         inv_sample = lmcs_derive_lut_sample(sample, input_pivot, lmcs->pivot,
             inv_scale_coeff, i, max);
 
         if (bit_depth > 8)
-            ((uint16_t *)lmcs->inv_lut)[sample] = inv_sample;
+            lmcs->inv_lut.u16[sample] = inv_sample;
         else
-            lmcs->inv_lut[sample] = inv_sample;
+            lmcs->inv_lut.u8 [sample] = inv_sample;
     }
 
     return 0;

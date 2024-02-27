@@ -93,7 +93,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         *den    = ((AVRational *)dst)->den;
         return 0;
     case AV_OPT_TYPE_CONST:
-        *num = o->default_val.dbl;
+        *intnum = o->default_val.i64;
         return 0;
     }
     return AVERROR(EINVAL);
@@ -444,16 +444,26 @@ static int set_string_fmt(void *obj, const AVOption *o, const char *val, uint8_t
     return 0;
 }
 
+static int get_pix_fmt(const char *name)
+{
+    return av_get_pix_fmt(name);
+}
+
 static int set_string_pixel_fmt(void *obj, const AVOption *o, const char *val, uint8_t *dst)
 {
     return set_string_fmt(obj, o, val, dst,
-                          AV_PIX_FMT_NB, av_get_pix_fmt, "pixel format");
+                          AV_PIX_FMT_NB, get_pix_fmt, "pixel format");
+}
+
+static int get_sample_fmt(const char *name)
+{
+    return av_get_sample_fmt(name);
 }
 
 static int set_string_sample_fmt(void *obj, const AVOption *o, const char *val, uint8_t *dst)
 {
     return set_string_fmt(obj, o, val, dst,
-                          AV_SAMPLE_FMT_NB, av_get_sample_fmt, "sample format");
+                          AV_SAMPLE_FMT_NB, get_sample_fmt, "sample format");
 }
 
 static int set_string_dict(void *obj, const AVOption *o, const char *val, uint8_t **dst)
@@ -878,7 +888,7 @@ int av_opt_get(void *obj, const char *name, int search_flags, uint8_t **out_val)
         ret = snprintf(buf, sizeof(buf), "%d/%d", ((AVRational *)dst)->num, ((AVRational *)dst)->den);
         break;
     case AV_OPT_TYPE_CONST:
-        ret = snprintf(buf, sizeof(buf), "%f", o->default_val.dbl);
+        ret = snprintf(buf, sizeof(buf), "%"PRId64, o->default_val.i64);
         break;
     case AV_OPT_TYPE_STRING:
         if (*(uint8_t **)dst) {
