@@ -119,6 +119,8 @@ typedef struct VVCPPS {
     uint16_t *row_bd;
     uint16_t *ctb_to_col_bd;
     uint16_t *ctb_to_row_bd;
+    uint16_t *ctb_to_col_idx;
+    uint16_t *ctb_to_row_idx;
 
     uint16_t width32;                       ///< width  in 32 pixels
     uint16_t height32;                      ///< height in 32 pixels

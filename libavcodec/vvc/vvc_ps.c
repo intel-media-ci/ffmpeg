@@ -276,27 +276,39 @@ static void pps_width_height(VVCPPS *pps, const VVCSPS *sps)
 static int pps_bd(VVCPPS *pps)
 {
     const H266RawPPS *r = pps->r;
+    int i, idx;
 
-    pps->col_bd        = av_calloc(r->num_tile_columns  + 1, sizeof(*pps->col_bd));
-    pps->row_bd        = av_calloc(r->num_tile_rows  + 1,    sizeof(*pps->row_bd));
-    pps->ctb_to_col_bd = av_calloc(pps->ctb_width  + 1,      sizeof(*pps->ctb_to_col_bd));
-    pps->ctb_to_row_bd = av_calloc(pps->ctb_height + 1,      sizeof(*pps->ctb_to_col_bd));
+    pps->col_bd         = av_calloc(r->num_tile_columns + 1, sizeof(*pps->col_bd));
+    pps->row_bd         = av_calloc(r->num_tile_rows    + 1, sizeof(*pps->row_bd));
+    pps->ctb_to_col_bd  = av_calloc(pps->ctb_width      + 1, sizeof(*pps->ctb_to_col_bd));
+    pps->ctb_to_row_bd  = av_calloc(pps->ctb_height     + 1, sizeof(*pps->ctb_to_col_bd));
+    pps->ctb_to_col_idx = av_calloc(pps->ctb_width      + 1, sizeof(*pps->ctb_to_col_idx));
+    pps->ctb_to_row_idx = av_calloc(pps->ctb_height     + 1, sizeof(*pps->ctb_to_row_idx));
+
     if (!pps->col_bd || !pps->row_bd || !pps->ctb_to_col_bd || !pps->ctb_to_row_bd)
         return AVERROR(ENOMEM);
 
-    for (int i = 0, j = 0; i < r->num_tile_columns; i++) {
-        pps->col_bd[i] = j;
-        j += r->col_width_val[i];
-        for (int k = pps->col_bd[i]; k < j; k++)
-            pps->ctb_to_col_bd[k] = pps->col_bd[i];
+    for (pps->col_bd[0] = 0, i = 0; i < r->num_tile_columns; i++)
+        pps->col_bd[i + 1] = pps->col_bd[i] + r->col_width_val[i];
+    for (pps->row_bd[0] = 0, i = 0; i < r->num_tile_rows; i++)
+        pps->row_bd[i + 1] = pps->row_bd[i] + r->row_height_val[i];
+
+    idx = 0;
+    for (i = 0; i <= pps->ctb_width; i++) {
+        if (i == pps->col_bd[idx + 1])
+            idx++;
+        pps->ctb_to_col_bd[i] = pps->col_bd[idx];
+        pps->ctb_to_col_idx[i] = idx;
     }
 
-    for (int i = 0, j = 0; i < r->num_tile_rows; i++) {
-        pps->row_bd[i] = j;
-        j += r->row_height_val[i];
-        for (int k = pps->row_bd[i]; k < j; k++)
-            pps->ctb_to_row_bd[k] = pps->row_bd[i];
+    idx = 0;
+    for (i = 0; i <= pps->ctb_height; i++) {
+        if (i == pps->row_bd[idx + 1])
+            idx++;
+        pps->ctb_to_row_bd[i] = pps->row_bd[idx];
+        pps->ctb_to_row_idx[i] = idx;
     }
+
     return 0;
 }
 
@@ -378,20 +390,85 @@ static void pps_multi_tiles_slice(VVCPPS *pps, const int tile_idx, const int i, 
     }
 }
 
-static void pps_rect_slice(VVCPPS* pps)
+static void pps_one_slice_per_subpic(VVCPPS *pps, const VVCSPS *sps)
+{
+    const H266RawPPS* rpps = pps->r;
+    const H266RawSPS* rsps = sps->r;
+    uint16_t *subpic_width, *subpic_height;
+    uint8_t *subpic_flag;
+    int offset = 0;
+    int i, j;
+
+    subpic_width  = av_calloc(rsps->sps_num_subpics_minus1 + 1, sizeof(*subpic_width));
+    subpic_height = av_calloc(rsps->sps_num_subpics_minus1 + 1, sizeof(*subpic_height));
+    subpic_flag   = av_calloc(rsps->sps_num_subpics_minus1 + 1, sizeof(*subpic_flag));
+
+    for (i = 0; i <= rsps->sps_num_subpics_minus1; i++) {
+        int leftx, rightx, topy, bottomy;
+        leftx   = rsps->sps_subpic_ctu_top_left_x[i];
+        rightx  = leftx + rsps->sps_subpic_width_minus1[i];
+        topy    = rsps->sps_subpic_ctu_top_left_y[i];
+        bottomy = topy + rsps->sps_subpic_height_minus1[i];
+
+        subpic_width[i]  = pps->ctb_to_col_idx[rightx] + 1 - pps->ctb_to_col_idx[leftx];
+        subpic_height[i] = pps->ctb_to_row_idx[bottomy] + 1 - pps->ctb_to_row_idx[topy];
+
+        if (subpic_width[i] == 1 &&
+            rsps->sps_subpic_height_minus1[i] + 1 < rpps->row_height_val[pps->ctb_to_row_idx[topy]])
+            subpic_flag[i] = 1;
+    }
+
+    if (!rsps->sps_subpic_info_present_flag) {
+        for (j = 0; j < rpps->num_tile_rows; j++)
+            for (i = 0; i < rpps->num_tile_columns; i++)
+               pps->num_ctus_in_slice[0] += pps_add_ctus(pps, &offset,
+                                                         pps->col_bd[i], pps->row_bd[j],
+                                                         rpps->col_width_val[i], rpps->row_height_val[j]);
+    } else {
+        for (i = 0; i <= rsps->sps_num_subpics_minus1; i++) {
+            pps->slice_start_offset[i] = offset;
+            if (subpic_flag[i])
+                pps->num_ctus_in_slice[i] = pps_add_ctus(pps, &offset,
+                                                         rsps->sps_subpic_ctu_top_left_x[i],
+                                                         rsps->sps_subpic_ctu_top_left_y[i],
+                                                         rsps->sps_subpic_width_minus1[i] + 1,
+                                                         rsps->sps_subpic_height_minus1[i] + 1);
+            else {
+                int tilex, tiley;
+                tilex = pps->ctb_to_col_idx[rsps->sps_subpic_ctu_top_left_x[i]];
+                tiley = pps->ctb_to_row_idx[rsps->sps_subpic_ctu_top_left_y[i]];
+                for (j = 0; j < subpic_height[i]; j++)
+                    for (int k = 0; k < subpic_width[i]; k++)
+                        pps->num_ctus_in_slice[i] += pps_add_ctus(pps, &offset,
+                                                                  pps->col_bd[tilex + k], pps->row_bd[tiley + j],
+                                                                  rpps->col_width_val[k], rpps->row_height_val[j]);
+            }
+        }
+    }
+
+    av_freep(&subpic_width);
+    av_freep(&subpic_height);
+    av_freep(&subpic_flag);
+}
+
+static void pps_rect_slice(VVCPPS* pps, const VVCSPS *sps)
 {
     const H266RawPPS* r = pps->r;
     int tile_idx = 0, off = 0;
 
-    for (int i = 0; i < r->pps_num_slices_in_pic_minus1 + 1; i++) {
-        if (!r->pps_slice_width_in_tiles_minus1[i] &&
-            !r->pps_slice_height_in_tiles_minus1[i]) {
-            i = pps_one_tile_slices(pps, tile_idx, i, &off);
-        } else {
-            pps_multi_tiles_slice(pps, tile_idx, i, &off);
+    if (r->pps_single_slice_per_subpic_flag) {
+        pps_one_slice_per_subpic(pps, sps);
+    } else {
+        for (int i = 0; i < r->pps_num_slices_in_pic_minus1 + 1; i++) {
+            if (!r->pps_slice_width_in_tiles_minus1[i] &&
+                !r->pps_slice_height_in_tiles_minus1[i]) {
+                i = pps_one_tile_slices(pps, tile_idx, i, &off);
+            } else {
+                pps_multi_tiles_slice(pps, tile_idx, i, &off);
 
+            }
+            tile_idx = next_tile_idx(tile_idx, i, r);
         }
-        tile_idx = next_tile_idx(tile_idx, i, r);
     }
 }
 
@@ -408,14 +485,14 @@ static void pps_no_rect_slice(VVCPPS* pps)
     }
 }
 
-static int pps_slice_map(VVCPPS *pps)
+static int pps_slice_map(VVCPPS *pps, const VVCSPS *sps)
 {
     pps->ctb_addr_in_slice = av_calloc(pps->ctb_count, sizeof(*pps->ctb_addr_in_slice));
     if (!pps->ctb_addr_in_slice)
         return AVERROR(ENOMEM);
 
     if (pps->r->pps_rect_slice_flag)
-        pps_rect_slice(pps);
+        pps_rect_slice(pps, sps);
     else
         pps_no_rect_slice(pps);
 
@@ -441,7 +518,7 @@ static int pps_derive(VVCPPS *pps, const VVCSPS *sps)
     if (ret < 0)
         return ret;
 
-    ret = pps_slice_map(pps);
+    ret = pps_slice_map(pps, sps);
     if (ret < 0)
         return ret;
 
@@ -460,6 +537,8 @@ static void pps_free(FFRefStructOpaque opaque, void *obj)
     av_freep(&pps->row_bd);
     av_freep(&pps->ctb_to_col_bd);
     av_freep(&pps->ctb_to_row_bd);
+    av_freep(&pps->ctb_to_col_idx);
+    av_freep(&pps->ctb_to_row_idx);
     av_freep(&pps->ctb_addr_in_slice);
 }
 
