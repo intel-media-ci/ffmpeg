@@ -716,6 +716,9 @@ static const enum AVPixelFormat pix_fmts[] = {
     AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P,
     AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV410P, AV_PIX_FMT_YUV411P,
     AV_PIX_FMT_NV12,
+#if CONFIG_VAAPI
+    AV_PIX_FMT_VAAPI,
+#endif
     AV_PIX_FMT_NONE
 };
 
@@ -839,11 +842,38 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
+static int config_output(AVFilterLink *outlink)
+{
+    AVFilterContext *context = outlink->src;
+    AVFilterLink *inlink = context->inputs[0];
+    DnnDetectContext *detect_ctx = context->priv;
+    if (inlink->hw_frames_ctx) {
+        if (inlink->format == AV_PIX_FMT_VAAPI &&
+            detect_ctx->dnnctx.backend_type == DNN_OV)
+            outlink->hw_frames_ctx = av_buffer_ref(inlink->hw_frames_ctx);
+        else {
+            av_log(detect_ctx, AV_LOG_ERROR, "The pixel format is not supported \
+                                              by the selected dnn_backend\n");
+            return AVERROR_PATCHWELCOME;
+        }
+    }
+
+    return 0;
+}
+
 static const AVFilterPad dnn_detect_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_input,
+    },
+};
+
+static const AVFilterPad dnn_detect_outputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_output,
     },
 };
 
@@ -854,8 +884,9 @@ const AVFilter ff_vf_dnn_detect = {
     .init          = dnn_detect_init,
     .uninit        = dnn_detect_uninit,
     FILTER_INPUTS(dnn_detect_inputs),
-    FILTER_OUTPUTS(ff_video_default_filterpad),
+    FILTER_OUTPUTS(dnn_detect_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .priv_class    = &dnn_detect_class,
     .activate      = dnn_detect_activate,
+    .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };
