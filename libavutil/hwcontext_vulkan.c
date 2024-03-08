@@ -975,6 +975,20 @@ static int find_device(AVHWDeviceContext *ctx, VulkanDeviceSelection *select)
                select->name);
         err = AVERROR(ENODEV);
         goto end;
+    } else if (select->vendor_id && select->pci_device) {
+        av_log(ctx, AV_LOG_VERBOSE, "Requested vendor:device %04x:%04x\n",
+               select->vendor_id, select->pci_device);
+        for (int i = 0; i < num; i++) {
+            if (select->vendor_id == prop[i].properties.vendorID &&
+                select->pci_device == prop[i].properties.deviceID) {
+                choice = i;
+                goto end;
+            }
+        }
+        av_log(ctx, AV_LOG_ERROR, "Unable to find device with vendor ID 0x%x "
+               "and PCI ID 0x%x!\n", select->vendor_id, select->pci_device);
+        err = AVERROR(EINVAL);
+        goto end;
     } else if (select->pci_device) {
         av_log(ctx, AV_LOG_VERBOSE, "Requested device: 0x%x\n", select->pci_device);
         for (int i = 0; i < num; i++) {
@@ -1597,8 +1611,14 @@ static int vulkan_device_derive(AVHWDeviceContext *ctx,
 #if CONFIG_VAAPI
     case AV_HWDEVICE_TYPE_VAAPI: {
         AVVAAPIDeviceContext *src_hwctx = src_ctx->hwctx;
-
-        const char *vendor = vaQueryVendorString(src_hwctx->display);
+        VADisplay dpy = src_hwctx->display;
+#if VA_CHECK_VERSION(1, 15, 0)
+        VAStatus vas;
+        VADisplayAttribute attr = {
+            .type = VADisplayPCIID,
+        };
+#endif
+        const char *vendor = vaQueryVendorString(dpy);
         if (!vendor) {
             av_log(ctx, AV_LOG_ERROR, "Unable to get device info from VAAPI!\n");
             return AVERROR_EXTERNAL;
@@ -1607,6 +1627,13 @@ static int vulkan_device_derive(AVHWDeviceContext *ctx,
         if (strstr(vendor, "AMD"))
             dev_select.vendor_id = 0x1002;
 
+#if VA_CHECK_VERSION(1, 15, 0)
+        vas = vaGetDisplayAttributes(dpy, &attr, 1);
+        if (vas == VA_STATUS_SUCCESS && attr.flags != VA_DISPLAY_ATTRIB_NOT_SUPPORTED) {
+            dev_select.vendor_id = ((attr.value >> 16) & 0xFFFF);
+            dev_select.pci_device = (attr.value & 0xFFFF);
+        }
+#endif
         return vulkan_device_create_internal(ctx, &dev_select, 0, opts, flags);
     }
 #endif
