@@ -1160,7 +1160,7 @@ static const AVOption hevc_options[] = {
         { "off",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_GPUCOPY_OFF },     0, 0, VD, .unit = "gpu_copy"},
     { NULL },
 };
-DEFINE_QSV_DECODER_WITH_OPTION(hevc, HEVC, "hevc_mp4toannexb", hevc_options)
+DEFINE_QSV_DECODER_WITH_OPTION(hevc, HEVC, "hevc_mp4toannexb,dump_extra", hevc_options)
 #endif
 
 static const AVOption options[] = {
@@ -1174,7 +1174,7 @@ static const AVOption options[] = {
 };
 
 #if CONFIG_H264_QSV_DECODER
-DEFINE_QSV_DECODER(h264, H264, "h264_mp4toannexb")
+DEFINE_QSV_DECODER(h264, H264, "h264_mp4toannexb,dump_extra")
 #endif
 
 #if CONFIG_MPEG2_QSV_DECODER
