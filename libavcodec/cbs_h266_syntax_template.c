@@ -1931,8 +1931,6 @@ static int FUNC(pps) (CodedBitstreamContext *ctx, RWContext *rw,
         }
         if (current->pps_rect_slice_flag)
             flag(pps_single_slice_per_subpic_flag);
-        else
-            infer(pps_single_slice_per_subpic_flag, 1);
         if (current->pps_rect_slice_flag &&
             !current->pps_single_slice_per_subpic_flag) {
             int j;
@@ -2134,6 +2132,7 @@ static int FUNC(pps) (CodedBitstreamContext *ctx, RWContext *rw,
         infer(pps_tile_column_width_minus1[0], pic_width_in_ctbs_y - 1);
         infer(pps_num_exp_tile_rows_minus1, 0);
         infer(pps_tile_row_height_minus1[0], pic_height_in_ctbs_y - 1);
+        infer(pps_single_slice_per_subpic_flag, 1);
         current->col_width_val[0] = pic_width_in_ctbs_y;
         current->row_height_val[0] = pic_height_in_ctbs_y;
         current->num_tile_columns = 1;
