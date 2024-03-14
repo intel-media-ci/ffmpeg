@@ -34,7 +34,7 @@ version <next>:
 - ffprobe (with -export_side_data film_grain) now prints film grain metadata
 - AEA muxer
 - ffmpeg CLI loopback decoders
-
+- D3D12VA HEVC encoder
 
 version 6.1:
 - libaribcaption decoder
