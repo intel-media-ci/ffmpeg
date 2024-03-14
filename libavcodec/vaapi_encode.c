@@ -2208,44 +2208,16 @@ av_cold int ff_vaapi_encode_init(AVCodecContext *avctx)
     VAStatus vas;
     int err;
 
+    err = ff_hw_base_encode_init(avctx);
+    if (err < 0)
+        goto fail;
+
     ctx->va_config  = VA_INVALID_ID;
     ctx->va_context = VA_INVALID_ID;
 
     base_ctx->op = &vaapi_op;
 
-    /* If you add something that can fail above this av_frame_alloc(),
-     * modify ff_vaapi_encode_close() accordingly. */
-    base_ctx->frame = av_frame_alloc();
-    if (!base_ctx->frame) {
-        return AVERROR(ENOMEM);
-    }
-
-    if (!avctx->hw_frames_ctx) {
-        av_log(avctx, AV_LOG_ERROR, "A hardware frames reference is "
-               "required to associate the encoding device.\n");
-        return AVERROR(EINVAL);
-    }
-
-    base_ctx->input_frames_ref = av_buffer_ref(avctx->hw_frames_ctx);
-    if (!base_ctx->input_frames_ref) {
-        err = AVERROR(ENOMEM);
-        goto fail;
-    }
-    base_ctx->input_frames = (AVHWFramesContext*)base_ctx->input_frames_ref->data;
-
-    base_ctx->device_ref = av_buffer_ref(base_ctx->input_frames->device_ref);
-    if (!base_ctx->device_ref) {
-        err = AVERROR(ENOMEM);
-        goto fail;
-    }
-    base_ctx->device = (AVHWDeviceContext*)base_ctx->device_ref->data;
     ctx->hwctx = base_ctx->device->hwctx;
-
-    base_ctx->tail_pkt = av_packet_alloc();
-    if (!base_ctx->tail_pkt) {
-        err = AVERROR(ENOMEM);
-        goto fail;
-    }
 
     err = vaapi_encode_profile_entrypoint(avctx);
     if (err < 0)
