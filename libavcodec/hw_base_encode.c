@@ -630,3 +630,20 @@ int ff_hw_base_encode_init(AVCodecContext *avctx)
 
     return 0;
 }
+
+int ff_hw_base_encode_close(AVCodecContext *avctx)
+{
+    HWBaseEncodeContext *ctx = avctx->priv_data;
+
+    av_fifo_freep2(&ctx->encode_fifo);
+
+    av_frame_free(&ctx->frame);
+    av_packet_free(&ctx->tail_pkt);
+
+    av_buffer_unref(&ctx->device_ref);
+    av_buffer_unref(&ctx->input_frames_ref);
+    av_buffer_unref(&ctx->recon_frames_ref);
+
+
+    return 0;
+}

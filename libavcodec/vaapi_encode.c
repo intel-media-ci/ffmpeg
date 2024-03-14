@@ -2412,16 +2412,10 @@ av_cold int ff_vaapi_encode_close(AVCodecContext *avctx)
         ctx->va_config = VA_INVALID_ID;
     }
 
-    av_frame_free(&base_ctx->frame);
-    av_packet_free(&base_ctx->tail_pkt);
-
     av_freep(&ctx->codec_sequence_params);
     av_freep(&ctx->codec_picture_params);
-    av_fifo_freep2(&base_ctx->encode_fifo);
 
-    av_buffer_unref(&base_ctx->recon_frames_ref);
-    av_buffer_unref(&base_ctx->input_frames_ref);
-    av_buffer_unref(&base_ctx->device_ref);
+    ff_hw_base_encode_close(avctx);
 
     return 0;
 }
