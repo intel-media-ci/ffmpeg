@@ -53,6 +53,7 @@ typedef struct VAAPIEncodeVP9Context {
 
 static int vaapi_encode_vp9_init_sequence_params(AVCodecContext *avctx)
 {
+    HWBaseEncodeContext         *base_ctx = avctx->priv_data;
     VAAPIEncodeContext               *ctx = avctx->priv_data;
     VAEncSequenceParameterBufferVP9 *vseq = ctx->codec_sequence_params;
     VAEncPictureParameterBufferVP9  *vpic = ctx->codec_picture_params;
@@ -64,7 +65,7 @@ static int vaapi_encode_vp9_init_sequence_params(AVCodecContext *avctx)
 
     if (!(ctx->va_rc_mode & VA_RC_CQP)) {
         vseq->bits_per_second = ctx->va_bit_rate;
-        vseq->intra_period    = ctx->gop_size;
+        vseq->intra_period    = base_ctx->gop_size;
     }
 
     vpic->frame_width_src  = avctx->width;
@@ -78,9 +79,10 @@ static int vaapi_encode_vp9_init_sequence_params(AVCodecContext *avctx)
 static int vaapi_encode_vp9_init_picture_params(AVCodecContext *avctx,
                                                 VAAPIEncodePicture *pic)
 {
-    VAAPIEncodeContext              *ctx = avctx->priv_data;
+    HWBaseEncodeContext        *base_ctx = avctx->priv_data;
     VAAPIEncodeVP9Context          *priv = avctx->priv_data;
-    VAAPIEncodeVP9Picture          *hpic = pic->priv_data;
+    HWBaseEncodePicture        *base_pic = (HWBaseEncodePicture *)pic;
+    VAAPIEncodeVP9Picture          *hpic = base_pic->priv_data;
     VAEncPictureParameterBufferVP9 *vpic = pic->codec_picture_params;
     int i;
     int num_tile_columns;
@@ -94,20 +96,20 @@ static int vaapi_encode_vp9_init_picture_params(AVCodecContext *avctx,
     num_tile_columns = (vpic->frame_width_src + VP9_MAX_TILE_WIDTH - 1) / VP9_MAX_TILE_WIDTH;
     vpic->log2_tile_columns = num_tile_columns == 1 ? 0 : av_log2(num_tile_columns - 1) + 1;
 
-    switch (pic->type) {
+    switch (base_pic->type) {
     case PICTURE_TYPE_IDR:
-        av_assert0(pic->nb_refs[0] == 0 && pic->nb_refs[1] == 0);
+        av_assert0(base_pic->nb_refs[0] == 0 && base_pic->nb_refs[1] == 0);
         vpic->ref_flags.bits.force_kf = 1;
         vpic->refresh_frame_flags = 0xff;
         hpic->slot = 0;
         break;
     case PICTURE_TYPE_P:
-        av_assert0(!pic->nb_refs[1]);
+        av_assert0(!base_pic->nb_refs[1]);
         {
-            VAAPIEncodeVP9Picture *href = pic->refs[0][0]->priv_data;
+            VAAPIEncodeVP9Picture *href = base_pic->refs[0][0]->priv_data;
             av_assert0(href->slot == 0 || href->slot == 1);
 
-            if (ctx->max_b_depth > 0) {
+            if (base_ctx->max_b_depth > 0) {
                 hpic->slot = !href->slot;
                 vpic->refresh_frame_flags = 1 << hpic->slot | 0xfc;
             } else {
@@ -120,20 +122,20 @@ static int vaapi_encode_vp9_init_picture_params(AVCodecContext *avctx,
         }
         break;
     case PICTURE_TYPE_B:
-        av_assert0(pic->nb_refs[0] && pic->nb_refs[1]);
+        av_assert0(base_pic->nb_refs[0] && base_pic->nb_refs[1]);
         {
-            VAAPIEncodeVP9Picture *href0 = pic->refs[0][0]->priv_data,
-                                  *href1 = pic->refs[1][0]->priv_data;
-            av_assert0(href0->slot < pic->b_depth + 1 &&
-                       href1->slot < pic->b_depth + 1);
+            VAAPIEncodeVP9Picture *href0 = base_pic->refs[0][0]->priv_data,
+                                  *href1 = base_pic->refs[1][0]->priv_data;
+            av_assert0(href0->slot < base_pic->b_depth + 1 &&
+                       href1->slot < base_pic->b_depth + 1);
 
-            if (pic->b_depth == ctx->max_b_depth) {
+            if (base_pic->b_depth == base_ctx->max_b_depth) {
                 // Unreferenced frame.
                 vpic->refresh_frame_flags = 0x00;
                 hpic->slot = 8;
             } else {
-                vpic->refresh_frame_flags = 0xfe << pic->b_depth & 0xff;
-                hpic->slot = 1 + pic->b_depth;
+                vpic->refresh_frame_flags = 0xfe << base_pic->b_depth & 0xff;
+                hpic->slot = 1 + base_pic->b_depth;
             }
             vpic->ref_flags.bits.ref_frame_ctrl_l0  = 1;
             vpic->ref_flags.bits.ref_frame_ctrl_l1  = 2;
@@ -148,31 +150,31 @@ static int vaapi_encode_vp9_init_picture_params(AVCodecContext *avctx,
     }
     if (vpic->refresh_frame_flags == 0x00) {
         av_log(avctx, AV_LOG_DEBUG, "Pic %"PRId64" not stored.\n",
-               pic->display_order);
+               base_pic->display_order);
     } else {
         av_log(avctx, AV_LOG_DEBUG, "Pic %"PRId64" stored in slot %d.\n",
-               pic->display_order, hpic->slot);
+               base_pic->display_order, hpic->slot);
     }
 
     for (i = 0; i < FF_ARRAY_ELEMS(vpic->reference_frames); i++)
         vpic->reference_frames[i] = VA_INVALID_SURFACE;
 
     for (i = 0; i < MAX_REFERENCE_LIST_NUM; i++) {
-        for (int j = 0; j < pic->nb_refs[i]; j++) {
-            VAAPIEncodePicture *ref_pic = pic->refs[i][j];
+        for (int j = 0; j < base_pic->nb_refs[i]; j++) {
+            HWBaseEncodePicture *ref_pic = base_pic->refs[i][j];
             int slot;
             slot = ((VAAPIEncodeVP9Picture*)ref_pic->priv_data)->slot;
             av_assert0(vpic->reference_frames[slot] == VA_INVALID_SURFACE);
-            vpic->reference_frames[slot] = ref_pic->recon_surface;
+            vpic->reference_frames[slot] = ((VAAPIEncodePicture *)ref_pic)->recon_surface;
         }
     }
 
-    vpic->pic_flags.bits.frame_type = (pic->type != PICTURE_TYPE_IDR);
-    vpic->pic_flags.bits.show_frame = pic->display_order <= pic->encode_order;
+    vpic->pic_flags.bits.frame_type = (base_pic->type != PICTURE_TYPE_IDR);
+    vpic->pic_flags.bits.show_frame = base_pic->display_order <= base_pic->encode_order;
 
-    if (pic->type == PICTURE_TYPE_IDR)
+    if (base_pic->type == PICTURE_TYPE_IDR)
         vpic->luma_ac_qindex     = priv->q_idx_idr;
-    else if (pic->type == PICTURE_TYPE_P)
+    else if (base_pic->type == PICTURE_TYPE_P)
         vpic->luma_ac_qindex     = priv->q_idx_p;
     else
         vpic->luma_ac_qindex     = priv->q_idx_b;
@@ -188,22 +190,23 @@ static int vaapi_encode_vp9_init_picture_params(AVCodecContext *avctx,
 
 static av_cold int vaapi_encode_vp9_get_encoder_caps(AVCodecContext *avctx)
 {
-    VAAPIEncodeContext *ctx = avctx->priv_data;
+    HWBaseEncodeContext *base_ctx = avctx->priv_data;
 
     // Surfaces must be aligned to 64x64 superblock boundaries.
-    ctx->surface_width  = FFALIGN(avctx->width,  64);
-    ctx->surface_height = FFALIGN(avctx->height, 64);
+    base_ctx->surface_width  = FFALIGN(avctx->width,  64);
+    base_ctx->surface_height = FFALIGN(avctx->height, 64);
 
     return 0;
 }
 
 static av_cold int vaapi_encode_vp9_configure(AVCodecContext *avctx)
 {
-    VAAPIEncodeContext     *ctx = avctx->priv_data;
-    VAAPIEncodeVP9Context *priv = avctx->priv_data;
+    HWBaseEncodeContext *base_ctx = avctx->priv_data;
+    VAAPIEncodeContext       *ctx = avctx->priv_data;
+    VAAPIEncodeVP9Context   *priv = avctx->priv_data;
 
     if (ctx->rc_mode->quality) {
-        priv->q_idx_p = av_clip(ctx->rc_quality, 0, VP9_MAX_QUANT);
+        priv->q_idx_p = av_clip(base_ctx->rc_quality, 0, VP9_MAX_QUANT);
         if (avctx->i_quant_factor > 0.0)
             priv->q_idx_idr =
                 av_clip((avctx->i_quant_factor * priv->q_idx_p  +
@@ -273,6 +276,7 @@ static av_cold int vaapi_encode_vp9_init(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(VAAPIEncodeVP9Context, x)
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM)
 static const AVOption vaapi_encode_vp9_options[] = {
+    HW_BASE_ENCODE_COMMON_OPTIONS,
     VAAPI_ENCODE_COMMON_OPTIONS,
     VAAPI_ENCODE_RC_OPTIONS,
 

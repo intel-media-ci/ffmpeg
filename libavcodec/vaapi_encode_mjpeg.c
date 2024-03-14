@@ -222,7 +222,9 @@ static int vaapi_encode_mjpeg_write_extra_buffer(AVCodecContext *avctx,
 static int vaapi_encode_mjpeg_init_picture_params(AVCodecContext *avctx,
                                                   VAAPIEncodePicture *pic)
 {
+    HWBaseEncodeContext         *base_ctx = avctx->priv_data;
     VAAPIEncodeMJPEGContext         *priv = avctx->priv_data;
+    HWBaseEncodePicture         *base_pic = (HWBaseEncodePicture *)pic;
     JPEGRawFrameHeader                *fh = &priv->frame_header;
     JPEGRawScanHeader                 *sh = &priv->scan.header;
     VAEncPictureParameterBufferJPEG *vpic = pic->codec_picture_params;
@@ -232,9 +234,9 @@ static int vaapi_encode_mjpeg_init_picture_params(AVCodecContext *avctx,
     const uint8_t *components;
     int t, i, quant_scale, len;
 
-    av_assert0(pic->type == PICTURE_TYPE_IDR);
+    av_assert0(base_pic->type == PICTURE_TYPE_IDR);
 
-    desc = av_pix_fmt_desc_get(priv->common.input_frames->sw_format);
+    desc = av_pix_fmt_desc_get(base_ctx->input_frames->sw_format);
     av_assert0(desc);
     if (desc->flags & AV_PIX_FMT_FLAG_RGB)
         components = components_rgb;
@@ -261,7 +263,7 @@ static int vaapi_encode_mjpeg_init_picture_params(AVCodecContext *avctx,
     // JFIF header.
     if (priv->jfif) {
         JPEGRawApplicationData *app = &priv->jfif_header;
-        AVRational sar = pic->input_image->sample_aspect_ratio;
+        AVRational sar = base_pic->input_image->sample_aspect_ratio;
         int sar_w, sar_h;
         PutByteContext pbc;
 
@@ -436,25 +438,26 @@ static int vaapi_encode_mjpeg_init_slice_params(AVCodecContext *avctx,
 
 static av_cold int vaapi_encode_mjpeg_get_encoder_caps(AVCodecContext *avctx)
 {
-    VAAPIEncodeContext *ctx = avctx->priv_data;
+    HWBaseEncodeContext *base_ctx = avctx->priv_data;
     const AVPixFmtDescriptor *desc;
 
-    desc = av_pix_fmt_desc_get(ctx->input_frames->sw_format);
+    desc = av_pix_fmt_desc_get(base_ctx->input_frames->sw_format);
     av_assert0(desc);
 
-    ctx->surface_width  = FFALIGN(avctx->width,  8 << desc->log2_chroma_w);
-    ctx->surface_height = FFALIGN(avctx->height, 8 << desc->log2_chroma_h);
+    base_ctx->surface_width  = FFALIGN(avctx->width,  8 << desc->log2_chroma_w);
+    base_ctx->surface_height = FFALIGN(avctx->height, 8 << desc->log2_chroma_h);
 
     return 0;
 }
 
 static av_cold int vaapi_encode_mjpeg_configure(AVCodecContext *avctx)
 {
+    HWBaseEncodeContext *base_ctx = avctx->priv_data;
     VAAPIEncodeContext       *ctx = avctx->priv_data;
     VAAPIEncodeMJPEGContext *priv = avctx->priv_data;
     int err;
 
-    priv->quality = ctx->rc_quality;
+    priv->quality = base_ctx->rc_quality;
     if (priv->quality < 1 || priv->quality > 100) {
         av_log(avctx, AV_LOG_ERROR, "Invalid quality value %d "
                "(must be 1-100).\n", priv->quality);
@@ -540,6 +543,7 @@ static av_cold int vaapi_encode_mjpeg_close(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(VAAPIEncodeMJPEGContext, x)
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM)
 static const AVOption vaapi_encode_mjpeg_options[] = {
+    HW_BASE_ENCODE_COMMON_OPTIONS,
     VAAPI_ENCODE_COMMON_OPTIONS,
 
     { "jfif", "Include JFIF header",

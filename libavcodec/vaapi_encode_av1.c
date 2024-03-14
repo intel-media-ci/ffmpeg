@@ -109,20 +109,21 @@ static void vaapi_encode_av1_trace_write_log(void *ctx,
 
 static av_cold int vaapi_encode_av1_get_encoder_caps(AVCodecContext *avctx)
 {
-    VAAPIEncodeContext *ctx = avctx->priv_data;
-    VAAPIEncodeAV1Context *priv = avctx->priv_data;
+    HWBaseEncodeContext *base_ctx = avctx->priv_data;
+    VAAPIEncodeAV1Context   *priv = avctx->priv_data;
 
     // Surfaces must be aligned to superblock boundaries.
-    ctx->surface_width  = FFALIGN(avctx->width,  priv->use_128x128_superblock ? 128 : 64);
-    ctx->surface_height = FFALIGN(avctx->height, priv->use_128x128_superblock ? 128 : 64);
+    base_ctx->surface_width  = FFALIGN(avctx->width,  priv->use_128x128_superblock ? 128 : 64);
+    base_ctx->surface_height = FFALIGN(avctx->height, priv->use_128x128_superblock ? 128 : 64);
 
     return 0;
 }
 
 static av_cold int vaapi_encode_av1_configure(AVCodecContext *avctx)
 {
-    VAAPIEncodeContext     *ctx = avctx->priv_data;
-    VAAPIEncodeAV1Context *priv = avctx->priv_data;
+    HWBaseEncodeContext *base_ctx = avctx->priv_data;
+    VAAPIEncodeContext       *ctx = avctx->priv_data;
+    VAAPIEncodeAV1Context   *priv = avctx->priv_data;
     int ret;
 
     ret = ff_cbs_init(&priv->cbc, AV_CODEC_ID_AV1, avctx);
@@ -134,7 +135,7 @@ static av_cold int vaapi_encode_av1_configure(AVCodecContext *avctx)
     priv->cbc->trace_write_callback = vaapi_encode_av1_trace_write_log;
 
     if (ctx->rc_mode->quality) {
-        priv->q_idx_p = av_clip(ctx->rc_quality, 0, AV1_MAX_QUANT);
+        priv->q_idx_p = av_clip(base_ctx->rc_quality, 0, AV1_MAX_QUANT);
         if (fabs(avctx->i_quant_factor) > 0.0)
             priv->q_idx_idr =
                 av_clip((fabs(avctx->i_quant_factor) * priv->q_idx_p  +
@@ -355,6 +356,7 @@ static int vaapi_encode_av1_write_sequence_header(AVCodecContext *avctx,
 
 static int vaapi_encode_av1_init_sequence_params(AVCodecContext *avctx)
 {
+    HWBaseEncodeContext         *base_ctx = avctx->priv_data;
     VAAPIEncodeContext               *ctx = avctx->priv_data;
     VAAPIEncodeAV1Context           *priv = avctx->priv_data;
     AV1RawOBU                     *sh_obu = &priv->sh;
@@ -367,7 +369,7 @@ static int vaapi_encode_av1_init_sequence_params(AVCodecContext *avctx)
     memset(sh_obu, 0, sizeof(*sh_obu));
     sh_obu->header.obu_type = AV1_OBU_SEQUENCE_HEADER;
 
-    desc = av_pix_fmt_desc_get(priv->common.input_frames->sw_format);
+    desc = av_pix_fmt_desc_get(base_ctx->input_frames->sw_format);
     av_assert0(desc);
 
     sh->seq_profile  = avctx->profile;
@@ -419,7 +421,7 @@ static int vaapi_encode_av1_init_sequence_params(AVCodecContext *avctx)
             framerate = 0;
 
         level = ff_av1_guess_level(avctx->bit_rate, priv->tier,
-                                   ctx->surface_width, ctx->surface_height,
+                                   base_ctx->surface_width, base_ctx->surface_height,
                                    priv->tile_rows * priv->tile_cols,
                                    priv->tile_cols, framerate);
         if (level) {
@@ -436,8 +438,8 @@ static int vaapi_encode_av1_init_sequence_params(AVCodecContext *avctx)
     vseq->seq_level_idx           = sh->seq_level_idx[0];
     vseq->seq_tier                = sh->seq_tier[0];
     vseq->order_hint_bits_minus_1 = sh->order_hint_bits_minus_1;
-    vseq->intra_period            = ctx->gop_size;
-    vseq->ip_period               = ctx->b_per_p + 1;
+    vseq->intra_period            = base_ctx->gop_size;
+    vseq->ip_period               = base_ctx->b_per_p + 1;
 
     vseq->seq_fields.bits.enable_order_hint = sh->enable_order_hint;
 
@@ -464,12 +466,13 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
 {
     VAAPIEncodeContext              *ctx = avctx->priv_data;
     VAAPIEncodeAV1Context          *priv = avctx->priv_data;
-    VAAPIEncodeAV1Picture          *hpic = pic->priv_data;
+    HWBaseEncodePicture        *base_pic = (HWBaseEncodePicture *)pic;
+    VAAPIEncodeAV1Picture          *hpic = base_pic->priv_data;
     AV1RawOBU                    *fh_obu = &priv->fh;
     AV1RawFrameHeader                *fh = &fh_obu->obu.frame.header;
     VAEncPictureParameterBufferAV1 *vpic = pic->codec_picture_params;
     CodedBitstreamFragment          *obu = &priv->current_obu;
-    VAAPIEncodePicture    *ref;
+    HWBaseEncodePicture    *ref;
     VAAPIEncodeAV1Picture *href;
     int slot, i;
     int ret;
@@ -478,24 +481,24 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
 
     memset(fh_obu, 0, sizeof(*fh_obu));
     pic->nb_slices = priv->tile_groups;
-    pic->non_independent_frame = pic->encode_order < pic->display_order;
+    pic->non_independent_frame = base_pic->encode_order < base_pic->display_order;
     fh_obu->header.obu_type = AV1_OBU_FRAME_HEADER;
     fh_obu->header.obu_has_size_field = 1;
 
-    switch (pic->type) {
+    switch (base_pic->type) {
     case PICTURE_TYPE_IDR:
-        av_assert0(pic->nb_refs[0] == 0 || pic->nb_refs[1]);
+        av_assert0(base_pic->nb_refs[0] == 0 || base_pic->nb_refs[1]);
         fh->frame_type = AV1_FRAME_KEY;
         fh->refresh_frame_flags = 0xFF;
         fh->base_q_idx = priv->q_idx_idr;
         hpic->slot = 0;
-        hpic->last_idr_frame = pic->display_order;
+        hpic->last_idr_frame = base_pic->display_order;
         break;
     case PICTURE_TYPE_P:
-        av_assert0(pic->nb_refs[0]);
+        av_assert0(base_pic->nb_refs[0]);
         fh->frame_type = AV1_FRAME_INTER;
         fh->base_q_idx = priv->q_idx_p;
-        ref = pic->refs[0][pic->nb_refs[0] - 1];
+        ref = base_pic->refs[0][base_pic->nb_refs[0] - 1];
         href = ref->priv_data;
         hpic->slot = !href->slot;
         hpic->last_idr_frame = href->last_idr_frame;
@@ -510,8 +513,8 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         vpic->ref_frame_ctrl_l0.fields.search_idx0 = AV1_REF_FRAME_LAST;
 
         /** set the 2nd nearest frame in L0 as Golden frame. */
-        if (pic->nb_refs[0] > 1) {
-            ref = pic->refs[0][pic->nb_refs[0] - 2];
+        if (base_pic->nb_refs[0] > 1) {
+            ref = base_pic->refs[0][base_pic->nb_refs[0] - 2];
             href = ref->priv_data;
             fh->ref_frame_idx[3] = href->slot;
             fh->ref_order_hint[href->slot] = ref->display_order - href->last_idr_frame;
@@ -519,7 +522,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         }
         break;
     case PICTURE_TYPE_B:
-        av_assert0(pic->nb_refs[0] && pic->nb_refs[1]);
+        av_assert0(base_pic->nb_refs[0] && base_pic->nb_refs[1]);
         fh->frame_type = AV1_FRAME_INTER;
         fh->base_q_idx = priv->q_idx_b;
         fh->refresh_frame_flags = 0x0;
@@ -532,7 +535,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         vpic->ref_frame_ctrl_l0.fields.search_idx0 = AV1_REF_FRAME_LAST;
         vpic->ref_frame_ctrl_l1.fields.search_idx0 = AV1_REF_FRAME_BWDREF;
 
-        ref                            = pic->refs[0][pic->nb_refs[0] - 1];
+        ref                            = base_pic->refs[0][base_pic->nb_refs[0] - 1];
         href                           = ref->priv_data;
         hpic->last_idr_frame           = href->last_idr_frame;
         fh->primary_ref_frame          = href->slot;
@@ -541,7 +544,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
             fh->ref_frame_idx[i] = href->slot;
         }
 
-        ref                            = pic->refs[1][pic->nb_refs[1] - 1];
+        ref                            = base_pic->refs[1][base_pic->nb_refs[1] - 1];
         href                           = ref->priv_data;
         fh->ref_order_hint[href->slot] = ref->display_order - href->last_idr_frame;
         for (i = AV1_REF_FRAME_GOLDEN; i < AV1_REFS_PER_FRAME; i++) {
@@ -552,13 +555,13 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         av_assert0(0 && "invalid picture type");
     }
 
-    fh->show_frame                = pic->display_order <= pic->encode_order;
+    fh->show_frame                = base_pic->display_order <= base_pic->encode_order;
     fh->showable_frame            = fh->frame_type != AV1_FRAME_KEY;
     fh->frame_width_minus_1       = avctx->width - 1;
     fh->frame_height_minus_1      = avctx->height - 1;
     fh->render_width_minus_1      = fh->frame_width_minus_1;
     fh->render_height_minus_1     = fh->frame_height_minus_1;
-    fh->order_hint                = pic->display_order - hpic->last_idr_frame;
+    fh->order_hint                = base_pic->display_order - hpic->last_idr_frame;
     fh->tile_cols                 = priv->tile_cols;
     fh->tile_rows                 = priv->tile_rows;
     fh->tile_cols_log2            = priv->tile_cols_log2;
@@ -624,13 +627,13 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         vpic->reference_frames[i] = VA_INVALID_SURFACE;
 
     for (i = 0; i < MAX_REFERENCE_LIST_NUM; i++) {
-        for (int j = 0; j < pic->nb_refs[i]; j++) {
-            VAAPIEncodePicture *ref_pic = pic->refs[i][j];
+        for (int j = 0; j < base_pic->nb_refs[i]; j++) {
+            HWBaseEncodePicture *ref_pic = base_pic->refs[i][j];
 
             slot = ((VAAPIEncodeAV1Picture*)ref_pic->priv_data)->slot;
             av_assert0(vpic->reference_frames[slot] == VA_INVALID_SURFACE);
 
-            vpic->reference_frames[slot] = ref_pic->recon_surface;
+            vpic->reference_frames[slot] = ((VAAPIEncodePicture *)ref_pic)->recon_surface;
         }
     }
 
@@ -651,7 +654,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         vpic->bit_offset_cdef_params         = priv->cdef_start_offset;
         vpic->size_in_bits_cdef_params       = priv->cdef_param_size;
         vpic->size_in_bits_frame_hdr_obu     = priv->fh_data_len;
-        vpic->byte_offset_frame_hdr_obu_size = (((pic->type == PICTURE_TYPE_IDR) ?
+        vpic->byte_offset_frame_hdr_obu_size = (((base_pic->type == PICTURE_TYPE_IDR) ?
                                                priv->sh_data_len / 8 : 0) +
                                                (fh_obu->header.obu_extension_flag ?
                                                2 : 1));
@@ -693,14 +696,15 @@ static int vaapi_encode_av1_write_picture_header(AVCodecContext *avctx,
     CodedBitstreamAV1Context *cbctx = priv->cbc->priv_data;
     AV1RawOBU               *fh_obu = &priv->fh;
     AV1RawFrameHeader       *rep_fh = &fh_obu->obu.frame_header;
+    HWBaseEncodePicture *base_pic   = (HWBaseEncodePicture *)pic;
     VAAPIEncodeAV1Picture *href;
     int ret = 0;
 
     pic->tail_size = 0;
     /** Pack repeat frame header. */
-    if (pic->display_order > pic->encode_order) {
+    if (base_pic->display_order > base_pic->encode_order) {
         memset(fh_obu, 0, sizeof(*fh_obu));
-        href = pic->refs[0][pic->nb_refs[0] - 1]->priv_data;
+        href = base_pic->refs[0][base_pic->nb_refs[0] - 1]->priv_data;
         fh_obu->header.obu_type = AV1_OBU_FRAME_HEADER;
         fh_obu->header.obu_has_size_field = 1;
 
@@ -862,6 +866,7 @@ static av_cold int vaapi_encode_av1_close(AVCodecContext *avctx)
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM)
 
 static const AVOption vaapi_encode_av1_options[] = {
+    HW_BASE_ENCODE_COMMON_OPTIONS,
     VAAPI_ENCODE_COMMON_OPTIONS,
     VAAPI_ENCODE_RC_OPTIONS,
     { "profile", "Set profile (seq_profile)",
