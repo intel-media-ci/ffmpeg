@@ -224,6 +224,8 @@ typedef struct HWBaseEncodeContext {
     AVPacket        *tail_pkt;
 } HWBaseEncodeContext;
 
+int ff_hw_base_encode_receive_packet(AVCodecContext *avctx, AVPacket *pkt);
+
 #define HW_BASE_ENCODE_COMMON_OPTIONS \
     { "idr_interval", \
       "Distance (in I-frames) between key frames", \
