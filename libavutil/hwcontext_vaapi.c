@@ -390,6 +390,13 @@ static const struct {
         "Splitted-Desktop Systems VDPAU backend for VA-API",
         AV_VAAPI_DRIVER_QUIRK_SURFACE_ATTRIBUTES,
     },
+#if CONFIG_VAAPI_1
+    {
+        "New Intel iHD",
+        "Intel iHD driver for Intel(R) Gen Graphics",
+        AV_VAAPI_DRIVER_QUIRK_DYNAMIC_SURFACE_POOL,
+    },
+#endif
 };
 
 static int vaapi_device_init(AVHWDeviceContext *hwdev)

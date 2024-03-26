@@ -58,6 +58,12 @@ enum {
      * and the results of the vaQuerySurfaceAttributes() call will be faked.
      */
     AV_VAAPI_DRIVER_QUIRK_SURFACE_ATTRIBUTES = (1 << 3),
+
+    /**
+     * The driver (and the underlying HW) supports dynamic surface pool.
+     * The vaCreateContext() call doesn't require a fixed surface-array.
+     */
+    AV_VAAPI_DRIVER_QUIRK_DYNAMIC_SURFACE_POOL = (1 << 4),
 };
 
 /**
