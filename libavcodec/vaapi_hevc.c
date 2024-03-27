@@ -612,6 +612,13 @@ VAProfile ff_vaapi_parse_hevc_rext_scc_profile(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_VERBOSE, "HEVC profile %s is found.\n", profile->name);
     }
 
+#if VA_CHECK_VERSION(0, 37, 0)
+    if (!strcmp(profile->name, "Main Intra"))
+        return VAProfileHEVCMain;
+    else if (!strcmp(profile->name, "Main 10 Intra"))
+        return VAProfileHEVCMain10;
+#endif
+
 #if VA_CHECK_VERSION(1, 2, 0)
     if (!strcmp(profile->name, "Main 12") ||
         !strcmp(profile->name, "Main 12 Intra"))
