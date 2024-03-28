@@ -449,6 +449,16 @@ static void uninit_vps(FFRefStructOpaque opaque, void *obj)
     av_freep(&vps->hdr);
 }
 
+static int compare_vps(const HEVCVPS *vps1, const HEVCVPS *vps2)
+{
+    if ((!vps1->hdr && !vps2->hdr) ||
+        (vps1->hdr && vps2->hdr && !memcmp(vps1->hdr, vps2->hdr, sizeof(*vps1->hdr)))) {
+        return !memcmp(vps1, vps2, offsetof(HEVCVPS, hdr));
+    }
+
+    return 0;
+}
+
 int ff_hevc_decode_nal_vps(GetBitContext *gb, AVCodecContext *avctx,
                            HEVCParamSets *ps)
 {
@@ -545,9 +555,11 @@ int ff_hevc_decode_nal_vps(GetBitContext *gb, AVCodecContext *avctx,
             goto err;
         }
 
-        vps->hdr = av_calloc(vps->vps_num_hrd_parameters, sizeof(*vps->hdr));
-        if (!vps->hdr)
-            goto err;
+        if (vps->vps_num_hrd_parameters) {
+            vps->hdr = av_calloc(vps->vps_num_hrd_parameters, sizeof(*vps->hdr));
+            if (!vps->hdr)
+                goto err;
+        }
 
         for (i = 0; i < vps->vps_num_hrd_parameters; i++) {
             int common_inf_present = 1;
@@ -569,7 +581,7 @@ int ff_hevc_decode_nal_vps(GetBitContext *gb, AVCodecContext *avctx,
     }
 
     if (ps->vps_list[vps_id] &&
-        !memcmp(ps->vps_list[vps_id], vps, sizeof(*vps))) {
+        compare_vps(ps->vps_list[vps_id], vps)) {
         ff_refstruct_unref(&vps);
     } else {
         remove_vps(ps, vps_id);
