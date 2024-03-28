@@ -885,6 +885,13 @@ static int wait_delayed_frame(VVCContext *s, AVFrame *output, int *got_output)
 static int submit_frame(VVCContext *s, VVCFrameContext *fc, AVFrame *output, int *got_output)
 {
     int ret;
+
+    if (fc->ps.pps->r->pps_num_subpics_minus1 &&
+        fc->ps.pps->r->pps_single_slice_per_subpic_flag) {
+        avpriv_report_missing_feature(fc->log_ctx, "Single slice per subpic");
+        return AVERROR_PATCHWELCOME;
+    }
+
     s->nb_frames++;
     s->nb_delayed++;
     ff_vvc_frame_submit(s, fc);
