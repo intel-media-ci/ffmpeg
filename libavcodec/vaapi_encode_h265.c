@@ -949,22 +949,22 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
     case PICTURE_TYPE_IDR:
         vpic->pic_fields.bits.idr_pic_flag       = 1;
         vpic->pic_fields.bits.coding_type        = 1;
-        vpic->pic_fields.bits.reference_pic_flag = 1;
+        vpic->pic_fields.bits.reference_pic_flag = pic->is_reference;
         break;
     case PICTURE_TYPE_I:
         vpic->pic_fields.bits.idr_pic_flag       = 0;
         vpic->pic_fields.bits.coding_type        = 1;
-        vpic->pic_fields.bits.reference_pic_flag = 1;
+        vpic->pic_fields.bits.reference_pic_flag = pic->is_reference;
         break;
     case PICTURE_TYPE_P:
         vpic->pic_fields.bits.idr_pic_flag       = 0;
         vpic->pic_fields.bits.coding_type        = 2;
-        vpic->pic_fields.bits.reference_pic_flag = 1;
+        vpic->pic_fields.bits.reference_pic_flag = pic->is_reference;
         break;
     case PICTURE_TYPE_B:
         vpic->pic_fields.bits.idr_pic_flag       = 0;
         vpic->pic_fields.bits.coding_type        = 3;
-        vpic->pic_fields.bits.reference_pic_flag = 0;
+        vpic->pic_fields.bits.reference_pic_flag = pic->is_reference;
         break;
     default:
         av_assert0(0 && "invalid picture type");
