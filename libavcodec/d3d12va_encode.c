@@ -302,6 +302,7 @@ static int d3d12va_encode_issue(AVCodecContext *avctx,
     }
 
     if (ctx->staging_buffer_needed) {
+        D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES *tiles;
         D3D12_HEAP_PROPERTIES props = { .Type = D3D12_HEAP_TYPE_DEFAULT };
         D3D12_RESOURCE_DESC desc = {
             .Dimension        = D3D12_RESOURCE_DIMENSION_BUFFER,
@@ -323,6 +324,16 @@ static int d3d12va_encode_issue(AVCodecContext *avctx,
             av_log(avctx, AV_LOG_ERROR, "Failed to create staging buffer.\n");
             return AVERROR_UNKNOWN;
         }
+
+        input_args.SequenceControlDesc.SelectedLayoutMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_GRID_PARTITION;
+        input_args.SequenceControlDesc.FrameSubregionsLayoutData.DataSize = sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES);
+        tiles = av_mallocz(input_args.SequenceControlDesc.FrameSubregionsLayoutData.DataSize);
+        tiles->RowCount = 1;
+        tiles->ColCount = 1;
+        tiles->RowHeights[0] = 5;
+        tiles->ColWidths[0] = 6;
+        input_args.SequenceControlDesc.FrameSubregionsLayoutData.pTilesPartition_AV1 = tiles;
+
     } else if (base_pic->type == FF_HW_PICTURE_TYPE_IDR) {
         if (ctx->codec->write_sequence_header) {
             bit_len = 8 * sizeof(data);
@@ -1102,6 +1113,9 @@ static int d3d12va_encode_init_gop_structure(AVCodecContext *avctx)
     union {
         D3D12_VIDEO_ENCODER_CODEC_PICTURE_CONTROL_SUPPORT_H264 h264;
         D3D12_VIDEO_ENCODER_CODEC_PICTURE_CONTROL_SUPPORT_HEVC hevc;
+#if D3D12_SDK_VERSION >= 611
+        D3D12_VIDEO_ENCODER_CODEC_AV1_PICTURE_CONTROL_SUPPORT av1;
+#endif
     } codec_support;
 
     support.NodeIndex = 0;
@@ -1118,7 +1132,12 @@ static int d3d12va_encode_init_gop_structure(AVCodecContext *avctx)
             support.PictureSupport.DataSize = sizeof(codec_support.hevc);
             support.PictureSupport.pHEVCSupport = &codec_support.hevc;
             break;
-
+#if D3D12_SDK_VERSION >= 611
+        case D3D12_VIDEO_ENCODER_CODEC_AV1:
+            support.PictureSupport.DataSize = sizeof(codec_support.av1);
+            support.PictureSupport.pAV1Support = &codec_support.av1;
+            break;
+#endif
         default:
             av_assert0(0);
     }
@@ -1141,7 +1160,13 @@ static int d3d12va_encode_init_gop_structure(AVCodecContext *avctx)
                                support.PictureSupport.pHEVCSupport->MaxL1ReferencesForB);
                 ref_l1 = support.PictureSupport.pHEVCSupport->MaxL1ReferencesForB;
                 break;
-
+#if D3D12_SDK_VERSION >= 611
+            case D3D12_VIDEO_ENCODER_CODEC_AV1:
+                ref_l0 = support.PictureSupport.pAV1Support->MaxUniqueReferencesPerFrame;
+                ref_l1 = support.PictureSupport.pAV1Support->PredictionMode ?
+                         support.PictureSupport.pAV1Support->MaxUniqueReferencesPerFrame : 0;
+                break;
+#endif
             default:
                 av_assert0(0);
         }
