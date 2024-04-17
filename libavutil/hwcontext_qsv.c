@@ -23,10 +23,7 @@
 #include <mfxvideo.h>
 
 #include "config.h"
-
-#if HAVE_PTHREADS
-#include <pthread.h>
-#endif
+#include "thread.h"
 
 #define COBJMACROS
 #if CONFIG_VAAPI
@@ -99,9 +96,7 @@ typedef struct QSVFramesContext {
     atomic_int session_download_init;
     mfxSession session_upload;
     atomic_int session_upload_init;
-#if HAVE_PTHREADS
-    pthread_mutex_t session_lock;
-#endif
+    AVMutex session_lock;
 
     AVBufferRef *child_frames_ref;
     mfxFrameSurface1 *surfaces_internal;
@@ -364,9 +359,7 @@ static void qsv_frames_uninit(AVHWFramesContext *ctx)
     s->session_upload = NULL;
     s->session_upload_init = 0;
 
-#if HAVE_PTHREADS
-    pthread_mutex_destroy(&s->session_lock);
-#endif
+    ff_mutex_destroy(&s->session_lock);
 
     av_freep(&s->mem_ids);
 #if QSV_HAVE_OPAQUE
@@ -1469,9 +1462,7 @@ static int qsv_frames_init(AVHWFramesContext *ctx)
     s->session_download_init = 0;
     s->session_upload_init   = 0;
 
-#if HAVE_PTHREADS
-    pthread_mutex_init(&s->session_lock, NULL);
-#endif
+    ff_mutex_init(&s->session_lock, NULL);
 
     return 0;
 }
@@ -1797,24 +1788,20 @@ static int qsv_internal_session_check_init(AVHWFramesContext *ctx, int upload)
     if (atomic_load(inited))
         return 0;
 
-#if HAVE_PTHREADS
-    pthread_mutex_lock(&s->session_lock);
-#endif
+    ff_mutex_lock(&s->session_lock);
 
     if (!atomic_load(inited)) {
         ret = qsv_init_internal_session(ctx, session, upload);
         atomic_store(inited, 1);
     }
 
-#if HAVE_PTHREADS
-    pthread_mutex_unlock(&s->session_lock);
-#endif
+    ff_mutex_unlock(&s->session_lock);
 
     return ret;
 }
 
-static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
-                                  const AVFrame *src)
+static int qsv_transfer_data_from_internal(AVHWFramesContext *ctx, AVFrame *dst,
+                                           const AVFrame *src, int realigned)
 {
     QSVFramesContext  *s = ctx->hwctx;
     mfxFrameSurface1 out = {{ 0 }};
@@ -1826,17 +1813,11 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
     /* download to temp frame if the output is not padded as libmfx requires */
     AVFrame *tmp_frame = &s->realigned_download_frame;
     AVFrame *dst_frame;
-    int realigned = 0;
-
-    ret = qsv_internal_session_check_init(ctx, 0);
-    if (ret < 0)
-        return ret;
 
     /* According to MSDK spec for mfxframeinfo, "Width must be a multiple of 16.
      * Height must be a multiple of 16 for progressive frame sequence and a
      * multiple of 32 otherwise.", so allign all frames to 16 before downloading. */
-    if (dst->height & 15 || dst->linesize[0] & 15) {
-        realigned = 1;
+    if (realigned) {
         if (tmp_frame->format != dst->format ||
             tmp_frame->width  != FFALIGN(dst->linesize[0], 16) ||
             tmp_frame->height != FFALIGN(dst->height, 16)) {
@@ -1896,8 +1877,30 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
     return 0;
 }
 
-static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
-                                const AVFrame *src)
+static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
+                                  const AVFrame *src)
+{
+    QSVFramesContext *s = ctx->hwctx;
+    int realigned = 0;
+    int ret = 0;
+
+    ret = qsv_internal_session_check_init(ctx, 0);
+    if (ret < 0)
+        return ret;
+
+    if (dst->height & 15 || dst->linesize[0] & 15) {
+        realigned = 1;
+        ff_mutex_lock(&s->session_lock);
+    }
+    ret = qsv_transfer_data_from_internal(ctx, dst, src, realigned);
+    if (realigned)
+        ff_mutex_unlock(&s->session_lock);
+
+    return ret;
+}
+
+static int qsv_transfer_data_to_internal(AVHWFramesContext *ctx, AVFrame *dst,
+                                         const AVFrame *src, int realigned)
 {
     QSVFramesContext   *s = ctx->hwctx;
     mfxFrameSurface1   in = {{ 0 }};
@@ -1910,17 +1913,11 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
     /* make a copy if the input is not padded as libmfx requires */
     AVFrame *tmp_frame = &s->realigned_upload_frame;
     const AVFrame *src_frame;
-    int realigned = 0;
-
-    ret = qsv_internal_session_check_init(ctx, 1);
-    if (ret < 0)
-        return ret;
 
     /* According to MSDK spec for mfxframeinfo, "Width must be a multiple of 16.
      * Height must be a multiple of 16 for progressive frame sequence and a
      * multiple of 32 otherwise.", so allign all frames to 16 before uploading. */
-    if (src->height & 15 || src->linesize[0] & 15) {
-        realigned = 1;
+    if (realigned) {
         if (tmp_frame->format != src->format ||
             tmp_frame->width  != FFALIGN(src->width, 16) ||
             tmp_frame->height != FFALIGN(src->height, 16)) {
@@ -1987,6 +1984,28 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
     }
 
     return 0;
+}
+
+static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
+                                const AVFrame *src)
+{
+    QSVFramesContext *s = ctx->hwctx;
+    int realigned = 0;
+    int ret = 0;
+
+    ret = qsv_internal_session_check_init(ctx, 1);
+    if (ret < 0)
+        return ret;
+
+    if (src->height & 15 || src->linesize[0] & 15) {
+        realigned = 1;
+        ff_mutex_lock(&s->session_lock);
+    }
+    ret = qsv_transfer_data_to_internal(ctx, dst, src, realigned);
+    if (realigned)
+        ff_mutex_unlock(&s->session_lock);
+
+    return ret;
 }
 
 static int qsv_dynamic_frames_derive_to(AVHWFramesContext *dst_ctx,
