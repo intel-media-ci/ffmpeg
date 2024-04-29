@@ -411,6 +411,7 @@ extern const AVFilter ff_vf_program_opencl;
 extern const AVFilter ff_vf_pseudocolor;
 extern const AVFilter ff_vf_psnr;
 extern const AVFilter ff_vf_pullup;
+extern const AVFilter ff_vf_video_python;
 extern const AVFilter ff_vf_qp;
 extern const AVFilter ff_vf_qrencode;
 extern const AVFilter ff_vf_quirc;
