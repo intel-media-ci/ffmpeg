@@ -296,7 +296,29 @@ static int d3d12va_encode_issue(AVCodecContext *avctx,
         }
     }
 
-    if (base_pic->type == FF_HW_PICTURE_TYPE_IDR) {
+    if (ctx->staging_buffer_needed) {
+        D3D12_HEAP_PROPERTIES props = { .Type = D3D12_HEAP_TYPE_DEFAULT };
+        D3D12_RESOURCE_DESC desc = {
+            .Dimension        = D3D12_RESOURCE_DIMENSION_BUFFER,
+            .Alignment        = 0,
+            .Width            = 1024 * 1024 * 8, // 8MB for default
+            .Height           = 1,
+            .DepthOrArraySize = 1,
+            .MipLevels        = 1,
+            .Format           = DXGI_FORMAT_UNKNOWN,
+            .SampleDesc       = { .Count = 1, .Quality = 0 },
+            .Layout           = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+            .Flags            = D3D12_RESOURCE_FLAG_NONE,
+        };
+
+        hr = ID3D12Device_CreateCommittedResource(ctx->hwctx->device, &props, D3D12_HEAP_FLAG_NONE,
+                                                  &desc, D3D12_RESOURCE_STATE_COMMON, NULL,
+                                                  &IID_ID3D12Resource, (void **)&pic->staging_buffer);
+        if (FAILED(hr)) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to create staging buffer.\n");
+            return AVERROR_UNKNOWN;
+        }
+    } else if (base_pic->type == FF_HW_PICTURE_TYPE_IDR) {
         if (ctx->codec->write_sequence_header) {
             bit_len = 8 * sizeof(data);
             err = ctx->codec->write_sequence_header(avctx, data, &bit_len);
@@ -346,7 +368,7 @@ static int d3d12va_encode_issue(AVCodecContext *avctx,
     input_args.PictureControlDesc.ReferenceFrames         = d3d12_refs;
     input_args.CurrentFrameBitstreamMetadataSize          = pic->header_size;
 
-    output_args.Bitstream.pBuffer                                    = pic->output_buffer;
+    output_args.Bitstream.pBuffer                                    = ctx->staging_buffer_needed ? pic->staging_buffer : pic->output_buffer;
     output_args.Bitstream.FrameStartOffset                           = pic->header_size;
     output_args.ReconstructedPicture.pReconstructedPicture           = pic->recon_surface->texture;
     output_args.ReconstructedPicture.ReconstructedPictureSubresource = 0;
@@ -390,7 +412,7 @@ static int d3d12va_encode_issue(AVCodecContext *avctx,
     barriers[0] = TRANSITION_BARRIER(pic->input_surface->texture,
                                      D3D12_RESOURCE_STATE_COMMON,
                                      D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ);
-    barriers[1] = TRANSITION_BARRIER(pic->output_buffer,
+    barriers[1] = TRANSITION_BARRIER(ctx->staging_buffer_needed ? pic->staging_buffer : pic->output_buffer,
                                      D3D12_RESOURCE_STATE_COMMON,
                                      D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE);
     barriers[2] = TRANSITION_BARRIER(pic->recon_surface->texture,
@@ -443,7 +465,7 @@ static int d3d12va_encode_issue(AVCodecContext *avctx,
     barriers[0] = TRANSITION_BARRIER(pic->input_surface->texture,
                                      D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ,
                                      D3D12_RESOURCE_STATE_COMMON);
-    barriers[1] = TRANSITION_BARRIER(pic->output_buffer,
+    barriers[1] = TRANSITION_BARRIER(ctx->staging_buffer_needed ? pic->staging_buffer : pic->output_buffer,
                                      D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE,
                                      D3D12_RESOURCE_STATE_COMMON);
     barriers[2] = TRANSITION_BARRIER(pic->recon_surface->texture,
@@ -509,6 +531,8 @@ fail:
 
     av_buffer_unref(&pic->output_buffer_ref);
     pic->output_buffer = NULL;
+
+    D3D12_OBJECT_RELEASE(pic->staging_buffer);
     D3D12_OBJECT_RELEASE(pic->encoded_metadata);
     D3D12_OBJECT_RELEASE(pic->resolved_metadata);
     return err;
@@ -529,6 +553,7 @@ static int d3d12va_encode_discard(AVCodecContext *avctx,
         pic->output_buffer = NULL;
     }
 
+    D3D12_OBJECT_RELEASE(pic->staging_buffer);
     D3D12_OBJECT_RELEASE(pic->encoded_metadata);
     D3D12_OBJECT_RELEASE(pic->resolved_metadata);
 

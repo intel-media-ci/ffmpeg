@@ -49,6 +49,7 @@ typedef struct D3D12VAEncodePicture {
 
     AVBufferRef    *output_buffer_ref;
     ID3D12Resource *output_buffer;
+    ID3D12Resource *staging_buffer;
 
     ID3D12Resource *encoded_metadata;
     ID3D12Resource *resolved_metadata;
@@ -228,6 +229,13 @@ typedef struct D3D12VAEncodeContext {
      * The bi_not_empty feature.
      */
     int bi_not_empty;
+
+    /**
+     * Used only for AV1. A staging buffer is needed for the output
+     * of the EncodeFrame call. Sequence headers and frame headers are
+     * uploaded and concatenated afterwards.
+     */
+    int staging_buffer_needed;
 
     /**
      * D3D12_FEATURE structures.
