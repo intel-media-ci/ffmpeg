@@ -36,6 +36,9 @@
 
 typedef HRESULT(WINAPI *PFN_CREATE_DXGI_FACTORY2)(UINT Flags, REFIID riid, void **ppFactory);
 
+__declspec(dllexport) extern const unsigned int D3D12SDKVersion = 613;
+__declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\";
+
 typedef struct D3D12VAFramesContext {
     /**
      * The public AVD3D12VAFramesContext. See hwcontext_d3d12va.h for it.
