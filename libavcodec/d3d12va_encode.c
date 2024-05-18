@@ -171,6 +171,11 @@ static int d3d12va_encode_create_metadata_buffers(AVCodecContext *avctx,
 
     ctx->hwctx->device->lpVtbl->GetCustomHeapProperties(ctx->hwctx->device, &resolved_meta_props, 0, resolved_heap_type);
 
+#if D3D12_SDK_VERSION >= 611
+    if (ctx->codec->d3d12_codec == D3D12_VIDEO_ENCODER_CODEC_AV1)
+        width += sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES) +
+                 sizeof(D3D12_VIDEO_ENCODER_AV1_POST_ENCODE_VALUES);
+#endif
     meta_desc.Width = width;
 
     hr = ID3D12Device_CreateCommittedResource(ctx->hwctx->device, &resolved_meta_props, D3D12_HEAP_FLAG_NONE,
