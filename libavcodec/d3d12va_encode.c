@@ -701,6 +701,7 @@ end:
 static int d3d12va_encode_output(AVCodecContext *avctx,
                                  const FFHWBaseEncodePicture *base_pic, AVPacket *pkt)
 {
+    D3D12VAEncodeContext *ctx = avctx->priv_data;
     FFHWBaseEncodeContext *base_ctx = avctx->priv_data;
     D3D12VAEncodePicture *pic = (D3D12VAEncodePicture *)base_pic;
     AVPacket *pkt_ptr = pkt;
@@ -710,7 +711,10 @@ static int d3d12va_encode_output(AVCodecContext *avctx,
     if (err < 0)
         return err;
 
-    err = d3d12va_encode_get_coded_data(avctx, pic, pkt);
+    if (ctx->codec->get_coded_data)
+        err = ctx->codec->get_coded_data(avctx, pic, pkt);
+    else
+        err = d3d12va_encode_get_coded_data(avctx, pic, pkt);
     if (err < 0)
         return err;
 
