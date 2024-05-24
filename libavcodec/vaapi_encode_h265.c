@@ -1171,9 +1171,6 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         av_assert0(pic->type == PICTURE_TYPE_P ||
                    pic->type == PICTURE_TYPE_B);
         vslice->ref_pic_list0[0] = vpic->reference_frames[0];
-        if (ctx->p_to_gpb && pic->type == PICTURE_TYPE_P)
-            // Reference for GPB B-frame, L0 == L1
-            vslice->ref_pic_list1[0] = vpic->reference_frames[0];
     }
     if (pic->nb_refs[1]) {
         // Forward reference for B-frame.
@@ -1184,8 +1181,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
     if (pic->type == PICTURE_TYPE_P && ctx->p_to_gpb) {
         vslice->slice_type = HEVC_SLICE_B;
         for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
-            vslice->ref_pic_list1[i].picture_id = vslice->ref_pic_list0[i].picture_id;
-            vslice->ref_pic_list1[i].flags      = vslice->ref_pic_list0[i].flags;
+            vslice->ref_pic_list1[i] = vslice->ref_pic_list0[i];
         }
     }
 
