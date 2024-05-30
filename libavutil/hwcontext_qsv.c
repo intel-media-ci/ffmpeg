@@ -112,8 +112,6 @@ typedef struct QSVFramesContext {
     mfxExtOpaqueSurfaceAlloc opaque_alloc;
     mfxExtBuffer *ext_buffers[1];
 #endif
-    AVFrame realigned_upload_frame;
-    AVFrame realigned_download_frame;
 
     mfxFrameInfo frame_info;
 } QSVFramesContext;
@@ -367,8 +365,6 @@ static void qsv_frames_uninit(AVHWFramesContext *ctx)
 #endif
     av_freep(&s->surfaces_internal);
     av_freep(&s->handle_pairs_internal);
-    av_frame_unref(&s->realigned_upload_frame);
-    av_frame_unref(&s->realigned_download_frame);
     av_buffer_unref(&s->child_frames_ref);
 }
 
@@ -1811,35 +1807,39 @@ static int qsv_transfer_data_from_internal(AVHWFramesContext *ctx, AVFrame *dst,
     mfxStatus err;
     int ret = 0;
     /* download to temp frame if the output is not padded as libmfx requires */
-    AVFrame *tmp_frame = &s->realigned_download_frame;
+    AVFrame *tmp_frame = NULL;
     AVFrame *dst_frame;
 
     /* According to MSDK spec for mfxframeinfo, "Width must be a multiple of 16.
      * Height must be a multiple of 16 for progressive frame sequence and a
      * multiple of 32 otherwise.", so allign all frames to 16 before downloading. */
     if (realigned) {
-        if (tmp_frame->format != dst->format ||
-            tmp_frame->width  != FFALIGN(dst->linesize[0], 16) ||
-            tmp_frame->height != FFALIGN(dst->height, 16)) {
-            av_frame_unref(tmp_frame);
+        tmp_frame = av_frame_alloc();
+        if (!tmp_frame)
+            return AVERROR(ENOMEM);
 
-            tmp_frame->format = dst->format;
-            tmp_frame->width  = FFALIGN(dst->linesize[0], 16);
-            tmp_frame->height = FFALIGN(dst->height, 16);
-            ret = av_frame_get_buffer(tmp_frame, 0);
-            if (ret < 0)
-                return ret;
-        }
+        tmp_frame->format = dst->format;
+        tmp_frame->width  = FFALIGN(dst->linesize[0], 16);
+        tmp_frame->height = FFALIGN(dst->height, 16);
+        ret = av_frame_get_buffer(tmp_frame, 0);
+        if (ret < 0)
+            goto fail;
     }
 
     dst_frame = realigned ? tmp_frame : dst;
 
     if (!s->session_download) {
-        if (s->child_frames_ref)
-            return qsv_transfer_data_child(ctx, dst_frame, src);
+        if (s->child_frames_ref) {
+            ret = qsv_transfer_data_child(ctx, dst_frame, src);
+            if (ret < 0)
+                goto fail;
+            else
+                goto end;
+        }
 
         av_log(ctx, AV_LOG_ERROR, "Surface download not possible\n");
-        return AVERROR(ENOSYS);
+        ret = AVERROR(ENOSYS);
+        goto fail;
     }
 
     out.Info = in->Info;
@@ -1853,7 +1853,8 @@ static int qsv_transfer_data_from_internal(AVHWFramesContext *ctx, AVFrame *dst,
 
     if (err < 0 || !sync) {
         av_log(ctx, AV_LOG_ERROR, "Error downloading the surface\n");
-        return AVERROR_UNKNOWN;
+        ret = AVERROR_UNKNOWN;
+        goto fail;
     }
 
     do {
@@ -1861,26 +1862,25 @@ static int qsv_transfer_data_from_internal(AVHWFramesContext *ctx, AVFrame *dst,
     } while (err == MFX_WRN_IN_EXECUTION);
     if (err < 0) {
         av_log(ctx, AV_LOG_ERROR, "Error synchronizing the operation: %d\n", err);
-        return AVERROR_UNKNOWN;
+        ret = AVERROR_UNKNOWN;
+        goto fail;
     }
 
+end:
     if (realigned) {
         tmp_frame->width  = dst->width;
         tmp_frame->height = dst->height;
         ret = av_frame_copy(dst, tmp_frame);
-        tmp_frame->width  = FFALIGN(dst->linesize[0], 16);
-        tmp_frame->height = FFALIGN(dst->height, 16);
-        if (ret < 0)
-            return ret;
     }
 
-    return 0;
+fail:
+    av_frame_free(&tmp_frame);
+    return ret;
 }
 
 static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
                                   const AVFrame *src)
 {
-    QSVFramesContext *s = ctx->hwctx;
     int realigned = 0;
     int ret = 0;
 
@@ -1888,15 +1888,10 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
     if (ret < 0)
         return ret;
 
-    if (dst->height & 15 || dst->linesize[0] & 15) {
+    if (dst->height & 15 || dst->linesize[0] & 15)
         realigned = 1;
-        ff_mutex_lock(&s->session_lock);
-    }
-    ret = qsv_transfer_data_from_internal(ctx, dst, src, realigned);
-    if (realigned)
-        ff_mutex_unlock(&s->session_lock);
 
-    return ret;
+    return qsv_transfer_data_from_internal(ctx, dst, src, realigned);
 }
 
 static int qsv_transfer_data_to_internal(AVHWFramesContext *ctx, AVFrame *dst,
@@ -1911,35 +1906,31 @@ static int qsv_transfer_data_to_internal(AVHWFramesContext *ctx, AVFrame *dst,
     mfxStatus err;
     int ret = 0;
     /* make a copy if the input is not padded as libmfx requires */
-    AVFrame *tmp_frame = &s->realigned_upload_frame;
+    AVFrame *tmp_frame = NULL;
     const AVFrame *src_frame;
 
     /* According to MSDK spec for mfxframeinfo, "Width must be a multiple of 16.
      * Height must be a multiple of 16 for progressive frame sequence and a
      * multiple of 32 otherwise.", so allign all frames to 16 before uploading. */
     if (realigned) {
-        if (tmp_frame->format != src->format ||
-            tmp_frame->width  != FFALIGN(src->width, 16) ||
-            tmp_frame->height != FFALIGN(src->height, 16)) {
-            av_frame_unref(tmp_frame);
+        tmp_frame = av_frame_alloc();
+        if (!tmp_frame)
+            return AVERROR(ENOMEM);
 
-            tmp_frame->format = src->format;
-            tmp_frame->width  = FFALIGN(src->width, 16);
-            tmp_frame->height = FFALIGN(src->height, 16);
-            ret = av_frame_get_buffer(tmp_frame, 0);
-            if (ret < 0)
-                return ret;
-        }
+        tmp_frame->format = src->format;
+        tmp_frame->width  = FFALIGN(src->width, 16);
+        tmp_frame->height = FFALIGN(src->height, 16);
+        ret = av_frame_get_buffer(tmp_frame, 0);
+        if (ret < 0)
+            goto fail;
+
         ret = av_frame_copy(tmp_frame, src);
-        if (ret < 0) {
-            av_frame_unref(tmp_frame);
-            return ret;
-        }
+        if (ret < 0)
+            goto fail;
+
         ret = qsv_fill_border(tmp_frame, src);
-        if (ret < 0) {
-            av_frame_unref(tmp_frame);
-            return ret;
-        }
+        if (ret < 0)
+            goto fail;
 
         tmp_info = out->Info;
         out->Info.CropW = FFMIN(out->Info.Width,  tmp_frame->width);
@@ -1949,11 +1940,17 @@ static int qsv_transfer_data_to_internal(AVHWFramesContext *ctx, AVFrame *dst,
     src_frame = realigned ? tmp_frame : src;
 
     if (!s->session_upload) {
-        if (s->child_frames_ref)
-            return qsv_transfer_data_child(ctx, dst, src_frame);
+        if (s->child_frames_ref) {
+            ret = qsv_transfer_data_child(ctx, dst, src_frame);
+            if (ret < 0)
+                goto fail;
+            else
+                goto end;
+        }
 
         av_log(ctx, AV_LOG_ERROR, "Surface upload not possible\n");
-        return AVERROR(ENOSYS);
+        ret = AVERROR(ENOSYS);
+        goto fail;
     }
 
     in.Info = out->Info;
@@ -1967,7 +1964,8 @@ static int qsv_transfer_data_to_internal(AVHWFramesContext *ctx, AVFrame *dst,
 
     if (err < 0 || !sync) {
         av_log(ctx, AV_LOG_ERROR, "Error uploading the surface\n");
-        return AVERROR_UNKNOWN;
+        ret = AVERROR_UNKNOWN;
+        goto fail;
     }
 
     do {
@@ -1975,21 +1973,24 @@ static int qsv_transfer_data_to_internal(AVHWFramesContext *ctx, AVFrame *dst,
     } while (err == MFX_WRN_IN_EXECUTION);
     if (err < 0) {
         av_log(ctx, AV_LOG_ERROR, "Error synchronizing the operation\n");
-        return AVERROR_UNKNOWN;
+        ret = AVERROR_UNKNOWN;
+        goto fail;
     }
 
+end:
     if (realigned) {
         out->Info.CropW = tmp_info.CropW;
         out->Info.CropH = tmp_info.CropH;
     }
 
-    return 0;
+fail:
+    av_frame_free(&tmp_frame);
+    return ret;
 }
 
 static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
                                 const AVFrame *src)
 {
-    QSVFramesContext *s = ctx->hwctx;
     int realigned = 0;
     int ret = 0;
 
@@ -1997,15 +1998,10 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
     if (ret < 0)
         return ret;
 
-    if (src->height & 15 || src->linesize[0] & 15) {
+    if (src->height & 15 || src->linesize[0] & 15)
         realigned = 1;
-        ff_mutex_lock(&s->session_lock);
-    }
-    ret = qsv_transfer_data_to_internal(ctx, dst, src, realigned);
-    if (realigned)
-        ff_mutex_unlock(&s->session_lock);
 
-    return ret;
+    return qsv_transfer_data_to_internal(ctx, dst, src, realigned);
 }
 
 static int qsv_dynamic_frames_derive_to(AVHWFramesContext *dst_ctx,
