@@ -2511,7 +2511,7 @@ static inline VkFormat drm_to_vulkan_fmt(uint32_t drm_fourcc)
 }
 
 static int vulkan_map_from_drm_frame_desc(AVHWFramesContext *hwfc, AVVkFrame **frame,
-                                          const AVFrame *src)
+                                          const AVFrame *src, int flags)
 {
     int err = 0;
     VkResult ret;
@@ -2569,6 +2569,14 @@ static int vulkan_map_from_drm_frame_desc(AVHWFramesContext *hwfc, AVVkFrame **f
             .pNext       = &ext_img_mod_spec,
             .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
         };
+        int usage = (((flags & (AV_HWFRAME_MAP_READ | AV_HWFRAME_MAP_WRITE)) == (AV_HWFRAME_MAP_READ | AV_HWFRAME_MAP_WRITE)) ?
+                      (VK_IMAGE_USAGE_SAMPLED_BIT |
+                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                       VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                       VK_IMAGE_USAGE_STORAGE_BIT) :
+                     ((flags & AV_HWFRAME_MAP_WRITE) ?
+                      (VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT) :
+                      (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)));
         VkImageCreateInfo create_info = {
             .sType                 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
             .pNext                 = &ext_img_spec,
@@ -2580,8 +2588,7 @@ static int vulkan_map_from_drm_frame_desc(AVHWFramesContext *hwfc, AVVkFrame **f
             .flags                 = 0x0,
             .tiling                = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
             .initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED, /* specs say so */
-            .usage                 = VK_IMAGE_USAGE_SAMPLED_BIT |
-                                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            .usage                 = usage,
             .samples               = VK_SAMPLE_COUNT_1_BIT,
             .pQueueFamilyIndices   = p->img_qfs,
             .queueFamilyIndexCount = p->nb_img_qfs,
@@ -2788,7 +2795,7 @@ static int vulkan_map_from_drm(AVHWFramesContext *hwfc, AVFrame *dst,
     int err = 0;
     AVVkFrame *f;
 
-    if ((err = vulkan_map_from_drm_frame_desc(hwfc, &f, src)))
+    if ((err = vulkan_map_from_drm_frame_desc(hwfc, &f, src, flags)))
         return err;
 
     /* The unmapping function will free this */
