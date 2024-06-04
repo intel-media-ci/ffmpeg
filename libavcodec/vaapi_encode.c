@@ -1001,70 +1001,6 @@ static void vaapi_encode_remove_refs(AVCodecContext *avctx,
     }
 }
 
-static void vaapi_encode_set_b_pictures(AVCodecContext *avctx,
-                                        VAAPIEncodePicture *start,
-                                        VAAPIEncodePicture *end,
-                                        VAAPIEncodePicture *prev,
-                                        int current_depth,
-                                        VAAPIEncodePicture **last)
-{
-    VAAPIEncodeContext *ctx = avctx->priv_data;
-    VAAPIEncodePicture *pic, *next, *ref;
-    int i, len;
-
-    av_assert0(start && end && start != end && start->next != end);
-
-    // If we are at the maximum depth then encode all pictures as
-    // non-referenced B-pictures.  Also do this if there is exactly one
-    // picture left, since there will be nothing to reference it.
-    if (current_depth == ctx->max_b_depth || start->next->next == end) {
-        for (pic = start->next; pic; pic = pic->next) {
-            if (pic == end)
-                break;
-            pic->type    = PICTURE_TYPE_B;
-            pic->b_depth = current_depth;
-
-            vaapi_encode_add_ref(avctx, pic, start, 1, 1, 0);
-            vaapi_encode_add_ref(avctx, pic, end,   1, 1, 0);
-            vaapi_encode_add_ref(avctx, pic, prev,  0, 0, 1);
-
-            for (ref = end->refs[1][0]; ref; ref = ref->refs[1][0])
-                vaapi_encode_add_ref(avctx, pic, ref, 0, 1, 0);
-        }
-        *last = prev;
-
-    } else {
-        // Split the current list at the midpoint with a referenced
-        // B-picture, then descend into each side separately.
-        len = 0;
-        for (pic = start->next; pic != end; pic = pic->next)
-            ++len;
-        for (pic = start->next, i = 1; 2 * i < len; pic = pic->next, i++);
-
-        pic->type    = PICTURE_TYPE_B;
-        pic->b_depth = current_depth;
-
-        pic->is_reference = 1;
-
-        vaapi_encode_add_ref(avctx, pic, pic,   0, 1, 0);
-        vaapi_encode_add_ref(avctx, pic, start, 1, 1, 0);
-        vaapi_encode_add_ref(avctx, pic, end,   1, 1, 0);
-        vaapi_encode_add_ref(avctx, pic, prev,  0, 0, 1);
-
-        for (ref = end->refs[1][0]; ref; ref = ref->refs[1][0])
-            vaapi_encode_add_ref(avctx, pic, ref, 0, 1, 0);
-
-        if (i > 1)
-            vaapi_encode_set_b_pictures(avctx, start, pic, pic,
-                                        current_depth + 1, &next);
-        else
-            next = pic;
-
-        vaapi_encode_set_b_pictures(avctx, pic, end, next,
-                                    current_depth + 1, last);
-    }
-}
-
 static void vaapi_encode_add_next_prev(AVCodecContext *avctx,
                                        VAAPIEncodePicture *pic)
 {
@@ -1095,11 +1031,82 @@ static void vaapi_encode_add_next_prev(AVCodecContext *avctx,
     }
 }
 
+static void vaapi_encode_set_b_pictures(AVCodecContext *avctx,
+                                        VAAPIEncodePicture *start,
+                                        VAAPIEncodePicture *end,
+                                        VAAPIEncodePicture *prev,
+                                        int current_depth)
+{
+    VAAPIEncodeContext *ctx = avctx->priv_data;
+    VAAPIEncodePicture *pic, *ref, *next_prev;
+    int i, len;
+
+    av_assert0(start && end && start != end && start->next != end);
+
+    // If we are at the maximum depth then encode all pictures as
+    // non-referenced B-pictures.  Also do this if there is exactly one
+    // picture left, since there will be nothing to reference it.
+    if (current_depth == ctx->max_b_depth || start->next->next == end) {
+        for (pic = start->next; pic; pic = pic->next) {
+            if (pic == end)
+                break;
+            pic->type    = PICTURE_TYPE_B;
+            pic->b_depth = current_depth;
+
+            vaapi_encode_add_ref(avctx, pic, start, 1, 1, 0);
+            vaapi_encode_add_ref(avctx, pic, end,   1, 1, 0);
+            vaapi_encode_add_ref(avctx, pic, prev,  0, 0, 1);
+
+            for (ref = end->refs[1][0]; ref; ref = ref->refs[1][0])
+                vaapi_encode_add_ref(avctx, pic, ref, 0, 1, 0);
+        }
+    } else {
+        // Split the current list at the midpoint with a referenced
+        // B-picture, then descend into each side separately.
+        len = 0;
+        for (pic = start->next; pic != end; pic = pic->next)
+            ++len;
+        for (pic = start->next, i = 1; 2 * i < len; pic = pic->next, i++);
+
+        pic->type    = PICTURE_TYPE_B;
+        pic->b_depth = current_depth;
+
+        pic->is_reference = 1;
+
+        vaapi_encode_add_ref(avctx, pic, pic,   0, 1, 0);
+        vaapi_encode_add_ref(avctx, pic, start, 1, 1, 0);
+        vaapi_encode_add_ref(avctx, pic, end,   1, 1, 0);
+        vaapi_encode_add_ref(avctx, pic, prev,  0, 0, 1);
+
+
+        for (ref = end->refs[1][0]; ref; ref = ref->refs[1][0])
+            vaapi_encode_add_ref(avctx, pic, ref, 0, 1, 0);
+
+        av_assert0(ctx->nb_next_prev);
+        next_prev = ctx->next_prev[ctx->nb_next_prev - 1];
+
+        if (i > 1)
+            vaapi_encode_set_b_pictures(avctx, start, pic, pic, current_depth + 1);
+
+        // If ctx->next_prev not updated in 1st half mini-gop, then midpoint pic
+        // will be the prev of 1st pic in 2nd half mini-gop. Otherwise, the lastest
+        // pic in ctx->next_prev will be.
+        if (next_prev == ctx->next_prev[ctx->nb_next_prev - 1])
+            next_prev = pic;
+        else
+            next_prev = ctx->next_prev[ctx->nb_next_prev - 1];
+
+        vaapi_encode_add_next_prev(avctx, pic);
+
+        vaapi_encode_set_b_pictures(avctx, pic, end, next_prev, current_depth + 1);
+    }
+}
+
 static int vaapi_encode_pick_next(AVCodecContext *avctx,
                                   VAAPIEncodePicture **pic_out)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
-    VAAPIEncodePicture *pic = NULL, *prev = NULL, *next, *start;
+    VAAPIEncodePicture *pic = NULL, *next, *start;
     int i, b_counter, closed_gop_end;
 
     // If there are any B-frames already queued, the next one to encode
@@ -1236,13 +1243,10 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
         vaapi_encode_add_ref(avctx, pic, ctx->next_prev[ctx->nb_next_prev - 1], 0, 0, 1);
     }
 
-    if (b_counter > 0) {
-        vaapi_encode_set_b_pictures(avctx, start, pic, pic, 1,
-                                    &prev);
-    } else {
-        prev = pic;
-    }
-    vaapi_encode_add_next_prev(avctx, prev);
+    if (b_counter > 0)
+        vaapi_encode_set_b_pictures(avctx, start, pic, pic, 1);
+
+    vaapi_encode_add_next_prev(avctx, pic);
 
     return 0;
 }
