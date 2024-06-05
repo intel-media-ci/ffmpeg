@@ -372,14 +372,6 @@ static const struct {
     const char *match_string;
     unsigned int quirks;
 } vaapi_driver_quirks_table[] = {
-#if !VA_CHECK_VERSION(1, 0, 0)
-    // The i965 driver did not conform before version 2.0.
-    {
-        "Intel i965 (Quick Sync)",
-        "i965",
-        AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS,
-    },
-#endif
     {
         "Intel iHD",
         "ubit",
@@ -1425,7 +1417,6 @@ fail:
 }
 #endif
 
-#if VA_CHECK_VERSION(0, 36, 0)
 typedef struct VAAPIDRMImageBufferMapping {
     VAImage      image;
     VABufferInfo buffer_info;
@@ -1585,7 +1576,6 @@ fail:
     av_freep(&mapping);
     return err;
 }
-#endif
 
 static int vaapi_map_to_drm(AVHWFramesContext *hwfc, AVFrame *dst,
                             const AVFrame *src, int flags)
@@ -1596,10 +1586,7 @@ static int vaapi_map_to_drm(AVHWFramesContext *hwfc, AVFrame *dst,
     if (err != AVERROR(ENOSYS))
         return err;
 #endif
-#if VA_CHECK_VERSION(0, 36, 0)
     return vaapi_map_to_drm_abh(hwfc, dst, src, flags);
-#endif
-    return AVERROR(ENOSYS);
 }
 
 #endif /* CONFIG_LIBDRM */
@@ -1649,7 +1636,6 @@ static void vaapi_device_free(AVHWDeviceContext *ctx)
     av_freep(&priv);
 }
 
-#if CONFIG_VAAPI_1
 static void vaapi_device_log_error(void *context, const char *message)
 {
     AVHWDeviceContext *ctx = context;
@@ -1663,7 +1649,6 @@ static void vaapi_device_log_info(void *context, const char *message)
 
     av_log(ctx, AV_LOG_VERBOSE, "libva: %s", message);
 }
-#endif
 
 static int vaapi_device_connect(AVHWDeviceContext *ctx,
                                 VADisplay display)
@@ -1672,10 +1657,8 @@ static int vaapi_device_connect(AVHWDeviceContext *ctx,
     int major, minor;
     VAStatus vas;
 
-#if CONFIG_VAAPI_1
     vaSetErrorCallback(display, &vaapi_device_log_error, ctx);
     vaSetInfoCallback (display, &vaapi_device_log_info,  ctx);
-#endif
 
     hwctx->display = display;
 
@@ -1948,7 +1931,6 @@ static int vaapi_device_create(AVHWDeviceContext *ctx, const char *device,
 
     ent = av_dict_get(opts, "driver", NULL, 0);
     if (ent) {
-#if VA_CHECK_VERSION(0, 38, 0)
         VAStatus vas;
         vas = vaSetDriverName(display, ent->value);
         if (vas != VA_STATUS_SUCCESS) {
@@ -1957,10 +1939,6 @@ static int vaapi_device_create(AVHWDeviceContext *ctx, const char *device,
             vaTerminate(display);
             return AVERROR_EXTERNAL;
         }
-#else
-        av_log(ctx, AV_LOG_WARNING, "Driver name setting is not "
-               "supported with this VAAPI version.\n");
-#endif
     }
 
     return vaapi_device_connect(ctx, display);

@@ -22,10 +22,7 @@
 #include <stdint.h>
 
 #include <va/va.h>
-
-#if VA_CHECK_VERSION(1, 0, 0)
 #include <va/va_str.h>
-#endif
 
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_vaapi.h"
@@ -63,12 +60,19 @@ typedef struct VAAPIEncodeSlice {
 } VAAPIEncodeSlice;
 
 typedef struct VAAPIEncodePicture {
-#if VA_CHECK_VERSION(1, 0, 0)
+    struct VAAPIEncodePicture *next;
+
+    int64_t         display_order;
+    int64_t         encode_order;
+    int64_t         pts;
+    int64_t         duration;
+    int             force_idr;
+
+    void           *opaque;
+    AVBufferRef    *opaque_ref;
+
     // ROI regions.
     VAEncROI       *roi;
-#else
-    void           *roi;
-#endif
 
     VASurfaceID     input_surface;
     VASurfaceID     recon_surface;
@@ -216,9 +220,7 @@ typedef struct VAAPIEncodeContext {
     VAEncMiscParameterHRD        hrd_params;
     VAEncMiscParameterFrameRate   fr_params;
     VAEncMiscParameterBufferMaxFrameSize mfs_params;
-#if VA_CHECK_VERSION(0, 36, 0)
     VAEncMiscParameterBufferQualityLevel quality_params;
-#endif
 
     // Per-sequence parameter structure (VAEncSequenceParameterBuffer*).
     void           *codec_sequence_params;

@@ -522,7 +522,6 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
         }
     }
 
-#if VA_CHECK_VERSION(1, 0, 0)
     sd = av_frame_get_side_data(base_pic->input_image,
                                 AV_FRAME_DATA_REGIONS_OF_INTEREST);
     if (sd && base_ctx->roi_allowed) {
@@ -585,7 +584,6 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
         if (err < 0)
             goto fail;
     }
-#endif
 
     vas = vaBeginPicture(ctx->hwctx->display, ctx->va_context,
                          pic->input_surface);
@@ -610,26 +608,17 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_ERROR, "Failed to end picture encode issue: "
                "%d (%s).\n", vas, vaErrorStr(vas));
         err = AVERROR(EIO);
-        // vaRenderPicture() has been called here, so we should not destroy
-        // the parameter buffers unless separate destruction is required.
-        if (CONFIG_VAAPI_1 || ctx->hwctx->driver_quirks &
-            AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS)
-            goto fail;
-        else
-            goto fail_at_end;
+        goto fail;
     }
 
-    if (CONFIG_VAAPI_1 || ctx->hwctx->driver_quirks &
-        AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS) {
-        for (i = 0; i < pic->nb_param_buffers; i++) {
-            vas = vaDestroyBuffer(ctx->hwctx->display,
-                                  pic->param_buffers[i]);
-            if (vas != VA_STATUS_SUCCESS) {
-                av_log(avctx, AV_LOG_ERROR, "Failed to destroy "
-                       "param buffer %#x: %d (%s).\n",
-                       pic->param_buffers[i], vas, vaErrorStr(vas));
-                // And ignore.
-            }
+    for (i = 0; i < pic->nb_param_buffers; i++) {
+        vas = vaDestroyBuffer(ctx->hwctx->display,
+                              pic->param_buffers[i]);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to destroy "
+                   "param buffer %#x: %d (%s).\n",
+                   pic->param_buffers[i], vas, vaErrorStr(vas));
+            // And ignore.
         }
     }
 
@@ -644,7 +633,6 @@ fail:
         for (i = 0; i < pic->nb_slices; i++)
             av_freep(&pic->slices[i].codec_slice_params);
     }
-fail_at_end:
     av_freep(&pic->codec_picture_params);
     av_freep(&pic->param_buffers);
     av_freep(&pic->slices);
@@ -912,25 +900,19 @@ static const VAAPIEncodeRTFormat vaapi_encode_rt_formats[] = {
     { "YUV444",    VA_RT_FORMAT_YUV444,        8, 3, 0, 0 },
     { "XYUV",      VA_RT_FORMAT_YUV444,        8, 3, 0, 0 },
     { "YUV411",    VA_RT_FORMAT_YUV411,        8, 3, 2, 0 },
-#if VA_CHECK_VERSION(0, 38, 1)
     { "YUV420_10", VA_RT_FORMAT_YUV420_10BPP, 10, 3, 1, 1 },
-#endif
 };
 
 static const VAEntrypoint vaapi_encode_entrypoints_normal[] = {
     VAEntrypointEncSlice,
     VAEntrypointEncPicture,
-#if VA_CHECK_VERSION(0, 39, 2)
     VAEntrypointEncSliceLP,
-#endif
     0
 };
-#if VA_CHECK_VERSION(0, 39, 2)
 static const VAEntrypoint vaapi_encode_entrypoints_low_power[] = {
     VAEntrypointEncSliceLP,
     0
 };
-#endif
 
 static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
 {
@@ -949,13 +931,7 @@ static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
 
 
     if (ctx->low_power) {
-#if VA_CHECK_VERSION(0, 39, 2)
         usable_entrypoints = vaapi_encode_entrypoints_low_power;
-#else
-        av_log(avctx, AV_LOG_ERROR, "Low-power encoding is not "
-               "supported with this VAAPI version.\n");
-        return AVERROR(EINVAL);
-#endif
     } else {
         usable_entrypoints = vaapi_encode_entrypoints_normal;
     }
@@ -1006,11 +982,7 @@ static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
             avctx->profile != AV_PROFILE_UNKNOWN)
             continue;
 
-#if VA_CHECK_VERSION(1, 0, 0)
         profile_string = vaProfileStr(profile->va_profile);
-#else
-        profile_string = "(no profile names)";
-#endif
 
         for (j = 0; j < n; j++) {
             if (va_profiles[j] == profile->va_profile)
@@ -1069,11 +1041,7 @@ static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
     }
 
     ctx->va_entrypoint = va_entrypoints[i];
-#if VA_CHECK_VERSION(1, 0, 0)
     entrypoint_string = vaEntrypointStr(ctx->va_entrypoint);
-#else
-    entrypoint_string = "(no entrypoint names)";
-#endif
     av_log(avctx, AV_LOG_VERBOSE, "Using VAAPI entrypoint %s (%d).\n",
            entrypoint_string, ctx->va_entrypoint);
 
@@ -1190,16 +1158,10 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
 
         supported_va_rc_modes = rc_attr.value;
         if (ctx->blbrc) {
-#if VA_CHECK_VERSION(0, 39, 2)
             if (!(supported_va_rc_modes & VA_RC_MB)) {
                 ctx->blbrc = 0;
                 av_log(avctx, AV_LOG_WARNING, "Driver does not support BLBRC.\n");
             }
-#else
-            ctx->blbrc = 0;
-            av_log(avctx, AV_LOG_WARNING, "Please consider to update to VAAPI 0.39.2 "
-                   "or above, which can support BLBRC.\n");
-#endif
         }
 
         for (i = 0; i < FF_ARRAY_ELEMS(vaapi_encode_rc_modes); i++) {
@@ -1427,11 +1389,7 @@ rc_mode_found:
         ctx->config_attributes[ctx->nb_config_attributes++] =
             (VAConfigAttrib) {
             .type  = VAConfigAttribRateControl,
-#if VA_CHECK_VERSION(0, 39, 2)
             .value = ctx->blbrc ? ctx->va_rc_mode | VA_RC_MB : ctx->va_rc_mode,
-#else
-            .value = ctx->va_rc_mode,
-#endif
         };
     }
 
@@ -1464,9 +1422,7 @@ rc_mode_found:
 #if VA_CHECK_VERSION(1, 3, 0)
             .quality_factor     = rc_quality,
 #endif
-#if VA_CHECK_VERSION(0, 39, 2)
             .rc_flags.bits.mb_rate_control = ctx->blbrc ? 1 : 2,
-#endif
         };
         vaapi_encode_add_global_param(avctx,
                                       VAEncMiscParameterTypeRateControl,
@@ -1502,12 +1458,10 @@ rc_mode_found:
     ctx->fr_params = (VAEncMiscParameterFrameRate) {
         .framerate = (unsigned int)fr_den << 16 | fr_num,
     };
-#if VA_CHECK_VERSION(0, 40, 0)
     vaapi_encode_add_global_param(avctx,
                                   VAEncMiscParameterTypeFrameRate,
                                   &ctx->fr_params,
                                   sizeof(ctx->fr_params));
-#endif
 
     return 0;
 }
@@ -1679,11 +1633,9 @@ static av_cold int vaapi_encode_init_row_slice_structure(AVCodecContext *avctx,
         }
         ctx->nb_slices  = (ctx->slice_block_rows + k - 1) / k;
         ctx->slice_size = k;
-#if VA_CHECK_VERSION(1, 0, 0)
     } else if (slice_structure & VA_ENC_SLICE_STRUCTURE_EQUAL_ROWS) {
         ctx->nb_slices  = ctx->slice_block_rows;
         ctx->slice_size = 1;
-#endif
     } else {
         av_log(avctx, AV_LOG_ERROR, "Driver does not support any usable "
                "slice structure modes (%#x).\n", slice_structure);
@@ -1908,7 +1860,6 @@ static av_cold int vaapi_encode_init_packed_headers(AVCodecContext *avctx)
 
 static av_cold int vaapi_encode_init_quality(AVCodecContext *avctx)
 {
-#if VA_CHECK_VERSION(0, 36, 0)
     VAAPIEncodeContext *ctx = avctx->priv_data;
     VAStatus vas;
     VAConfigAttrib attr = { VAConfigAttribEncQualityRange };
@@ -1945,17 +1896,12 @@ static av_cold int vaapi_encode_init_quality(AVCodecContext *avctx)
                                       &ctx->quality_params,
                                       sizeof(ctx->quality_params));
     }
-#else
-    av_log(avctx, AV_LOG_WARNING, "The encode quality option is "
-           "not supported with this VAAPI version.\n");
-#endif
 
     return 0;
 }
 
 static av_cold int vaapi_encode_init_roi(AVCodecContext *avctx)
 {
-#if VA_CHECK_VERSION(1, 0, 0)
     FFHWBaseEncodeContext *base_ctx = avctx->priv_data;
     VAAPIEncodeContext         *ctx = avctx->priv_data;
     VAStatus vas;
@@ -1983,7 +1929,7 @@ static av_cold int vaapi_encode_init_roi(AVCodecContext *avctx)
             (ctx->va_rc_mode == VA_RC_CQP ||
              roi.bits.roi_rc_qp_delta_support);
     }
-#endif
+
     return 0;
 }
 

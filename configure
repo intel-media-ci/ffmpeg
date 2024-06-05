@@ -2636,7 +2636,6 @@ CONFIG_EXTRA="
     texturedsp
     texturedspenc
     tpeldsp
-    vaapi_1
     vaapi_encode
     vc1dsp
     videodsp
@@ -3211,7 +3210,7 @@ hevc_dxva2_hwaccel_deps="dxva2 DXVA_PicParams_HEVC"
 hevc_dxva2_hwaccel_select="hevc_decoder"
 hevc_nvdec_hwaccel_deps="nvdec"
 hevc_nvdec_hwaccel_select="hevc_decoder"
-hevc_vaapi_hwaccel_deps="vaapi VAPictureParameterBufferHEVC"
+hevc_vaapi_hwaccel_deps="vaapi"
 hevc_vaapi_hwaccel_select="hevc_decoder"
 hevc_vdpau_hwaccel_deps="vdpau VdpPictureInfoHEVC"
 hevc_vdpau_hwaccel_select="hevc_decoder"
@@ -3283,7 +3282,7 @@ vp9_dxva2_hwaccel_deps="dxva2 DXVA_PicParams_VP9"
 vp9_dxva2_hwaccel_select="vp9_decoder"
 vp9_nvdec_hwaccel_deps="nvdec"
 vp9_nvdec_hwaccel_select="vp9_decoder"
-vp9_vaapi_hwaccel_deps="vaapi VADecPictureParameterBufferVP9_bit_depth"
+vp9_vaapi_hwaccel_deps="vaapi"
 vp9_vaapi_hwaccel_select="vp9_decoder"
 vp9_vdpau_hwaccel_deps="vdpau VdpPictureInfoVP9"
 vp9_vdpau_hwaccel_select="vp9_decoder"
@@ -3393,7 +3392,6 @@ hevc_qsv_decoder_select="hevc_mp4toannexb_bsf qsvdec"
 hevc_qsv_encoder_select="hevcparse qsvenc"
 hevc_rkmpp_decoder_deps="rkmpp"
 hevc_rkmpp_decoder_select="hevc_mp4toannexb_bsf"
-hevc_vaapi_encoder_deps="VAEncPictureParameterBufferHEVC"
 hevc_vaapi_encoder_select="atsc_a53 cbs_h265 vaapi_encode"
 hevc_vulkan_encoder_select="atsc_a53 cbs_h265 vulkan_encode"
 hevc_v4l2m2m_decoder_deps="v4l2_m2m hevc_v4l2_m2m"
@@ -3403,7 +3401,6 @@ mjpeg_cuvid_decoder_deps="cuvid"
 mjpeg_qsv_decoder_select="qsvdec"
 mjpeg_qsv_encoder_deps="libmfx"
 mjpeg_qsv_encoder_select="qsvenc"
-mjpeg_vaapi_encoder_deps="VAEncPictureParameterBufferJPEG"
 mjpeg_vaapi_encoder_select="cbs_jpeg jpegtables vaapi_encode"
 mp3_mf_encoder_deps="mediafoundation"
 mp3_mediacodec_decoder_deps="mediacodec"
@@ -3434,7 +3431,6 @@ vp8_mediacodec_decoder_deps="mediacodec"
 vp8_mediacodec_encoder_deps="mediacodec"
 vp8_qsv_decoder_select="qsvdec"
 vp8_rkmpp_decoder_deps="rkmpp"
-vp8_vaapi_encoder_deps="VAEncPictureParameterBufferVP8"
 vp8_vaapi_encoder_select="vaapi_encode"
 vp8_v4l2m2m_decoder_deps="v4l2_m2m vp8_v4l2_m2m"
 vp8_v4l2m2m_encoder_deps="v4l2_m2m vp8_v4l2_m2m"
@@ -3443,7 +3439,6 @@ vp9_mediacodec_decoder_deps="mediacodec"
 vp9_mediacodec_encoder_deps="mediacodec"
 vp9_qsv_decoder_select="qsvdec"
 vp9_rkmpp_decoder_deps="rkmpp"
-vp9_vaapi_encoder_deps="VAEncPictureParameterBufferVP9"
 vp9_vaapi_encoder_select="vaapi_encode"
 vp9_qsv_encoder_deps="libmfx MFX_CODEC_VP9"
 vp9_qsv_encoder_select="qsvenc"
@@ -3996,17 +3991,17 @@ xfade_vulkan_filter_deps="vulkan spirv_compiler"
 yadif_cuda_filter_deps="ffnvcodec"
 yadif_cuda_filter_deps_any="cuda_nvcc cuda_llvm"
 yadif_videotoolbox_filter_deps="metal corevideo videotoolbox"
-hstack_vaapi_filter_deps="vaapi_1"
-vstack_vaapi_filter_deps="vaapi_1"
-xstack_vaapi_filter_deps="vaapi_1"
+hstack_vaapi_filter_deps="vaapi"
+vstack_vaapi_filter_deps="vaapi"
+xstack_vaapi_filter_deps="vaapi"
 hstack_qsv_filter_deps="libmfx"
 hstack_qsv_filter_select="qsvvpp"
 vstack_qsv_filter_deps="libmfx"
 vstack_qsv_filter_select="qsvvpp"
 xstack_qsv_filter_deps="libmfx"
 xstack_qsv_filter_select="qsvvpp"
-pad_vaapi_filter_deps="vaapi_1"
-drawbox_vaapi_filter_deps="vaapi_1"
+pad_vaapi_filter_deps="vaapi"
+drawbox_vaapi_filter_deps="vaapi VAProcPipelineCaps_blend_flags"
 
 # examples
 avio_http_serve_files_deps="avformat avutil fork"
@@ -7289,7 +7284,7 @@ enabled libdrm &&
     check_pkg_config libdrm_getfb2 libdrm "xf86drmMode.h" drmModeGetFB2
 
 enabled vaapi &&
-    check_pkg_config vaapi "libva >= 0.35.0" "va/va.h" vaInitialize
+    check_pkg_config vaapi "libva >= 1.0.0" "va/va.h" vaInitialize
 
 if enabled vaapi; then
     case $target_os in
@@ -7305,18 +7300,10 @@ if enabled vaapi; then
         check_pkg_config vaapi_x11 "libva-x11" "va/va_x11.h" vaGetDisplay
     fi
 
-    check_cpp_condition vaapi_1 "va/va.h" "VA_CHECK_VERSION(1, 0, 0)"
-
-    check_type "va/va.h va/va_dec_hevc.h" "VAPictureParameterBufferHEVC"
-    check_struct "va/va.h" "VADecPictureParameterBufferVP9" bit_depth
     check_struct "va/va.h" "VADecPictureParameterBufferAV1" bit_depth_idx
     check_type   "va/va.h va/va_vpp.h" "VAProcFilterParameterBufferHDRToneMapping"
     check_struct "va/va.h va/va_vpp.h" "VAProcPipelineCaps" rotation_flags
     check_struct "va/va.h va/va_vpp.h" "VAProcPipelineCaps" blend_flags
-    check_type "va/va.h va/va_enc_hevc.h" "VAEncPictureParameterBufferHEVC"
-    check_type "va/va.h va/va_enc_jpeg.h" "VAEncPictureParameterBufferJPEG"
-    check_type "va/va.h va/va_enc_vp8.h"  "VAEncPictureParameterBufferVP8"
-    check_type "va/va.h va/va_enc_vp9.h"  "VAEncPictureParameterBufferVP9"
     check_type "va/va.h va/va_enc_av1.h"  "VAEncPictureParameterBufferAV1"
 fi
 

@@ -203,12 +203,9 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
     output_frames->width     = ctx->output_width;
     output_frames->height    = ctx->output_height;
 
-    if (CONFIG_VAAPI_1)
-        output_frames->initial_pool_size = 0;
-    else
-        output_frames->initial_pool_size = 4;
+    output_frames->initial_pool_size = 0;
 
-    err = ff_filter_init_hw_frames(avctx, outlink, 10);
+    err = ff_filter_init_hw_frames(avctx, outlink, 0);
     if (err < 0)
         goto fail;
 
@@ -676,15 +673,12 @@ int ff_vaapi_vpp_render_pictures(AVFilterContext *avctx,
         goto fail_after_render;
     }
 
-    if (CONFIG_VAAPI_1 || ctx->hwctx->driver_quirks &
-        AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS) {
-        for (int i = 0; i < cout && params_ids[i] != VA_INVALID_ID; i++) {
-            vas = vaDestroyBuffer(ctx->hwctx->display, params_ids[i]);
-            if (vas != VA_STATUS_SUCCESS) {
-                av_log(avctx, AV_LOG_ERROR, "Failed to free parameter buffer: "
-                       "%d (%s).\n", vas, vaErrorStr(vas));
-                // And ignore.
-            }
+    for (int i = 0; i < cout && params_ids[i] != VA_INVALID_ID; i++) {
+        vas = vaDestroyBuffer(ctx->hwctx->display, params_ids[i]);
+        if (vas != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to free parameter buffer: "
+                   "%d (%s).\n", vas, vaErrorStr(vas));
+            // And ignore.
         }
     }
 

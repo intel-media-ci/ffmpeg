@@ -198,16 +198,10 @@ int ff_vaapi_decode_issue(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_ERROR, "Failed to end picture decode "
                "issue: %d (%s).\n", vas, vaErrorStr(vas));
         err = AVERROR(EIO);
-        if (CONFIG_VAAPI_1 || ctx->hwctx->driver_quirks &
-            AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS)
-            goto fail;
-        else
-            goto fail_at_end;
+        goto fail;
     }
 
-    if (CONFIG_VAAPI_1 || ctx->hwctx->driver_quirks &
-        AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS)
-        ff_vaapi_decode_destroy_buffers(avctx, pic);
+    ff_vaapi_decode_destroy_buffers(avctx, pic);
 
     err = 0;
     goto exit;
@@ -220,7 +214,6 @@ fail_with_picture:
     }
 fail:
     ff_vaapi_decode_destroy_buffers(avctx, pic);
-fail_at_end:
 exit:
     pic->nb_param_buffers = 0;
     pic->nb_slices        = 0;
@@ -413,12 +406,10 @@ static const struct {
                            H264ConstrainedBaseline),
     MAP(H264,        H264_MAIN,       H264Main    ),
     MAP(H264,        H264_HIGH,       H264High    ),
-#if VA_CHECK_VERSION(0, 37, 0)
     MAP(HEVC,        HEVC_MAIN,       HEVCMain    ),
     MAP(HEVC,        HEVC_MAIN_10,    HEVCMain10  ),
     MAP(HEVC,        HEVC_MAIN_STILL_PICTURE,
                                       HEVCMain    ),
-#endif
 #if VA_CHECK_VERSION(1, 2, 0) && CONFIG_HEVC_VAAPI_HWACCEL
     MAP(HEVC,        HEVC_REXT,       None,
                  ff_vaapi_parse_hevc_rext_scc_profile ),
@@ -436,14 +427,10 @@ static const struct {
     MAP(VC1,         VC1_COMPLEX,     VC1Advanced ),
     MAP(VC1,         VC1_ADVANCED,    VC1Advanced ),
     MAP(VP8,         UNKNOWN,       VP8Version0_3 ),
-#if VA_CHECK_VERSION(0, 38, 0)
     MAP(VP9,         VP9_0,           VP9Profile0 ),
-#endif
-#if VA_CHECK_VERSION(0, 39, 0)
     MAP(VP9,         VP9_1,           VP9Profile1 ),
     MAP(VP9,         VP9_2,           VP9Profile2 ),
     MAP(VP9,         VP9_3,           VP9Profile3 ),
-#endif
 #if VA_CHECK_VERSION(1, 8, 0)
     MAP(AV1,         AV1_MAIN,        AV1Profile0),
     MAP(AV1,         AV1_HIGH,        AV1Profile1),
@@ -606,27 +593,7 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         if (err < 0)
             goto fail;
 
-        if (CONFIG_VAAPI_1)
-            frames->initial_pool_size = 0;
-        else {
-            frames->initial_pool_size = 1;
-            // Add per-codec number of surfaces used for storing reference frames.
-            switch (avctx->codec_id) {
-            case AV_CODEC_ID_H264:
-            case AV_CODEC_ID_HEVC:
-            case AV_CODEC_ID_AV1:
-                frames->initial_pool_size += 16;
-                break;
-            case AV_CODEC_ID_VP9:
-                frames->initial_pool_size += 8;
-                break;
-            case AV_CODEC_ID_VP8:
-                frames->initial_pool_size += 3;
-                break;
-            default:
-                frames->initial_pool_size += 2;
-            }
-        }
+        frames->initial_pool_size = 0;
     }
 
     av_hwframe_constraints_free(&constraints);
