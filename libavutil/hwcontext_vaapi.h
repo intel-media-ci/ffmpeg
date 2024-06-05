@@ -21,6 +21,8 @@
 
 #include <va/va.h>
 
+#include "attributes.h"
+
 /**
  * @file
  * API-specific header for AV_HWDEVICE_TYPE_VAAPI.
@@ -37,18 +39,24 @@ enum {
     /**
      * The quirks field has been set by the user and should not be detected
      * automatically by av_hwdevice_ctx_init().
+     *
+     * @deprecated  Driver quirks are no longer used.
      */
     AV_VAAPI_DRIVER_QUIRK_USER_SET = (1 << 0),
     /**
      * The driver does not destroy parameter buffers when they are used by
      * vaRenderPicture().  Additional code will be required to destroy them
      * separately afterwards.
+     *
+     * @deprecated  Driver quirks are no longer used.
      */
     AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS = (1 << 1),
 
     /**
      * The driver does not support the VASurfaceAttribMemoryType attribute,
      * so the surface allocation code will not try to use it.
+     *
+     * @deprecated  Driver quirks are no longer used.
      */
     AV_VAAPI_DRIVER_QUIRK_ATTRIB_MEMTYPE = (1 << 2),
 
@@ -56,6 +64,8 @@ enum {
      * The driver does not support surface attributes at all.
      * The surface allocation code will never pass them to surface allocation,
      * and the results of the vaQuerySurfaceAttributes() call will be faked.
+     *
+     * @deprecated  Driver quirks are no longer used.
      */
     AV_VAAPI_DRIVER_QUIRK_SURFACE_ATTRIBUTES = (1 << 3),
 };
@@ -76,7 +86,14 @@ typedef struct AVVAAPIDeviceContext {
      * AV_VAAPI_DRIVER_QUIRK_USER_SET bit is already present.  The user
      * may need to refer to this field when performing any later
      * operations using VAAPI with the same VADisplay.
+     *
+     * @deprecated  This was used with libva before the 2.x to support
+     *              various drivers which had behaviour not fully
+     *              matching the specification.  Since libva 2.x this is
+     *              no longer used; setting this field has no effect and
+     *              new code must ignore it.
      */
+    attribute_deprecated
     unsigned int driver_quirks;
 } AVVAAPIDeviceContext;
 
