@@ -981,6 +981,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
     H265RawSliceHeader                 *sh = &priv->raw_slice.header;
     VAEncPictureParameterBufferHEVC  *vpic = pic->codec_picture_params;
     VAEncSliceParameterBufferHEVC  *vslice = slice->codec_slice_params;
+    int list0_poc[MAX_DPB_SIZE], list1_poc[MAX_DPB_SIZE];
     int i;
 
     sh->nal_unit_header = (H265RawNALUnitHeader) {
@@ -1074,18 +1075,22 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
         rps->num_negative_pics = i;
         poc = hpic->pic_order_cnt;
-        for (j = i - 1; j >= 0; j--) {
+        for (int k = 0, j = i - 1; j >= 0; j--) {
             rps->delta_poc_s0_minus1[i - 1 - j] = poc - rps_poc[j] - 1;
             rps->used_by_curr_pic_s0_flag[i - 1 - j] = rps_used[j];
             poc = rps_poc[j];
+            if (rps_used[j])
+                list0_poc[k++] = poc;
         }
 
         rps->num_positive_pics = rps_pics - i;
         poc = hpic->pic_order_cnt;
-        for (j = i; j < rps_pics; j++) {
+        for (int k = 0, j = i; j < rps_pics; j++) {
             rps->delta_poc_s1_minus1[j - i] = rps_poc[j] - poc - 1;
             rps->used_by_curr_pic_s1_flag[j - i] = rps_used[j];
             poc = rps_poc[j];
+            if (rps_used[j])
+                list1_poc[k++] = poc;
         }
 
         sh->num_long_term_sps  = 0;
@@ -1166,16 +1171,25 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         vslice->ref_pic_list1[i].flags      = VA_PICTURE_HEVC_INVALID;
     }
 
-    if (pic->nb_refs[0]) {
+    for (i = 0; i < pic->nb_refs[0]; i++) {
         // Backward reference for P- or B-frame.
         av_assert0(pic->type == PICTURE_TYPE_P ||
                    pic->type == PICTURE_TYPE_B);
-        vslice->ref_pic_list0[0] = vpic->reference_frames[0];
+        for (int j = 0; j < FF_ARRAY_ELEMS(vpic->reference_frames); j++) {
+            if (list0_poc[i] == vpic->reference_frames[j].pic_order_cnt &&
+                vpic->reference_frames[j].picture_id != VA_INVALID_ID)
+                vslice->ref_pic_list0[i] = vpic->reference_frames[j];
+        }
     }
-    if (pic->nb_refs[1]) {
+
+    for (i = 0; i < pic->nb_refs[1]; i++) {
         // Forward reference for B-frame.
         av_assert0(pic->type == PICTURE_TYPE_B);
-        vslice->ref_pic_list1[0] = vpic->reference_frames[1];
+        for (int j = 0; j < FF_ARRAY_ELEMS(vpic->reference_frames); j++) {
+            if (list1_poc[i] == vpic->reference_frames[j].pic_order_cnt &&
+                vpic->reference_frames[j].picture_id != VA_INVALID_ID)
+                vslice->ref_pic_list1[i] = vpic->reference_frames[j];
+        }
     }
 
     if (pic->type == PICTURE_TYPE_P && ctx->p_to_gpb) {
