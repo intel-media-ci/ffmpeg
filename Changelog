@@ -12,7 +12,7 @@ version <next>:
 - qsv_params option added for QSV encoders
 - VVC decoder compatible with DVB test content
 - xHE-AAC decoder
-
+- D3D12VA HEVC encoder
 
 version 7.0:
 - DXV DXT1 encoder
