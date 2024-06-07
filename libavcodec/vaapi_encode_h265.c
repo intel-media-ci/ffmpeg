@@ -1101,9 +1101,9 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
             sh->collocated_ref_idx      = 0;
         }
 
-        sh->num_ref_idx_active_override_flag = 0;
-        sh->num_ref_idx_l0_active_minus1 = pps->num_ref_idx_l0_default_active_minus1;
-        sh->num_ref_idx_l1_active_minus1 = pps->num_ref_idx_l1_default_active_minus1;
+        sh->num_ref_idx_active_override_flag = 1;
+        sh->num_ref_idx_l0_active_minus1 = pic->nb_refs[0] ? pic->nb_refs[0] - 1 : 0;
+        sh->num_ref_idx_l1_active_minus1 = pic->nb_refs[1] ? pic->nb_refs[1] - 1 : 0;
     }
 
     sh->slice_sao_luma_flag = sh->slice_sao_chroma_flag =
@@ -1183,6 +1183,9 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
             vslice->ref_pic_list1[i] = vslice->ref_pic_list0[i];
         }
+        sh->num_ref_idx_l1_active_minus1 =
+            vslice->num_ref_idx_l1_active_minus1 =
+            sh->num_ref_idx_l0_active_minus1;
     }
 
     return 0;
