@@ -700,8 +700,6 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
         .coded_buf = VA_INVALID_ID,
 
-        .collocated_ref_pic_index = sps->sps_temporal_mvp_enabled_flag ?
-                                    0 : 0xff,
         .last_picture = 0,
 
         .pic_init_qp            = pps->init_qp_minus26 + 26,
@@ -763,6 +761,7 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
     VAAPIEncodePicture              *prev = pic->prev;
     VAAPIEncodeH265Picture         *hprev = prev ? prev->priv_data : NULL;
     VAEncPictureParameterBufferHEVC *vpic = pic->codec_picture_params;
+    H265RawSPS                    *sps = &priv->raw_sps;
     int i, j = 0;
 
     if (pic->type == PICTURE_TYPE_IDR) {
@@ -945,6 +944,14 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
     vpic->nal_unit_type = hpic->slice_nal_unit;
 
     vpic->pic_fields.bits.reference_pic_flag = pic->is_reference;
+    for (i = 0, j = 0; i < FF_ARRAY_ELEMS(vpic->reference_frames); i++) {
+        if (vpic->reference_frames[i].picture_id == VA_INVALID_ID ||
+            vpic->reference_frames[i].pic_order_cnt > hpic->pic_order_cnt)
+            continue;
+        if (vpic->reference_frames[i].pic_order_cnt > vpic->reference_frames[j].pic_order_cnt)
+            j = i;
+    }
+    vpic->collocated_ref_pic_index = sps->sps_temporal_mvp_enabled_flag ? j : 0xff;
     switch (pic->type) {
     case PICTURE_TYPE_IDR:
         vpic->pic_fields.bits.idr_pic_flag       = 1;
