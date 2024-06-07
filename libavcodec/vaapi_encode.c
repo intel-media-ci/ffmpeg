@@ -1230,7 +1230,7 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
         // TODO: apply both previous and forward multi reference for all vaapi encoders.
         // And L0/L1 reference frame number can be set dynamically through query
         // VAConfigAttribEncMaxRefFrames attribute.
-        if (avctx->codec_id == AV_CODEC_ID_AV1) {
+        if (avctx->codec_id == AV_CODEC_ID_AV1 || avctx->codec_id == AV_CODEC_ID_H265) {
             for (i = 0; i < ctx->nb_next_prev; i++)
                 vaapi_encode_add_ref(avctx, pic, ctx->next_prev[i],
                                      pic->type == PICTURE_TYPE_P,
