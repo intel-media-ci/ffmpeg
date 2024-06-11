@@ -913,23 +913,23 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
         .flags         = 0,
     };
 
-    for (int k = 0; k < MAX_REFERENCE_LIST_NUM; k++) {
-        for (i = 0; i < pic->nb_refs[k]; i++) {
-            VAAPIEncodePicture      *ref = pic->refs[k][i];
-            VAAPIEncodeH265Picture *href;
+    for (i = 0, j = 0; i < pic->nb_dpb_pics; i++) {
+        VAAPIEncodePicture      *ref = pic->dpb[i];
+        VAAPIEncodeH265Picture *href;
 
-            av_assert0(ref && ref->encode_order < pic->encode_order);
-            href = ref->priv_data;
+        if (ref == pic)
+            continue;
+        av_assert0(ref && ref->encode_order < pic->encode_order);
+        href = ref->priv_data;
 
-            vpic->reference_frames[j++] = (VAPictureHEVC) {
-                .picture_id    = ref->recon_surface,
-                .pic_order_cnt = href->pic_order_cnt,
-                .flags = (ref->display_order < pic->display_order ?
-                          VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE : 0) |
-                          (ref->display_order > pic->display_order ?
-                          VA_PICTURE_HEVC_RPS_ST_CURR_AFTER  : 0),
-            };
-        }
+        vpic->reference_frames[j++] = (VAPictureHEVC) {
+            .picture_id    = ref->recon_surface,
+            .pic_order_cnt = href->pic_order_cnt,
+            .flags = (ref->display_order < pic->display_order ?
+                      VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE : 0) |
+                      (ref->display_order > pic->display_order ?
+                      VA_PICTURE_HEVC_RPS_ST_CURR_AFTER  : 0),
+        };
     }
 
     for (; j < FF_ARRAY_ELEMS(vpic->reference_frames); j++) {
