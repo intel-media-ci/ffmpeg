@@ -1142,7 +1142,7 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
     }
 
     if (pic) {
-        av_log(avctx, AV_LOG_DEBUG, "Pick B-picture at depth %d to "
+        av_log(avctx, AV_LOG_WARNING, "Pick B-picture at depth %d to "
                "encode next.\n", pic->b_depth);
         *pic_out = pic;
         return 0;
@@ -1188,18 +1188,18 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
     }
 
     if (!pic) {
-        av_log(avctx, AV_LOG_DEBUG, "Pick nothing to encode next - "
+        av_log(avctx, AV_LOG_WARNING, "Pick nothing to encode next - "
                "need more input for reference pictures.\n");
         return AVERROR(EAGAIN);
     }
     if (ctx->input_order <= ctx->decode_delay && !ctx->end_of_stream) {
-        av_log(avctx, AV_LOG_DEBUG, "Pick nothing to encode next - "
+        av_log(avctx, AV_LOG_WARNING, "Pick nothing to encode next - "
                "need more input for timestamps.\n");
         return AVERROR(EAGAIN);
     }
 
     if (pic->force_idr) {
-        av_log(avctx, AV_LOG_DEBUG, "Pick forced IDR-picture to "
+        av_log(avctx, AV_LOG_WARNING, "Pick forced IDR-picture to "
                "encode next.\n");
         pic->type = PICTURE_TYPE_IDR;
         ctx->idr_counter = 1;
@@ -1207,12 +1207,12 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
 
     } else if (ctx->gop_counter + b_counter >= ctx->gop_size) {
         if (ctx->idr_counter == ctx->gop_per_idr) {
-            av_log(avctx, AV_LOG_DEBUG, "Pick new-GOP IDR-picture to "
+            av_log(avctx, AV_LOG_WARNING, "Pick new-GOP IDR-picture to "
                    "encode next.\n");
             pic->type = PICTURE_TYPE_IDR;
             ctx->idr_counter = 1;
         } else {
-            av_log(avctx, AV_LOG_DEBUG, "Pick new-GOP I-picture to "
+            av_log(avctx, AV_LOG_WARNING, "Pick new-GOP I-picture to "
                    "encode next.\n");
             pic->type = PICTURE_TYPE_I;
             ++ctx->idr_counter;
@@ -1221,10 +1221,10 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
 
     } else {
         if (ctx->gop_counter + b_counter + closed_gop_end == ctx->gop_size) {
-            av_log(avctx, AV_LOG_DEBUG, "Pick group-end P-picture to "
+            av_log(avctx, AV_LOG_WARNING, "Pick group-end P-picture to "
                    "encode next.\n");
         } else {
-            av_log(avctx, AV_LOG_DEBUG, "Pick normal P-picture to "
+            av_log(avctx, AV_LOG_WARNING, "Pick normal P-picture to "
                    "encode next.\n");
         }
         pic->type = PICTURE_TYPE_P;
