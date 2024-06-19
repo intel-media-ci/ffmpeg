@@ -1234,11 +1234,11 @@ static int vaapi_encode_pick_next(AVCodecContext *avctx,
             for (i = 0; i < ctx->nb_next_prev; i++)
                 vaapi_encode_add_ref(avctx, pic, ctx->next_prev[i],
                                      pic->type == PICTURE_TYPE_P,
-                                     b_counter > 0, 0);
+                                     1, 0);
         } else
             vaapi_encode_add_ref(avctx, pic, start,
                                  pic->type == PICTURE_TYPE_P,
-                                 b_counter > 0, 0);
+                                 1, 0);
 
         vaapi_encode_add_ref(avctx, pic, ctx->next_prev[ctx->nb_next_prev - 1], 0, 0, 1);
     }
