@@ -728,22 +728,23 @@ static int vaapi_encode_h264_init_picture_params(AVCodecContext *avctx,
         .TopFieldOrderCnt    = hpic->pic_order_cnt,
         .BottomFieldOrderCnt = hpic->pic_order_cnt,
     };
-    for (int k = 0; k < MAX_REFERENCE_LIST_NUM; k++) {
-        for (i = 0; i < pic->nb_refs[k]; i++) {
-            VAAPIEncodePicture      *ref = pic->refs[k][i];
-            VAAPIEncodeH264Picture *href;
 
-            av_assert0(ref && ref->encode_order < pic->encode_order);
-            href = ref->priv_data;
+    for (i = 0, j = 0; i < pic->nb_dpb_pics; i++) {
+        VAAPIEncodePicture      *ref = pic->dpb[i];
+        VAAPIEncodeH264Picture *href;
 
-            vpic->ReferenceFrames[j++] = (VAPictureH264) {
-                .picture_id          = ref->recon_surface,
-                .frame_idx           = href->frame_num,
-                .flags               = VA_PICTURE_H264_SHORT_TERM_REFERENCE,
-                .TopFieldOrderCnt    = href->pic_order_cnt,
-                .BottomFieldOrderCnt = href->pic_order_cnt,
-            };
-        }
+        if (ref == pic)
+            continue;
+        av_assert0(ref && ref->encode_order < pic->encode_order);
+        href = ref->priv_data;
+
+        vpic->ReferenceFrames[j++] = (VAPictureH264) {
+            .picture_id          = ref->recon_surface,
+            .frame_idx           = href->frame_num,
+            .flags               = VA_PICTURE_H264_SHORT_TERM_REFERENCE,
+            .TopFieldOrderCnt    = href->pic_order_cnt,
+            .BottomFieldOrderCnt = href->pic_order_cnt,
+        };
     }
 
     for (; j < FF_ARRAY_ELEMS(vpic->ReferenceFrames); j++) {

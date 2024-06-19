@@ -701,8 +701,6 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 
         .coded_buf = VA_INVALID_ID,
 
-        .collocated_ref_pic_index = sps->sps_temporal_mvp_enabled_flag ?
-                                    0 : 0xff,
         .last_picture = 0,
 
         .pic_init_qp            = pps->init_qp_minus26 + 26,
@@ -764,6 +762,7 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
     VAAPIEncodePicture              *prev = pic->prev;
     VAAPIEncodeH265Picture         *hprev = prev ? prev->priv_data : NULL;
     VAEncPictureParameterBufferHEVC *vpic = pic->codec_picture_params;
+    H265RawSPS                    *sps = &priv->raw_sps;
     int i, j = 0;
 
     if (pic->type == PICTURE_TYPE_IDR) {
@@ -915,23 +914,23 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
         .flags         = 0,
     };
 
-    for (int k = 0; k < MAX_REFERENCE_LIST_NUM; k++) {
-        for (i = 0; i < pic->nb_refs[k]; i++) {
-            VAAPIEncodePicture      *ref = pic->refs[k][i];
-            VAAPIEncodeH265Picture *href;
+    for (i = 0, j = 0; i < pic->nb_dpb_pics; i++) {
+        VAAPIEncodePicture      *ref = pic->dpb[i];
+        VAAPIEncodeH265Picture *href;
 
-            av_assert0(ref && ref->encode_order < pic->encode_order);
-            href = ref->priv_data;
+        if (ref == pic)
+            continue;
+        av_assert0(ref && ref->encode_order < pic->encode_order);
+        href = ref->priv_data;
 
-            vpic->reference_frames[j++] = (VAPictureHEVC) {
-                .picture_id    = ref->recon_surface,
-                .pic_order_cnt = href->pic_order_cnt,
-                .flags = (ref->display_order < pic->display_order ?
-                          VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE : 0) |
-                          (ref->display_order > pic->display_order ?
-                          VA_PICTURE_HEVC_RPS_ST_CURR_AFTER  : 0),
-            };
-        }
+        vpic->reference_frames[j++] = (VAPictureHEVC) {
+            .picture_id    = ref->recon_surface,
+            .pic_order_cnt = href->pic_order_cnt,
+            .flags = (ref->display_order < pic->display_order ?
+                      VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE : 0) |
+                      (ref->display_order > pic->display_order ?
+                      VA_PICTURE_HEVC_RPS_ST_CURR_AFTER  : 0),
+        };
     }
 
     for (; j < FF_ARRAY_ELEMS(vpic->reference_frames); j++) {
@@ -946,6 +945,14 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
     vpic->nal_unit_type = hpic->slice_nal_unit;
 
     vpic->pic_fields.bits.reference_pic_flag = pic->is_reference;
+    for (i = 0, j = 0; i < FF_ARRAY_ELEMS(vpic->reference_frames); i++) {
+        if (vpic->reference_frames[i].picture_id == VA_INVALID_ID ||
+            vpic->reference_frames[i].pic_order_cnt > hpic->pic_order_cnt)
+            continue;
+        if (vpic->reference_frames[i].pic_order_cnt > vpic->reference_frames[j].pic_order_cnt)
+            j = i;
+    }
+    vpic->collocated_ref_pic_index = sps->sps_temporal_mvp_enabled_flag ? j : 0xff;
     switch (pic->type) {
     case PICTURE_TYPE_IDR:
         vpic->pic_fields.bits.idr_pic_flag       = 1;
@@ -982,6 +989,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
     H265RawSliceHeader                 *sh = &priv->raw_slice.header;
     VAEncPictureParameterBufferHEVC  *vpic = pic->codec_picture_params;
     VAEncSliceParameterBufferHEVC  *vslice = slice->codec_slice_params;
+    int list0_poc[MAX_DPB_SIZE], list1_poc[MAX_DPB_SIZE];
     int i;
 
     sh->nal_unit_header = (H265RawNALUnitHeader) {
@@ -1075,18 +1083,22 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
         rps->num_negative_pics = i;
         poc = hpic->pic_order_cnt;
-        for (j = i - 1; j >= 0; j--) {
+        for (int k = 0, j = i - 1; j >= 0; j--) {
             rps->delta_poc_s0_minus1[i - 1 - j] = poc - rps_poc[j] - 1;
             rps->used_by_curr_pic_s0_flag[i - 1 - j] = rps_used[j];
             poc = rps_poc[j];
+            if (rps_used[j])
+                list0_poc[k++] = poc;
         }
 
         rps->num_positive_pics = rps_pics - i;
         poc = hpic->pic_order_cnt;
-        for (j = i; j < rps_pics; j++) {
+        for (int k = 0, j = i; j < rps_pics; j++) {
             rps->delta_poc_s1_minus1[j - i] = rps_poc[j] - poc - 1;
             rps->used_by_curr_pic_s1_flag[j - i] = rps_used[j];
             poc = rps_poc[j];
+            if (rps_used[j])
+                list1_poc[k++] = poc;
         }
 
         sh->num_long_term_sps  = 0;
@@ -1102,9 +1114,9 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
             sh->collocated_ref_idx      = 0;
         }
 
-        sh->num_ref_idx_active_override_flag = 0;
-        sh->num_ref_idx_l0_active_minus1 = pps->num_ref_idx_l0_default_active_minus1;
-        sh->num_ref_idx_l1_active_minus1 = pps->num_ref_idx_l1_default_active_minus1;
+        sh->num_ref_idx_active_override_flag = 1;
+        sh->num_ref_idx_l0_active_minus1 = pic->nb_refs[0] ? pic->nb_refs[0] - 1 : 0;
+        sh->num_ref_idx_l1_active_minus1 = pic->nb_refs[1] ? pic->nb_refs[1] - 1 : 0;
     }
 
     sh->slice_sao_luma_flag = sh->slice_sao_chroma_flag =
@@ -1167,27 +1179,35 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         vslice->ref_pic_list1[i].flags      = VA_PICTURE_HEVC_INVALID;
     }
 
-    if (pic->nb_refs[0]) {
+    for (i = 0; i < pic->nb_refs[0]; i++) {
         // Backward reference for P- or B-frame.
         av_assert0(pic->type == PICTURE_TYPE_P ||
                    pic->type == PICTURE_TYPE_B);
-        vslice->ref_pic_list0[0] = vpic->reference_frames[0];
-        if (ctx->p_to_gpb && pic->type == PICTURE_TYPE_P)
-            // Reference for GPB B-frame, L0 == L1
-            vslice->ref_pic_list1[0] = vpic->reference_frames[0];
+        for (int j = 0; j < FF_ARRAY_ELEMS(vpic->reference_frames); j++) {
+            if (list0_poc[i] == vpic->reference_frames[j].pic_order_cnt &&
+                vpic->reference_frames[j].picture_id != VA_INVALID_ID)
+                vslice->ref_pic_list0[i] = vpic->reference_frames[j];
+        }
     }
-    if (pic->nb_refs[1]) {
+
+    for (i = 0; i < pic->nb_refs[1]; i++) {
         // Forward reference for B-frame.
         av_assert0(pic->type == PICTURE_TYPE_B);
-        vslice->ref_pic_list1[0] = vpic->reference_frames[1];
+        for (int j = 0; j < FF_ARRAY_ELEMS(vpic->reference_frames); j++) {
+            if (list1_poc[i] == vpic->reference_frames[j].pic_order_cnt &&
+                vpic->reference_frames[j].picture_id != VA_INVALID_ID)
+                vslice->ref_pic_list1[i] = vpic->reference_frames[j];
+        }
     }
 
     if (pic->type == PICTURE_TYPE_P && ctx->p_to_gpb) {
         vslice->slice_type = HEVC_SLICE_B;
         for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
-            vslice->ref_pic_list1[i].picture_id = vslice->ref_pic_list0[i].picture_id;
-            vslice->ref_pic_list1[i].flags      = vslice->ref_pic_list0[i].flags;
+            vslice->ref_pic_list1[i] = vslice->ref_pic_list0[i];
         }
+        sh->num_ref_idx_l1_active_minus1 =
+            vslice->num_ref_idx_l1_active_minus1 =
+            sh->num_ref_idx_l0_active_minus1;
     }
 
     return 0;
