@@ -919,6 +919,7 @@ static const FFCodecDefault vaapi_encode_av1_defaults[] = {
     { "g",              "120" },
     { "qmin",           "1"   },
     { "qmax",           "255" },
+    { "refs",           "3"   },
     { NULL },
 };
 

@@ -554,6 +554,7 @@ static const AVOption vaapi_encode_mjpeg_options[] = {
 
 static const FFCodecDefault vaapi_encode_mjpeg_defaults[] = {
     { "b",              "0"  },
+    { "refs",           "0"  },
     { NULL },
 };
 

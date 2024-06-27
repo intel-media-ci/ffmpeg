@@ -677,6 +677,7 @@ static const FFCodecDefault vaapi_encode_mpeg2_defaults[] = {
     { "b_qoffset",      "0"   },
     { "qmin",           "-1"  },
     { "qmax",           "-1"  },
+    { "refs",           "3"   },
     { NULL },
 };
 

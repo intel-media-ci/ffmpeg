@@ -1021,11 +1021,11 @@ static void vaapi_encode_add_next_prev(AVCodecContext *avctx,
         return;
     }
 
-    if (ctx->nb_next_prev < MAX_PICTURE_REFERENCES) {
+    if (ctx->nb_next_prev < ctx->num_refs) {
         ctx->next_prev[ctx->nb_next_prev++] = vaapi_encode_picture_ref(pic);
     } else {
         vaapi_encode_picture_unref(ctx->next_prev[0]);
-        for (i = 0; i < MAX_PICTURE_REFERENCES - 1; i++)
+        for (i = 0; i < ctx->num_refs - 1; i++)
             ctx->next_prev[i] = ctx->next_prev[i + 1];
         ctx->next_prev[i] = vaapi_encode_picture_ref(pic);
     }
@@ -2245,6 +2245,7 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
         avctx->gop_size <= 1) {
         av_log(avctx, AV_LOG_VERBOSE, "Using intra frames only.\n");
         ctx->gop_size = 1;
+        ctx->num_refs = 0;
     } else if (ref_l0 < 1) {
         av_log(avctx, AV_LOG_ERROR, "Driver does not support any "
                "reference frames.\n");
@@ -2262,6 +2263,7 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
         ctx->gop_size = avctx->gop_size;
         ctx->p_per_i  = INT_MAX;
         ctx->b_per_p  = 0;
+        ctx->num_refs = FFMIN3(avctx->refs, MAX_PICTURE_REFERENCES, ref_l0);
     } else {
        if (ctx->p_to_gpb)
            av_log(avctx, AV_LOG_VERBOSE, "Using intra and B-frames "
@@ -2273,6 +2275,8 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
         ctx->gop_size = avctx->gop_size;
         ctx->p_per_i  = INT_MAX;
         ctx->b_per_p  = avctx->max_b_frames;
+        // Take 1 future reference for B into account.
+        ctx->num_refs = FFMIN3(FFMAX(avctx->refs, 2), MAX_PICTURE_REFERENCES, ref_l0 + 1);
         if (ctx->codec->flags & FLAG_B_PICTURE_REFERENCES) {
             ctx->max_b_depth = FFMIN(ctx->desired_b_depth,
                                      av_log2(ctx->b_per_p) + 1);
@@ -2280,6 +2284,8 @@ static av_cold int vaapi_encode_init_gop_structure(AVCodecContext *avctx)
             ctx->max_b_depth = 1;
         }
     }
+
+    av_log(avctx, AV_LOG_VERBOSE, "Using reference frames number: %d.\n", ctx->num_refs);
 
     if (ctx->codec->flags & FLAG_NON_IDR_KEY_PICTURES) {
         ctx->closed_gop  = !!(avctx->flags & AV_CODEC_FLAG_CLOSED_GOP);

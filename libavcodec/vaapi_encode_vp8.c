@@ -232,6 +232,7 @@ static const FFCodecDefault vaapi_encode_vp8_defaults[] = {
     { "g",              "120" },
     { "qmin",           "-1"  },
     { "qmax",           "-1"  },
+    { "refs",           "3"   },
     { NULL },
 };
 

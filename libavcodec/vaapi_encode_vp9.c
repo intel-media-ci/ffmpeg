@@ -289,6 +289,7 @@ static const FFCodecDefault vaapi_encode_vp9_defaults[] = {
     { "g",              "250" },
     { "qmin",           "-1"  },
     { "qmax",           "-1"  },
+    { "refs",           "3"   },
     { NULL },
 };
 

@@ -392,6 +392,9 @@ typedef struct VAAPIEncodeContext {
 
     /** Tail data of a pic, now only used for av1 repeat frame header. */
     AVPacket        *tail_pkt;
+
+    /** Number of reference frames. Include both previous and future references. */
+    int             num_refs;
 } VAAPIEncodeContext;
 
 enum {
