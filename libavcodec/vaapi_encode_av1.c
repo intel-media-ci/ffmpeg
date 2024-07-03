@@ -473,7 +473,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
     CodedBitstreamFragment          *obu = &priv->current_obu;
     VAAPIEncodePicture    *ref;
     VAAPIEncodeAV1Picture *href;
-    int slot, i;
+    int i;
     int ret;
     static const int8_t default_loop_filter_ref_deltas[AV1_TOTAL_REFS_PER_FRAME] =
         { 1, 0, 0, 0, -1, 0, -1, -1 };
@@ -619,21 +619,19 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
     vpic->tile_group_obu_hdr_info.bits.obu_has_size_field = 1;
 
     /** set reference. */
-    for (i = 0; i < AV1_REFS_PER_FRAME; i++)
-        vpic->ref_frame_idx[i] = fh->ref_frame_idx[i];
-
     for (i = 0; i < FF_ARRAY_ELEMS(vpic->reference_frames); i++)
         vpic->reference_frames[i] = VA_INVALID_SURFACE;
 
-    for (i = 0; i < MAX_REFERENCE_LIST_NUM; i++) {
-        for (int j = 0; j < pic->nb_refs[i]; j++) {
-            VAAPIEncodePicture *ref_pic = pic->refs[i][j];
+    for (i = 0; i < AV1_REFS_PER_FRAME; i++)
+        vpic->ref_frame_idx[i] = fh->ref_frame_idx[i];
 
-            slot = ((VAAPIEncodeAV1Picture*)ref_pic->priv_data)->slot;
-            av_assert0(vpic->reference_frames[slot] == VA_INVALID_SURFACE);
+    for (i = 0; i < pic->nb_dpb_pics; i++) {
+        ref = pic->dpb[i];
+        if (ref == pic)
+            continue;
 
-            vpic->reference_frames[slot] = ref_pic->recon_surface;
-        }
+        href = ref->priv_data;
+        vpic->reference_frames[href->slot] = ref->recon_surface;
     }
 
     ret = vaapi_encode_av1_add_obu(avctx, obu, AV1_OBU_FRAME_HEADER, &priv->fh);
