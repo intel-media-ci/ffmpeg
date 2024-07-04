@@ -34,6 +34,7 @@
 
 typedef struct VAAPIEncodeAV1Picture {
     int64_t last_idr_frame;
+    uint8_t order_hint;
     int slot;
 } VAAPIEncodeAV1Picture;
 
@@ -471,6 +472,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
     AV1RawFrameHeader                *fh = &fh_obu->obu.frame.header;
     VAEncPictureParameterBufferAV1 *vpic = pic->codec_picture_params;
     CodedBitstreamFragment          *obu = &priv->current_obu;
+    VAAPIEncodeAV1Picture         *hprev = pic->prev ? pic->prev->priv_data : NULL;
     VAAPIEncodePicture    *ref;
     VAAPIEncodeAV1Picture *href;
     int i;
@@ -492,23 +494,23 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         fh->base_q_idx = priv->q_idx_idr;
         hpic->slot = 0;
         hpic->last_idr_frame = pic->display_order;
+        hpic->order_hint = 0;
         break;
     case PICTURE_TYPE_P:
         av_assert0(pic->nb_refs[0]);
         fh->frame_type = AV1_FRAME_INTER;
         fh->base_q_idx = priv->q_idx_p;
-        ref = pic->refs[0][pic->nb_refs[0] - 1];
-        href = ref->priv_data;
-        hpic->slot = !href->slot;
-        hpic->last_idr_frame = href->last_idr_frame;
+        hpic->slot = !hprev->slot;
+        hpic->last_idr_frame = hprev->last_idr_frame;
+        hpic->order_hint = pic->display_order - hpic->last_idr_frame;
         fh->refresh_frame_flags = 1 << hpic->slot;
 
         /** set the nearest frame in L0 as all reference frame. */
         for (i = 0; i < AV1_REFS_PER_FRAME; i++) {
-            fh->ref_frame_idx[i] = href->slot;
+            fh->ref_frame_idx[i] = hprev->slot;
         }
-        fh->primary_ref_frame = href->slot;
-        fh->ref_order_hint[href->slot] = ref->display_order - href->last_idr_frame;
+        fh->primary_ref_frame = hprev->slot;
+        fh->ref_order_hint[hprev->slot] = hprev->order_hint;
         vpic->ref_frame_ctrl_l0.fields.search_idx0 = AV1_REF_FRAME_LAST;
 
         /** set the 2nd nearest frame in L0 as Golden frame. */
@@ -516,7 +518,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
             ref = pic->refs[0][pic->nb_refs[0] - 2];
             href = ref->priv_data;
             fh->ref_frame_idx[3] = href->slot;
-            fh->ref_order_hint[href->slot] = ref->display_order - href->last_idr_frame;
+            fh->ref_order_hint[href->slot] = href->order_hint;
             vpic->ref_frame_ctrl_l0.fields.search_idx1 = AV1_REF_FRAME_GOLDEN;
         }
         break;
@@ -538,14 +540,14 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         href                           = ref->priv_data;
         hpic->last_idr_frame           = href->last_idr_frame;
         fh->primary_ref_frame          = href->slot;
-        fh->ref_order_hint[href->slot] = ref->display_order - href->last_idr_frame;
+        fh->ref_order_hint[href->slot] = href->order_hint;
         for (i = 0; i < AV1_REF_FRAME_GOLDEN; i++) {
             fh->ref_frame_idx[i] = href->slot;
         }
 
         ref                            = pic->refs[1][pic->nb_refs[1] - 1];
         href                           = ref->priv_data;
-        fh->ref_order_hint[href->slot] = ref->display_order - href->last_idr_frame;
+        fh->ref_order_hint[href->slot] = href->order_hint;
         for (i = AV1_REF_FRAME_GOLDEN; i < AV1_REFS_PER_FRAME; i++) {
             fh->ref_frame_idx[i] = href->slot;
         }
@@ -560,7 +562,7 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
     fh->frame_height_minus_1      = avctx->height - 1;
     fh->render_width_minus_1      = fh->frame_width_minus_1;
     fh->render_height_minus_1     = fh->frame_height_minus_1;
-    fh->order_hint                = pic->display_order - hpic->last_idr_frame;
+    fh->order_hint                = hpic->order_hint;
     fh->tile_cols                 = priv->tile_cols;
     fh->tile_rows                 = priv->tile_rows;
     fh->tile_cols_log2            = priv->tile_cols_log2;
