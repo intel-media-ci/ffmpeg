@@ -278,6 +278,15 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
     av_log(avctx, AV_LOG_DEBUG, "Issuing encode for pic %"PRId64"/%"PRId64" "
            "as type %s.\n", pic->display_order, pic->encode_order,
            picture_type_name[pic->type]);
+
+    if (pic->nb_dpb_pics) {
+        av_log(avctx, AV_LOG_DEBUG, "DPB list");
+        for (i = 0; i < pic->nb_dpb_pics; i++)
+          av_log(avctx, AV_LOG_DEBUG, " %"PRId64"/%"PRId64,
+                   pic->dpb[i]->display_order, pic->dpb[i]->encode_order);
+        av_log(avctx, AV_LOG_DEBUG, ".\n");
+    }
+
     if (pic->nb_refs[0] == 0 && pic->nb_refs[1] == 0) {
         av_log(avctx, AV_LOG_DEBUG, "No reference pictures.\n");
     } else {
