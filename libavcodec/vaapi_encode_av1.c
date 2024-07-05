@@ -85,6 +85,8 @@ typedef struct VAAPIEncodeAV1Context {
     int tier;
     int tile_cols, tile_rows;
     int tile_groups;
+
+    int slot;
 } VAAPIEncodeAV1Context;
 
 static void vaapi_encode_av1_trace_write_log(void *ctx,
@@ -492,15 +494,16 @@ static int vaapi_encode_av1_init_picture_params(AVCodecContext *avctx,
         fh->frame_type = AV1_FRAME_KEY;
         fh->refresh_frame_flags = 0xFF;
         fh->base_q_idx = priv->q_idx_idr;
-        hpic->slot = 0;
+        hpic->slot = priv->slot = 0;
         hpic->last_idr_frame = pic->display_order;
         hpic->order_hint = 0;
         break;
     case PICTURE_TYPE_P:
         av_assert0(pic->nb_refs[0]);
+        priv->slot = priv->slot + 1 < ctx->num_refs ? priv->slot + 1 : 0;
         fh->frame_type = AV1_FRAME_INTER;
         fh->base_q_idx = priv->q_idx_p;
-        hpic->slot = !hprev->slot;
+        hpic->slot = priv->slot;
         hpic->last_idr_frame = hprev->last_idr_frame;
         hpic->order_hint = pic->display_order - hpic->last_idr_frame;
         fh->refresh_frame_flags = 1 << hpic->slot;
