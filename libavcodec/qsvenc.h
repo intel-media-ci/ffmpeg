@@ -46,11 +46,13 @@
 #define QSV_HAVE_VCM    1
 #define QSV_HAVE_MF     0
 #define QSV_HAVE_HE     QSV_VERSION_ATLEAST(2, 4)
+#define QSV_HAVE_AC     1 //  FIX ME
 #else
 #define QSV_HAVE_AVBR   0
 #define QSV_HAVE_VCM    0
 #define QSV_HAVE_MF     !QSV_ONEVPL
 #define QSV_HAVE_HE     0
+#define QSV_HAVE_AC     0
 #endif
 
 #define QSV_COMMON_OPTS \
@@ -190,10 +192,13 @@ typedef struct QSVEncContext {
     mfxFrameSurface1       **opaque_surfaces;
     AVBufferRef             *opaque_alloc_buf;
 #endif
+#if QSV_HAVE_AC
+    mfxExtAlphaChannelEncCtrl extaplhachannelparam;
+#endif
 
     mfxExtVideoSignalInfo extvsi;
 
-    mfxExtBuffer  *extparam_internal[5 + (QSV_HAVE_MF * 2) + (QSV_HAVE_EXT_AV1_PARAM * 2) + QSV_HAVE_HE];
+    mfxExtBuffer  *extparam_internal[5 + (QSV_HAVE_MF * 2) + (QSV_HAVE_EXT_AV1_PARAM * 2) + QSV_HAVE_HE + QSV_HAVE_AC];
     int         nb_extparam_internal;
 
     mfxExtBuffer  **extparam_str;
@@ -269,6 +274,7 @@ typedef struct QSVEncContext {
     int forced_idr;
     int low_delay_brc;
 
+    int extextaplhachannel_idx;
     int co2_idx;
     int co3_idx;
     int exthevctiles_idx;
@@ -321,6 +327,7 @@ typedef struct QSVEncContext {
     int dual_gfx;
 
     AVDictionary *qsv_params;
+    int alpha_encode;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);

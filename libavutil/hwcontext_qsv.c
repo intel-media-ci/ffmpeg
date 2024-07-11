@@ -594,6 +594,7 @@ static int qsv_init_child_ctx(AVHWFramesContext *ctx)
         if (hwctx->frame_type & MFX_MEMTYPE_SHARED_RESOURCE)
             child_frames_hwctx->MiscFlags = D3D11_RESOURCE_MISC_SHARED;
         child_frames_hwctx->BindFlags = qsv_get_d3d11va_bind_flags(hwctx->frame_type);
+        child_frames_hwctx->BindFlags |= D3D11_BIND_SHADER_RESOURCE;
     }
 #endif
 #if CONFIG_DXVA2

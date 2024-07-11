@@ -203,6 +203,9 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
 #if QSV_HAVE_HE
     mfxExtHyperModeParam *exthypermodeparam = NULL;
 #endif
+#if QSV_HAVE_AC
+    mfxExtAlphaChannelEncCtrl *extalphachannel = NULL;
+#endif
 
     const char *tmp_str = NULL;
 
@@ -218,6 +221,11 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
 #if QSV_HAVE_HE
     if (q->exthypermodeparam_idx > 0)
         exthypermodeparam = (mfxExtHyperModeParam *)coding_opts[q->exthypermodeparam_idx];
+#endif
+
+#if QSV_HAVE_AC
+    if (q->extextaplhachannel_idx > 0)
+        extalphachannel = (mfxExtAlphaChannelEncCtrl *)coding_opts[q->extextaplhachannel_idx];
 #endif
 
     av_log(avctx, AV_LOG_VERBOSE, "profile: %s; level: %"PRIu16"\n",
@@ -396,6 +404,23 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
             av_log(avctx, AV_LOG_VERBOSE, "ON");
         if (exthypermodeparam->Mode == MFX_HYPERMODE_ADAPTIVE)
             av_log(avctx, AV_LOG_VERBOSE, "Adaptive");
+
+        av_log(avctx, AV_LOG_VERBOSE, "\n");
+    }
+#endif
+
+#if QSV_HAVE_AC
+    if (extalphachannel) {
+        av_log(avctx, AV_LOG_VERBOSE, "AlphaChannel Encode: %s; ", print_threestate(extalphachannel->EnableAlphaChannelEncoding));
+
+        av_log(avctx, AV_LOG_VERBOSE, "Mode: ");
+        if (extalphachannel->AlphaChannelMode == MFX_ALPHA_MODE_PREMULTIPLIED)
+            av_log(avctx, AV_LOG_VERBOSE, "PREMULTIPLIED; ");
+        else if (extalphachannel->AlphaChannelMode == MFX_ALPHA_MODE_STRAIGHT)
+            av_log(avctx, AV_LOG_VERBOSE, "STRAIGHT; ");
+        else
+            av_log(avctx, AV_LOG_VERBOSE, "unknown; ");
+        av_log(avctx, AV_LOG_VERBOSE, "BitrateRatio: %d", extalphachannel->AlphaChannelBitrateRatio);
 
         av_log(avctx, AV_LOG_VERBOSE, "\n");
     }
@@ -1282,6 +1307,38 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     }
 #endif
 
+#if QSV_HAVE_AC
+   if (q->alpha_encode) {
+        //if (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 2, 4)) {
+        if (1) {
+            mfxIMPL impl;
+            MFXQueryIMPL(q->session, &impl);
+
+            if (MFX_IMPL_VIA_MASK(impl) != MFX_IMPL_VIA_D3D11) {
+                av_log(avctx, AV_LOG_ERROR, "Alpha Channel Encode requires D3D11VA \n");
+                return AVERROR_UNKNOWN;
+            }
+
+            if (q->param.mfx.CodecId != MFX_CODEC_HEVC) {
+                av_log(avctx, AV_LOG_ERROR, "Not supported encoder for Alpha Channel Encode. "
+                                            "Supported: hevc_qsv \n");
+                return AVERROR_UNKNOWN;
+            }
+
+            q->extaplhachannelparam.Header.BufferId = MFX_EXTBUFF_ALPHA_CHANNEL_ENC_CTRL;
+            q->extaplhachannelparam.Header.BufferSz = sizeof(q->extaplhachannelparam);
+            q->extaplhachannelparam.EnableAlphaChannelEncoding = MFX_CODINGOPTION_ON;
+            q->extaplhachannelparam.AlphaChannelBitrateRatio = 25;
+            q->extaplhachannelparam.AlphaChannelMode = MFX_ALPHA_MODE_PREMULTIPLIED;
+            q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extaplhachannelparam;
+        } else {
+            av_log(avctx, AV_LOG_ERROR,
+                   "This version of runtime doesn't support Alpha Channel Encode\n");
+            return AVERROR_UNKNOWN;
+        }
+    }
+#endif
+
     if (!check_enc_param(avctx,q)) {
         av_log(avctx, AV_LOG_ERROR,
                "some encoding parameters are not supported by the QSV "
@@ -1463,12 +1520,20 @@ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
     };
 #endif
 
-    mfxExtBuffer *ext_buffers[6 + QSV_HAVE_HE];
+#if QSV_HAVE_AC
+    mfxExtAlphaChannelEncCtrl alpha_encode_buf = {
+        .Header.BufferId = MFX_EXTBUFF_ALPHA_CHANNEL_ENC_CTRL,
+        .Header.BufferSz = sizeof(alpha_encode_buf),
+    };
+#endif
+
+    mfxExtBuffer *ext_buffers[6 + QSV_HAVE_HE + QSV_HAVE_AC];
 
     int need_pps = avctx->codec_id != AV_CODEC_ID_MPEG2VIDEO;
     int ret, ext_buf_num = 0, extradata_offset = 0;
 
-    q->co2_idx = q->co3_idx = q->exthevctiles_idx = q->exthypermodeparam_idx = -1;
+    q->co2_idx = q->co3_idx = q->exthevctiles_idx = q->exthypermodeparam_idx =
+        q->extextaplhachannel_idx = -1;
     ext_buffers[ext_buf_num++] = (mfxExtBuffer*)&extradata;
     ext_buffers[ext_buf_num++] = (mfxExtBuffer*)&co;
 
@@ -1494,6 +1559,13 @@ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
     if (q->dual_gfx && QSV_RUNTIME_VERSION_ATLEAST(q->ver, 2, 4)) {
         q->exthypermodeparam_idx = ext_buf_num;
         ext_buffers[ext_buf_num++] = (mfxExtBuffer*)&hyper_mode_param_buf;
+    }
+#endif
+
+#if QSV_HAVE_AC
+    if (q->alpha_encode && 1){ // QSV_RUNTIME_VERSION_ATLEAST(q->ver, 2, 4)) {
+        q->extextaplhachannel_idx = ext_buf_num;
+        ext_buffers[ext_buf_num++] = (mfxExtBuffer*)&alpha_encode_buf;
     }
 #endif
 
