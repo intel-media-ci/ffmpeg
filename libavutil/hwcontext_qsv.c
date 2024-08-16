@@ -236,7 +236,7 @@ static uint32_t qsv_get_d3d11va_bind_flags(int mem_type)
         bind_flags = D3D11_BIND_DECODER;
 
     if ((MFX_MEMTYPE_FROM_VPPOUT & mem_type) || (MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET & mem_type))
-        bind_flags = D3D11_BIND_RENDER_TARGET;
+        bind_flags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
     return bind_flags;
 }
@@ -590,7 +590,7 @@ static int qsv_init_child_ctx(AVHWFramesContext *ctx)
     if (child_device_ctx->type == AV_HWDEVICE_TYPE_D3D11VA) {
         AVD3D11VAFramesContext *child_frames_hwctx = child_frames_ctx->hwctx;
         if (hwctx->frame_type == 0)
-            hwctx->frame_type = MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET;
+            hwctx->frame_type = MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET | MFX_MEMTYPE_SHARED_RESOURCE;
         if (hwctx->frame_type & MFX_MEMTYPE_SHARED_RESOURCE)
             child_frames_hwctx->MiscFlags = D3D11_RESOURCE_MISC_SHARED;
         child_frames_hwctx->BindFlags = qsv_get_d3d11va_bind_flags(hwctx->frame_type);
