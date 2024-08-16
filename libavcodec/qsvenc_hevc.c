@@ -323,6 +323,9 @@ static const AVOption options[] = {
 #if QSV_HAVE_HE
     QSV_HE_OPTIONS
 #endif
+#if QSV_HAVE_MSE
+    QSV_MSE_OPTIONS
+#endif
 
     { "idr_interval", "Distance (in I-frames) between IDR frames", OFFSET(qsv.idr_interval), AV_OPT_TYPE_INT, { .i64 = 0 }, -1, INT_MAX, VE, .unit = "idr_interval" },
     { "begin_only", "Output an IDR-frame only at the beginning of the stream", 0, AV_OPT_TYPE_CONST, { .i64 = -1 }, 0, 0, VE, .unit = "idr_interval" },

@@ -183,6 +183,9 @@ static const AVOption options[] = {
     QSV_OPTION_EXTBRC
     QSV_OPTION_LOW_DELAY_BRC
     QSV_OPTION_MAX_FRAME_SIZE
+#if QSV_HAVE_MSE
+    QSV_MSE_OPTIONS
+#endif
     { "profile", NULL, OFFSET(qsv.profile), AV_OPT_TYPE_INT, { .i64 = MFX_PROFILE_UNKNOWN }, 0, INT_MAX, VE, .unit = "profile" },
         { "unknown" , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_PROFILE_UNKNOWN      }, INT_MIN, INT_MAX,     VE, .unit = "profile" },
         { "main"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = MFX_PROFILE_AV1_MAIN     }, INT_MIN, INT_MAX,     VE, .unit = "profile" },

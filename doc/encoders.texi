@@ -3624,6 +3624,10 @@ ffmpeg -i input.mp4 -c:v h264_qsv -qsv_params "CodingOption1=1:CodingOption2=2" 
 @end example
 
 This option allows fine-grained control over various encoder-specific settings provided by the QSV encoder.
+
+@item @var{mse}
+Supported in h264_qsv, hevc_qsv, and av1_qsv on Windows. Output encoded
+frame's quality(MSE/PSNR) information in VERBOSE log.
 @end table
 
 @subsection H264 options

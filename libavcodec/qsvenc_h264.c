@@ -120,6 +120,9 @@ static const AVOption options[] = {
 #if QSV_HAVE_HE
     QSV_HE_OPTIONS
 #endif
+#if QSV_HAVE_MSE
+    QSV_MSE_OPTIONS
+#endif
 
     { "cavlc",          "Enable CAVLC",                           OFFSET(qsv.cavlc),          AV_OPT_TYPE_BOOL, { .i64 = 0 },   0,          1, VE },
 #if QSV_HAVE_VCM

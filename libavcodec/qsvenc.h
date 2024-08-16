@@ -46,12 +46,14 @@
 #define QSV_HAVE_MF     0
 #define QSV_HAVE_HE     QSV_VERSION_ATLEAST(2, 4)
 #define QSV_HAVE_AC     QSV_VERSION_ATLEAST(2, 13)
+#define QSV_HAVE_MSE    QSV_VERSION_ATLEAST(2, 13)
 #else
 #define QSV_HAVE_AVBR   0
 #define QSV_HAVE_VCM    0
 #define QSV_HAVE_MF     !QSV_ONEVPL
 #define QSV_HAVE_HE     0
 #define QSV_HAVE_AC     0
+#define QSV_HAVE_MSE    0
 #endif
 
 #define QSV_COMMON_OPTS \
@@ -151,6 +153,11 @@
 { "brc_only",       "skip_frame metadata indicates the number of missed frames before the current frame", \
     0, AV_OPT_TYPE_CONST, { .i64 = MFX_SKIPFRAME_BRC_ONLY },          .flags = VE, .unit = "skip_frame" },
 
+#if QSV_HAVE_MSE
+#define QSV_MSE_OPTIONS \
+{ "mse", "Enable output MSE(Mean Squared Error) of each frame", OFFSET(qsv.mse), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+#endif
+
 extern const AVCodecHWConfigInternal *const ff_qsv_enc_hw_configs[];
 
 typedef int SetEncodeCtrlCB (AVCodecContext *avctx,
@@ -196,6 +203,9 @@ typedef struct QSVEncContext {
 #endif
 #if QSV_HAVE_EXT_AV1_SCC
     mfxExtAV1ScreenContentTools extsccparam;
+#endif
+#if QSV_HAVE_MSE
+    mfxExtQualityInfoMode extmseparam;
 #endif
 
     mfxExtVideoSignalInfo extvsi;
@@ -282,6 +292,7 @@ typedef struct QSVEncContext {
     int extaplhachannel_idx;
     int exthevctiles_idx;
     int exthypermodeparam_idx;
+    int extmse_idx;
     int vp9_idx;
 
     int max_qp_i;
@@ -333,6 +344,7 @@ typedef struct QSVEncContext {
     int alpha_encode;
     int palette_mode;
     int intrabc;
+    int mse;
 } QSVEncContext;
 
 int ff_qsv_enc_init(AVCodecContext *avctx, QSVEncContext *q);
