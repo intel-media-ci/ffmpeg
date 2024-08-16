@@ -519,6 +519,9 @@ static void dump_video_av1_param(AVCodecContext *avctx, QSVEncContext *q,
     mfxExtAV1BitstreamParam *av1_bs_param = (mfxExtAV1BitstreamParam *)coding_opts[1];
     mfxExtCodingOption2 *co2 = (mfxExtCodingOption2*)coding_opts[2];
     mfxExtCodingOption3 *co3 = (mfxExtCodingOption3*)coding_opts[3];
+#if QSV_HAVE_EXT_AV1_SCC
+    mfxExtAV1ScreenContentTools *scc = (mfxExtAV1ScreenContentTools*)coding_opts[4];
+#endif
 
     av_log(avctx, AV_LOG_VERBOSE, "profile: %s; level: %"PRIu16"\n",
            print_profile(avctx->codec_id, info->CodecProfile), info->CodecLevel);
@@ -591,6 +594,14 @@ static void dump_video_av1_param(AVCodecContext *avctx, QSVEncContext *q,
            print_threestate(av1_bs_param->WriteIVFHeaders));
     av_log(avctx, AV_LOG_VERBOSE, "LowDelayBRC: %s\n", print_threestate(co3->LowDelayBRC));
     av_log(avctx, AV_LOG_VERBOSE, "MaxFrameSize: %d;\n", co2->MaxFrameSize);
+
+#if QSV_HAVE_EXT_AV1_SCC
+    if (scc) {
+        av_log(avctx, AV_LOG_VERBOSE,
+               "Palette: %s; IntraBlockCopy: %s\n",
+               print_threestate(scc->Palette), print_threestate(scc->IntraBlockCopy));
+    }
+#endif
 }
 #endif
 
@@ -1339,6 +1350,28 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
     }
 #endif
 
+#if QSV_HAVE_EXT_AV1_SCC
+    if (q->palette_mode || q->intrabc) {
+        if (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 2, 13)) {
+            if (q->param.mfx.CodecId != MFX_CODEC_AV1) {
+                av_log(avctx, AV_LOG_ERROR, "Not supported encoder for Screen Content Tool Encode. "
+                                            "Supported: av1_qsv \n");
+                return AVERROR_UNKNOWN;
+            }
+
+            q->extsccparam.Header.BufferId = MFX_EXTBUFF_AV1_SCREEN_CONTENT_TOOLS;
+            q->extsccparam.Header.BufferSz = sizeof(q->extsccparam);
+            q->extsccparam.Palette = q->palette_mode ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
+            q->extsccparam.IntraBlockCopy = q->intrabc ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
+            q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extsccparam;
+        } else {
+            av_log(avctx, AV_LOG_ERROR,
+                   "This version of runtime doesn't support Screen Content Tool Encode\n");
+            return AVERROR_UNKNOWN;
+        }
+    }
+#endif
+
     if (!check_enc_param(avctx,q)) {
         av_log(avctx, AV_LOG_ERROR,
                "some encoding parameters are not supported by the QSV "
@@ -1446,11 +1479,21 @@ static int qsv_retrieve_enc_av1_params(AVCodecContext *avctx, QSVEncContext *q)
         .Header.BufferSz = sizeof(co3),
     };
 
+#if QSV_HAVE_EXT_AV1_SCC
+    mfxExtAV1ScreenContentTools scc_buf = {
+        .Header.BufferId = MFX_EXTBUFF_AV1_SCREEN_CONTENT_TOOLS,
+        .Header.BufferSz = sizeof(scc_buf),
+    };
+#endif
+
     mfxExtBuffer *ext_buffers[] = {
         (mfxExtBuffer*)&av1_extend_tile_buf,
         (mfxExtBuffer*)&av1_bs_param,
         (mfxExtBuffer*)&co2,
         (mfxExtBuffer*)&co3,
+#if QSV_HAVE_EXT_AV1_SCC
+        (mfxExtBuffer*)&scc_buf,
+#endif
     };
 
     if (!QSV_RUNTIME_VERSION_ATLEAST(q->ver, 2, 5)) {

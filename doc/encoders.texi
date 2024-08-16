@@ -4121,6 +4121,12 @@ than zero, then for I frames the value set by max_frame_size is ignored.
 @item @var{max_frame_size_p}
 Maximum encoded frame size for P frames in bytes. If this value is set as larger
 than zero, then for P frames the value set by max_frame_size is ignored.
+
+@item @var{palette_mode}
+Use palette mode in Screen Content Tool.
+
+@item @var{intrabc}
+Use intra block copy in Screen Content Tool.
 @end table
 
 @section snow
