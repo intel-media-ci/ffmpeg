@@ -398,6 +398,11 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
         av_log(avctx, AV_LOG_VERBOSE, "MaxFrameSizeI: %d; ", co3->MaxFrameSizeI);
         av_log(avctx, AV_LOG_VERBOSE, "MaxFrameSizeP: %d\n", co3->MaxFrameSizeP);
         av_log(avctx, AV_LOG_VERBOSE, "ScenarioInfo: %"PRId16"\n", co3->ScenarioInfo);
+#if QSV_HAVE_SW
+        av_log(avctx, AV_LOG_VERBOSE,
+               "WinBRCSize: %"PRIu16"; WinBRCMaxAvgKbps: %"PRIu16"\n",
+               co3->WinBRCSize, co3->WinBRCMaxAvgKbps);
+#endif
     }
 
     if (exthevctiles) {
@@ -646,6 +651,12 @@ static void dump_video_av1_param(AVCodecContext *avctx, QSVEncContext *q,
 
         av_log(avctx, AV_LOG_VERBOSE, "\n");
     }
+#endif
+
+#if QSV_HAVE_SW
+    av_log(avctx, AV_LOG_VERBOSE,
+           "WinBRCSize: %"PRIu16"; WinBRCMaxAvgKbps: %"PRIu16"\n",
+           co3->WinBRCSize, co3->WinBRCMaxAvgKbps);
 #endif
 }
 #endif
@@ -1250,6 +1261,20 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
                 q->extco3.TransformSkip = MFX_CODINGOPTION_UNKNOWN;
             q->extco3.GPB              = q->gpb ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
         }
+
+#if QSV_HAVE_SW
+        if ((avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_HEVC ||
+            avctx->codec_id == AV_CODEC_ID_AV1) && q->sw_size) {
+            if (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 2, 13)) {
+                q->extco3.WinBRCSize = q->sw_size;
+                q->extco3.WinBRCMaxAvgKbps = (int)(q->sw_max_bitrate_factor * q->param.mfx.TargetKbps);
+            } else {
+                av_log(avctx, AV_LOG_ERROR,
+                       "This version of runtime doesn't support sliding windows bitrate control\n");
+                return AVERROR_UNKNOWN;
+            }
+        }
+#endif
         q->extparam_internal[q->nb_extparam_internal++] = (mfxExtBuffer *)&q->extco3;
     }
 

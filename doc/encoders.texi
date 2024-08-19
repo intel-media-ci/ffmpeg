@@ -3628,6 +3628,15 @@ This option allows fine-grained control over various encoder-specific settings p
 @item @var{mse}
 Supported in h264_qsv, hevc_qsv, and av1_qsv on Windows. Output encoded
 frame's quality(MSE/PSNR) information in VERBOSE log.
+
+@item @var{sw_size}
+Number of frames used for sliding window(Only available for CBR bitrate
+control mode on Windows). Range from 30 to 60 for AVC and HEVC. 30 to 120 for AV1.
+
+@item @var{sw_max_bitrate_factor}
+Factor between bitrate and max bitrate for frames in sliding window.
+Range from 1.1 to 2.0.
+
 @end table
 
 @subsection H264 options
