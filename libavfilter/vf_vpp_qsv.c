@@ -555,10 +555,16 @@ static int config_output(AVFilterLink *outlink)
     }
 
     if (inlink->format == AV_PIX_FMT_QSV) {
-         if (!inl->hw_frames_ctx || !inl->hw_frames_ctx->data)
-             return AVERROR(EINVAL);
-         else
-             in_format = ((AVHWFramesContext*)inl->hw_frames_ctx->data)->sw_format;
+        if (!inl->hw_frames_ctx || !inl->hw_frames_ctx->data)
+            return AVERROR(EINVAL);
+        else {
+            AVHWFramesContext *frames_ctx = (AVHWFramesContext *)inl->hw_frames_ctx->data;
+            in_format = frames_ctx->sw_format;
+            if (outlink->format == AV_PIX_FMT_QSV && (frames_ctx->width != FFALIGN(outlink->w, 32) ||
+                (frames_ctx->height != FFALIGN(outlink->h, 32)))) {
+                vpp->has_passthrough = 0;
+            }
+        }
     } else
         in_format = inlink->format;
 
