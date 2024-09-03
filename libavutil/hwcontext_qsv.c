@@ -583,8 +583,8 @@ static int qsv_init_child_ctx(AVHWFramesContext *ctx)
     child_frames_ctx->format            = device_priv->child_pix_fmt;
     child_frames_ctx->sw_format         = ctx->sw_format;
     child_frames_ctx->initial_pool_size = ctx->initial_pool_size;
-    child_frames_ctx->width             = FFALIGN(ctx->width, 16);
-    child_frames_ctx->height            = FFALIGN(ctx->height, 16);
+    child_frames_ctx->width             = FFALIGN(ctx->width, 32);
+    child_frames_ctx->height            = FFALIGN(ctx->height, 32);
 
 #if CONFIG_D3D11VA
     if (child_device_ctx->type == AV_HWDEVICE_TYPE_D3D11VA) {
@@ -691,9 +691,9 @@ static int qsv_init_surface(AVHWFramesContext *ctx, mfxFrameSurface1 *surf)
         surf->Info.ChromaFormat   = MFX_CHROMAFORMAT_YUV444;
 
     surf->Info.FourCC         = fourcc;
-    surf->Info.Width          = FFALIGN(ctx->width, 16);
+    surf->Info.Width          = FFALIGN(ctx->width, 32);
     surf->Info.CropW          = ctx->width;
-    surf->Info.Height         = FFALIGN(ctx->height, 16);
+    surf->Info.Height         = FFALIGN(ctx->height, 32);
     surf->Info.CropH          = ctx->height;
     surf->Info.FrameRateExtN  = 25;
     surf->Info.FrameRateExtD  = 1;
@@ -1837,17 +1837,17 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
 
     /* According to MSDK spec for mfxframeinfo, "Width must be a multiple of 16.
      * Height must be a multiple of 16 for progressive frame sequence and a
-     * multiple of 32 otherwise.", so allign all frames to 16 before downloading. */
-    if (dst->height & 15 || dst->linesize[0] & 15) {
+     * multiple of 32 otherwise.", so allign all frames to 32 before downloading. */
+    if (dst->height & 31 || dst->width & 31) {
         realigned = 1;
         if (tmp_frame->format != dst->format ||
-            tmp_frame->width  != FFALIGN(dst->linesize[0], 16) ||
-            tmp_frame->height != FFALIGN(dst->height, 16)) {
+            tmp_frame->width  != FFALIGN(dst->width, 32) ||
+            tmp_frame->height != FFALIGN(dst->height, 32)) {
             av_frame_unref(tmp_frame);
 
             tmp_frame->format = dst->format;
-            tmp_frame->width  = FFALIGN(dst->linesize[0], 16);
-            tmp_frame->height = FFALIGN(dst->height, 16);
+            tmp_frame->width  = FFALIGN(dst->width, 32);
+            tmp_frame->height = FFALIGN(dst->height, 32);
             ret = av_frame_get_buffer(tmp_frame, 0);
             if (ret < 0)
                 return ret;
@@ -1890,8 +1890,8 @@ static int qsv_transfer_data_from(AVHWFramesContext *ctx, AVFrame *dst,
         tmp_frame->width  = dst->width;
         tmp_frame->height = dst->height;
         ret = av_frame_copy(dst, tmp_frame);
-        tmp_frame->width  = FFALIGN(dst->linesize[0], 16);
-        tmp_frame->height = FFALIGN(dst->height, 16);
+        tmp_frame->width  = FFALIGN(dst->linesize[0], 32);
+        tmp_frame->height = FFALIGN(dst->height, 32);
         if (ret < 0)
             return ret;
     }
@@ -1921,17 +1921,17 @@ static int qsv_transfer_data_to(AVHWFramesContext *ctx, AVFrame *dst,
 
     /* According to MSDK spec for mfxframeinfo, "Width must be a multiple of 16.
      * Height must be a multiple of 16 for progressive frame sequence and a
-     * multiple of 32 otherwise.", so allign all frames to 16 before uploading. */
-    if (src->height & 15 || src->linesize[0] & 15) {
+     * multiple of 32 otherwise.", so allign all frames to 32 before uploading. */
+    if (src->height & 31 || src->width & 31) {
         realigned = 1;
         if (tmp_frame->format != src->format ||
-            tmp_frame->width  != FFALIGN(src->width, 16) ||
-            tmp_frame->height != FFALIGN(src->height, 16)) {
+            tmp_frame->width  != FFALIGN(src->width, 32) ||
+            tmp_frame->height != FFALIGN(src->height, 32)) {
             av_frame_unref(tmp_frame);
 
             tmp_frame->format = src->format;
-            tmp_frame->width  = FFALIGN(src->width, 16);
-            tmp_frame->height = FFALIGN(src->height, 16);
+            tmp_frame->width  = FFALIGN(src->width, 32);
+            tmp_frame->height = FFALIGN(src->height, 32);
             ret = av_frame_get_buffer(tmp_frame, 0);
             if (ret < 0)
                 return ret;
