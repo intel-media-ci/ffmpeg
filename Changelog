@@ -26,6 +26,10 @@ version <next>:
 - stream specifiers in fftools can now match by stream disposition
 - LCEVC enhancement data exporting in H.26x and MP4/ISOBMFF
 - LCEVC filter
+- Alpha encode for hevc_qsv encoder
+- Screen Content Tool for av1_qsv encoder
+- Encode frame quality capture for {h264, hevc, av1}_qsv encoder
+- Sliding windows bitrate control for {h264, hevc, av1}_qsv encoder
 
 
 version 7.0:
