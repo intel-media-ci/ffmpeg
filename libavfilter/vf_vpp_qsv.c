@@ -524,7 +524,7 @@ static int vpp_set_frame_ext_params(AVFilterContext *ctx, const AVFrame *in, AVF
 
 static int config_output(AVFilterLink *outlink)
 {
-    FilterLink     *outl = ff_filter_link(outlink);
+    FilterLink      *outl = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     VPPContext      *vpp = ctx->priv;
     QSVVPPParam     param = { NULL };
@@ -532,13 +532,12 @@ static int config_output(AVFilterLink *outlink)
     mfxExtBuffer    *ext_buf[ENH_FILTERS_COUNT];
     mfxVersion      mfx_version;
     AVFilterLink    *inlink = ctx->inputs[0];
-    FilterLink         *inl = ff_filter_link(inlink);
-    FilterLink          *ol = ff_filter_link(outlink);
+    FilterLink      *inl = ff_filter_link(inlink);
     enum AVPixelFormat in_format;
 
     outlink->w          = vpp->out_width;
     outlink->h          = vpp->out_height;
-    ol->frame_rate      = vpp->framerate;
+    outl->frame_rate    = vpp->framerate;
     if (vpp->framerate.num == 0 || vpp->framerate.den == 0)
         outlink->time_base = inlink->time_base;
     else
@@ -555,10 +554,16 @@ static int config_output(AVFilterLink *outlink)
     }
 
     if (inlink->format == AV_PIX_FMT_QSV) {
-         if (!inl->hw_frames_ctx || !inl->hw_frames_ctx->data)
-             return AVERROR(EINVAL);
-         else
-             in_format = ((AVHWFramesContext*)inl->hw_frames_ctx->data)->sw_format;
+        if (!inl->hw_frames_ctx || !inl->hw_frames_ctx->data)
+            return AVERROR(EINVAL);
+        else {
+            AVHWFramesContext *frames_ctx = (AVHWFramesContext *)inl->hw_frames_ctx->data;
+            in_format = frames_ctx->sw_format;
+            if (outlink->format == AV_PIX_FMT_QSV && (frames_ctx->width != FFALIGN(outlink->w, 32) ||
+                (frames_ctx->height != FFALIGN(outlink->h, 32)))) {
+                vpp->has_passthrough = 0;
+            }
+        }
     } else
         in_format = inlink->format;
 
