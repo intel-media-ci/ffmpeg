@@ -2532,6 +2532,9 @@ static int fg_output_step(OutputFilterPriv *ofp, FilterGraphThread *fgt,
         return 0;
     }
 
+    // Frame's duration needs to be aligned with its time_base.
+    if(frame->duration)
+        frame->duration = av_rescale_q(frame->duration, frame->time_base, av_buffersink_get_time_base(filter));
     frame->time_base = av_buffersink_get_time_base(filter);
 
     if (debug_ts)
