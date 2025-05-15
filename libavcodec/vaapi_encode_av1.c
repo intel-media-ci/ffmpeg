@@ -446,6 +446,7 @@ static int vaapi_encode_av1_init_sequence_params(AVCodecContext *avctx)
     vseq->ip_period               = base_ctx->b_per_p + 1;
 
     vseq->seq_fields.bits.enable_order_hint = sh->enable_order_hint;
+    vseq->seq_fields.bits.bit_depth_minus8 = desc->comp[0].depth - 8;
 
     if (!(ctx->va_rc_mode & VA_RC_CQP)) {
         vseq->bits_per_second = ctx->va_bit_rate;
