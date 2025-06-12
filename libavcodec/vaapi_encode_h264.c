@@ -366,6 +366,8 @@ static int vaapi_encode_h264_init_sequence_params(AVCodecContext *avctx)
         .time_scale        = sps->vui.time_scale,
     };
 
+    pps->deblocking_filter_control_present_flag = 1;
+
     *vpic = (VAEncPictureParameterBufferH264) {
         .CurrPic = {
             .picture_id = VA_INVALID_ID,
