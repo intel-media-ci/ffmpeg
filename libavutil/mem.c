@@ -98,21 +98,26 @@ static int size_mult(size_t a, size_t b, size_t *r)
 void *av_malloc(size_t size)
 {
     void *ptr = NULL;
+    size_t alignment = ALIGN;
 
     if (size > atomic_load_explicit(&max_alloc_size, memory_order_relaxed))
         return NULL;
 
+#if CONFIG_QSV
+    if ((size > 1024*1024) && (alignment < 4096))
+        alignment = 4096;
+#endif
 #if HAVE_POSIX_MEMALIGN
     if (size) //OS X on SDK 10.6 has a broken posix_memalign implementation
-    if (posix_memalign(&ptr, ALIGN, size))
+    if (posix_memalign(&ptr, alignment, size))
         ptr = NULL;
 #elif HAVE_ALIGNED_MALLOC
-    ptr = _aligned_malloc(size, ALIGN);
+    ptr = _aligned_malloc(size, alignment);
 #elif HAVE_MEMALIGN
 #ifndef __DJGPP__
-    ptr = memalign(ALIGN, size);
+    ptr = memalign(alignment, size);
 #else
-    ptr = memalign(size, ALIGN);
+    ptr = memalign(size, alignment);
 #endif
     /* Why 64?
      * Indeed, we should align it:
