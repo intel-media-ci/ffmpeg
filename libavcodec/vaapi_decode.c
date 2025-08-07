@@ -324,7 +324,7 @@ static int vaapi_decode_find_best_format(AVCodecContext *avctx,
     VASurfaceAttrib *attr;
     enum AVPixelFormat source_format, best_format, format;
     uint32_t best_fourcc, fourcc;
-    int i, j, nb_attr;
+    int i, j, nb_attr=0;
 
     source_format = avctx->sw_pix_fmt;
     av_assert0(source_format != AV_PIX_FMT_NONE);
